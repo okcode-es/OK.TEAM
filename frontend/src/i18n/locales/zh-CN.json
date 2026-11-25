@@ -1,0 +1,154 @@
+{
+  "brand": "okTeam HR",
+  "locale": {
+    "label": "切换界面语言",
+    "zh-CN": "中文",
+    "es-ES": "Español"
+  },
+  "roles": {
+    "owner": "企业主",
+    "hr": "人事主管",
+    "store_manager": "门店经理",
+    "accountant": "外部会计师",
+    "employee": "员工"
+  },
+  "statuses": {
+    "active": "正常",
+    "invited": "已邀请",
+    "disabled": "已停用",
+    "inactive": "已归档"
+  },
+  "nav": {
+    "stores": "门店管理",
+    "members": "成员与权限",
+    "organization": "企业设置",
+    "switchTenant": "切换企业",
+    "signOut": "退出登录",
+    "openMenu": "打开导航菜单"
+  },
+  "auth": {
+    "title": "登录 okTeam HR",
+    "subtitle": "面向西班牙华人企业的合规人力资源管理平台",
+    "email": "工作邮箱",
+    "password": "密码",
+    "showPassword": "显示密码",
+    "hidePassword": "隐藏密码",
+    "signIn": "登录系统",
+    "signingIn": "正在登录...",
+    "supabaseNotConfigured": "当前未配置 Supabase Auth 环境变量，请使用下方本地开发模式登录或在 .env 中配置 VITE_SUPABASE_URL。",
+    "devSectionTitle": "本地开发快捷登录（仅开发环境）",
+    "devEmailPlaceholder": "输入测试邮箱，例如 owner@dragon.es",
+    "devSignIn": "使用开发令牌登录",
+    "devHint": "支持无 Supabase 本地全链路联调，生产环境已物理禁用。",
+    "errorGeneric": "登录失败，请检查凭据或后端服务状态。"
+  },
+  "onboarding": {
+    "badge": "企业初始化",
+    "title": "创建您的第一家西班牙企业",
+    "subtitle": "完成后您将自动成为该企业的企业主（Owner），随后可添加门店与成员。",
+    "legalName": "法定公司名称（Razón Social）",
+    "legalNamePlaceholder": "例如 Restaurante Dragón S.L.",
+    "tradeName": "常用中文 / 品牌简称",
+    "tradeNamePlaceholder": "例如 金龙餐饮集团",
+    "cifNif": "西班牙企业税号（CIF / NIF）",
+    "cifNifPlaceholder": "例如 B12345678",
+    "ownerDisplayName": "您的显示姓名",
+    "ownerDisplayNamePlaceholder": "例如 陈老板",
+    "defaultTimezone": "默认企业时区（IANA）",
+    "defaultLocale": "默认合规语言",
+    "submit": "创建企业并进入控制台",
+    "submitting": "正在创建..."
+  },
+  "stores": {
+    "title": "门店管理",
+    "subtitle": "按西班牙工作中心（Centro de Trabajo）管理各门店 IANA 时区，防夏令时工时错算。",
+    "searchPlaceholder": "按门店名称、编号或城市筛选...",
+    "addButton": "新建门店",
+    "count": "共 {{count}} 家门店",
+    "readOnlyHint": "当前角色仅可查看授权范围内的门店。",
+    "empty": "暂无门店记录，请点击右上角新建首家门店。",
+    "columns": {
+      "code": "编号",
+      "name": "门店名称",
+      "timezone": "IANA 时区",
+      "city": "城市 / 地址",
+      "status": "状态",
+      "updatedAt": "更新时间"
+    },
+    "drawer": {
+      "createTitle": "新建门店",
+      "editTitle": "门店详情与编辑",
+      "description": "门店时区将作为后续考勤自然日切分与夏令时计算的基准。",
+      "code": "门店编号",
+      "name": "门店名称",
+      "timezone": "门店时区（IANA）",
+      "address": "详细地址",
+      "city": "城市",
+      "postalCode": "邮编",
+      "save": "保存门店",
+      "saving": "保存中...",
+      "archive": "归档门店",
+      "cancel": "取消"
+    },
+    "archiveDialog": {
+      "title": "确认归档该门店？",
+      "description": "系统严格执行软删除，历史关联数据将被完整保留以符合西班牙 4 年留存法规。",
+      "confirm": "确认归档",
+      "cancel": "取消"
+    }
+  },
+  "members": {
+    "title": "成员与权限管理",
+    "subtitle": "5 类标准角色与门店数据范围实时生效，保障多租户与跨店隔离安全。",
+    "searchPlaceholder": "按姓名、邮箱或角色筛选...",
+    "addButton": "添加成员",
+    "count": "共 {{count}} 位成员",
+    "readOnlyHint": "当前角色为只读视图，仅企业主与人事可分配权限。",
+    "empty": "暂无成员记录。",
+    "allStoresScope": "全租户门店",
+    "noStoresScope": "未分配门店",
+    "columns": {
+      "member": "成员",
+      "role": "角色",
+      "stores": "授权门店范围",
+      "status": "状态",
+      "updatedAt": "更新时间"
+    },
+    "drawer": {
+      "createTitle": "添加企业成员",
+      "editTitle": "编辑成员权限",
+      "description": "修改门店范围或停用状态后实时生效，无需等待令牌过期。",
+      "userId": "用户 UUID（Supabase Auth sub）",
+      "generateUuid": "生成测试 UUID",
+      "email": "工作邮箱",
+      "displayName": "显示姓名",
+      "role": "角色",
+      "status": "状态",
+      "assignedStores": "授权门店（门店经理与员工受此范围限制）",
+      "save": "保存权限",
+      "saving": "保存中...",
+      "archive": "停用并归档",
+      "cancel": "取消"
+    },
+    "archiveDialog": {
+      "title": "确认停用并归档该成员？",
+      "description": "该成员将立即失去本企业访问权限，记录将按软删除保留审计痕迹。企业唯一企业主不可被移除。",
+      "confirm": "确认停用",
+      "cancel": "取消"
+    }
+  },
+  "organization": {
+    "title": "企业基础设置",
+    "subtitle": "配置企业西班牙法定主体信息、默认时区与合规语言。",
+    "navProfile": "主体信息",
+    "navCompliance": "时区与语言",
+    "readOnlyBanner": "仅企业主（Owner）可修改企业主体信息，当前为只读状态。",
+    "savedNotice": "企业设置已保存。",
+    "save": "保存更改",
+    "saving": "保存中..."
+  },
+  "common": {
+    "loading": "加载中...",
+    "error": "操作失败，请稍后重试。"
+  }
+}

@@ -1,0 +1,154 @@
+{
+  "brand": "okTeam HR",
+  "locale": {
+    "label": "Cambiar idioma de la interfaz",
+    "zh-CN": "中文",
+    "es-ES": "Español"
+  },
+  "roles": {
+    "owner": "Propietario",
+    "hr": "RR. HH.",
+    "store_manager": "Encargado de tienda",
+    "accountant": "Gestoría",
+    "employee": "Empleado"
+  },
+  "statuses": {
+    "active": "Activo",
+    "invited": "Invitado",
+    "disabled": "Desactivado",
+    "inactive": "Archivado"
+  },
+  "nav": {
+    "stores": "Centros de trabajo",
+    "members": "Miembros y permisos",
+    "organization": "Empresa",
+    "switchTenant": "Cambiar empresa",
+    "signOut": "Cerrar sesión",
+    "openMenu": "Abrir menú de navegación"
+  },
+  "auth": {
+    "title": "Iniciar sesión en okTeam HR",
+    "subtitle": "Gestión laboral y cumplimiento normativo en España",
+    "email": "Correo corporativo",
+    "password": "Contraseña",
+    "showPassword": "Mostrar contraseña",
+    "hidePassword": "Ocultar contraseña",
+    "signIn": "Iniciar sesión",
+    "signingIn": "Iniciando sesión...",
+    "supabaseNotConfigured": "Supabase Auth no está configurado en este entorno. Utilice el acceso de desarrollo local o configure VITE_SUPABASE_URL.",
+    "devSectionTitle": "Acceso rápido de desarrollo local",
+    "devEmailPlaceholder": "Correo de prueba, ej. owner@dragon.es",
+    "devSignIn": "Entrar con token de desarrollo",
+    "devHint": "Solo disponible en desarrollo local; desactivado físicamente en producción.",
+    "errorGeneric": "No se pudo iniciar sesión. Verifique sus credenciales o el servidor."
+  },
+  "onboarding": {
+    "badge": "Alta de empresa",
+    "title": "Cree su primera empresa en España",
+    "subtitle": "Se le asignará automáticamente el rol de Propietario (Owner) para gestionar centros y permisos.",
+    "legalName": "Razón social",
+    "legalNamePlaceholder": "Ej. Restaurante Dragón S.L.",
+    "tradeName": "Nombre comercial",
+    "tradeNamePlaceholder": "Ej. Grupo Dragón",
+    "cifNif": "CIF / NIF de la empresa",
+    "cifNifPlaceholder": "Ej. B12345678",
+    "ownerDisplayName": "Su nombre visible",
+    "ownerDisplayNamePlaceholder": "Ej. Carlos Chen",
+    "defaultTimezone": "Zona horaria predeterminada (IANA)",
+    "defaultLocale": "Idioma predeterminado",
+    "submit": "Crear empresa y acceder",
+    "submitting": "Creando..."
+  },
+  "stores": {
+    "title": "Centros de trabajo",
+    "subtitle": "Gestione cada centro con su zona horaria IANA para evitar errores de cambio horario (DST).",
+    "searchPlaceholder": "Filtrar por nombre, código o ciudad...",
+    "addButton": "Nuevo centro",
+    "count": "{{count}} centros",
+    "readOnlyHint": "Su rol solo permite consultar los centros asignados.",
+    "empty": "Todavía no hay centros de trabajo registrados.",
+    "columns": {
+      "code": "Código",
+      "name": "Centro",
+      "timezone": "Zona horaria",
+      "city": "Ciudad / Dirección",
+      "status": "Estado",
+      "updatedAt": "Actualizado"
+    },
+    "drawer": {
+      "createTitle": "Nuevo centro de trabajo",
+      "editTitle": "Detalle del centro",
+      "description": "La zona horaria IANA determina el cálculo legal de jornada diaria y cambios DST.",
+      "code": "Código del centro",
+      "name": "Nombre del centro",
+      "timezone": "Zona horaria (IANA)",
+      "address": "Dirección",
+      "city": "Ciudad",
+      "postalCode": "Código postal",
+      "save": "Guardar centro",
+      "saving": "Guardando...",
+      "archive": "Archivar centro",
+      "cancel": "Cancelar"
+    },
+    "archiveDialog": {
+      "title": "¿Archivar este centro de trabajo?",
+      "description": "Se aplicará borrado lógico para conservar los registros durante los 4 años exigidos por ley.",
+      "confirm": "Confirmar archivo",
+      "cancel": "Cancelar"
+    }
+  },
+  "members": {
+    "title": "Miembros y permisos",
+    "subtitle": "Los 5 roles y el alcance por centro se aplican en tiempo real para garantizar el aislamiento.",
+    "searchPlaceholder": "Filtrar por nombre, correo o rol...",
+    "addButton": "Añadir miembro",
+    "count": "{{count}} miembros",
+    "readOnlyHint": "Vista de solo lectura. Solo Propietario y RR. HH. pueden modificar permisos.",
+    "empty": "No hay miembros registrados en este alcance.",
+    "allStoresScope": "Todos los centros",
+    "noStoresScope": "Sin centros asignados",
+    "columns": {
+      "member": "Miembro",
+      "role": "Rol",
+      "stores": "Alcance de centros",
+      "status": "Estado",
+      "updatedAt": "Actualizado"
+    },
+    "drawer": {
+      "createTitle": "Añadir miembro",
+      "editTitle": "Editar permisos del miembro",
+      "description": "Los cambios de rol, centros asignados o baja tienen efecto inmediato.",
+      "userId": "UUID de usuario (Supabase Auth sub)",
+      "generateUuid": "Generar UUID de prueba",
+      "email": "Correo electrónico",
+      "displayName": "Nombre visible",
+      "role": "Rol",
+      "status": "Estado",
+      "assignedStores": "Centros autorizados (restringe a encargados y empleados)",
+      "save": "Guardar permisos",
+      "saving": "Guardando...",
+      "archive": "Desactivar y archivar",
+      "cancel": "Cancelar"
+    },
+    "archiveDialog": {
+      "title": "¿Desactivar y archivar a este miembro?",
+      "description": "Perderá acceso inmediato mediante borrado lógico. No se puede eliminar al último Propietario activo.",
+      "confirm": "Confirmar baja",
+      "cancel": "Cancelar"
+    }
+  },
+  "organization": {
+    "title": "Configuración de la empresa",
+    "subtitle": "Gestione los datos legales en España, zona horaria predeterminada e idioma.",
+    "navProfile": "Datos legales",
+    "navCompliance": "Zona horaria e idioma",
+    "readOnlyBanner": "Solo el Propietario (Owner) puede modificar los datos de la empresa.",
+    "savedNotice": "Cambios guardados correctamente.",
+    "save": "Guardar cambios",
+    "saving": "Guardando..."
+  },
+  "common": {
+    "loading": "Cargando...",
+    "error": "No se pudo completar la operación."
+  }
+}
