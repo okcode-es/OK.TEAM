@@ -19,6 +19,7 @@
     "inactive": "Archivado"
   },
   "nav": {
+    "employees": "Empleados",
     "stores": "Centros de trabajo",
     "members": "Miembros y permisos",
     "organization": "Empresa",
@@ -147,8 +148,103 @@
     "save": "Guardar cambios",
     "saving": "Guardando..."
   },
+  "employees": {
+    "title": "Directorio de empleados",
+    "subtitle": "Gestione contratos laborales en España, jornada semanal y datos cifrados (NIE/IBAN/NAF).",
+    "searchPlaceholder": "Filtrar por nombre, código o correo…",
+    "filterStore": "Todos los centros",
+    "filterStatus": "Todos los estados",
+    "addButton": "Nuevo empleado",
+    "count": "{{count}} empleados",
+    "readOnlyHint": "Su rol solo permite consultar fichas enmascaradas de su alcance.",
+    "empty": "No hay empleados registrados todavía.",
+    "overtimeProhibited": "Parcial · Sin horas extra",
+    "columns": {
+      "code": "Código",
+      "employee": "Empleado",
+      "store": "Centro",
+      "schedule": "Contrato / Jornada",
+      "nieMasked": "NIE / DNI",
+      "status": "Estado"
+    },
+    "contractTypes": {
+      "indefinido": "Indefinido",
+      "temporal": "Temporal",
+      "fijo_discontinuo": "Fijo discontinuo",
+      "practicas": "Formativo / Prácticas"
+    },
+    "scheduleTypes": {
+      "full_time": "Jornada completa",
+      "part_time": "Tiempo parcial"
+    },
+    "employmentStatuses": {
+      "active": "Activo",
+      "on_leave": "De baja / Permiso",
+      "terminated": "Baja",
+      "legal_hold": "Bloqueo legal (4 años)",
+      "anonymized": "Anonimizado"
+    },
+    "fields": {
+      "code": "Código de empleado",
+      "fullName": "Nombre legal completo",
+      "preferredName": "Nombre habitual / chino",
+      "email": "Correo de contacto",
+      "phone": "Teléfono",
+      "primaryStore": "Centro principal",
+      "birthDate": "Fecha de nacimiento",
+      "hireDate": "Fecha de alta",
+      "contractType": "Tipo de contrato",
+      "scheduleType": "Tipo de jornada",
+      "weeklyHours": "Horas semanales (<= 40 h)",
+      "vacationDays": "Vacaciones anuales (>= 30 días nat.)",
+      "nieDni": "NIE / DNI (cifrado AES-256-GCM)",
+      "iban": "IBAN nómina (cifrado)",
+      "naf": "NAF Seguridad Social 12 dígitos (cifrado)"
+    },
+    "drawer": {
+      "createTitle": "Nuevo empleado",
+      "description": "NIE, IBAN y NAF se cifran con AES-256-GCM antes de persistir; los listados nunca exponen texto claro.",
+      "save": "Crear ficha",
+      "saving": "Guardando…",
+      "cancel": "Cancelar"
+    },
+    "profile": {
+      "backToList": "Volver al directorio",
+      "navBasic": "Datos personales",
+      "navContract": "Contrato y jornada",
+      "navPii": "Datos sensibles cifrados",
+      "navRetention": "Baja y bloqueo 4 años",
+      "savedNotice": "Ficha de empleado guardada.",
+      "frozenBanner": "Esta ficha está bloqueada por conservación legal de 4 años o anonimizada (solo lectura).",
+      "piiSubtitle": "Enmascarado por defecto. Los roles autorizados pueden descifrar temporalmente durante 15 segundos.",
+      "storeManagerNoPii": "Por minimización de datos RGPD, el encargado de tienda no puede descifrar NIE / IBAN / NAF.",
+      "revealPii": "Ver texto claro (15 s)",
+      "revealing": "Descifrando…",
+      "hidePii": "Ocultar ahora ({{seconds}} s)",
+      "piiRotateHint": "Déjelo vacío para conservar el valor cifrado actual; introduzca uno nuevo para rotarlo.",
+      "notSet": "No registrado",
+      "retentionSubtitle": "El Estatuto de los Trabajadores exige conservar los registros al menos 4 años antes de anonimizar.",
+      "terminationDate": "Fecha de baja",
+      "retentionUntil": "Bloqueo legal hasta (UTC)",
+      "terminateAction": "Tramitar baja y bloqueo 4 años",
+      "anonymizeAction": "Anonimizar datos (RGPD)",
+      "anonymizeLockedHint": "No se puede anonimizar mientras no venza el plazo legal de 4 años.",
+      "terminateDialog": {
+        "title": "¿Tramitar baja y bloqueo legal de 4 años?",
+        "description": "La ficha quedará bloqueada en solo lectura sin borrado físico durante los 4 años exigidos por ley.",
+        "confirm": "Confirmar baja",
+        "cancel": "Cancelar"
+      },
+      "anonymizeDialog": {
+        "title": "¿Confirmar anonimización irreversible RGPD?",
+        "description": "Se eliminarán permanentemente nombre, contacto y datos cifrados (NIE/IBAN/NAF).",
+        "confirm": "Confirmar anonimización",
+        "cancel": "Cancelar"
+      }
+    }
+  },
   "common": {
-    "loading": "Cargando...",
+    "loading": "Cargando…",
     "error": "No se pudo completar la operación."
   }
 }

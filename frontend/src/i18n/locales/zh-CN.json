@@ -19,6 +19,7 @@
     "inactive": "已归档"
   },
   "nav": {
+    "employees": "员工档案",
     "stores": "门店管理",
     "members": "成员与权限",
     "organization": "企业设置",
@@ -147,8 +148,103 @@
     "save": "保存更改",
     "saving": "保存中..."
   },
+  "employees": {
+    "title": "员工档案",
+    "subtitle": "集中管理西班牙员工合同、周工时底线与加密敏感证件（NIE/IBAN/NAF）。",
+    "searchPlaceholder": "按姓名、工号或邮箱筛选…",
+    "filterStore": "全部门店",
+    "filterStatus": "全部状态",
+    "addButton": "新建员工",
+    "count": "共 {{count}} 位员工",
+    "readOnlyHint": "当前角色仅可查看授权范围内的脱敏档案。",
+    "empty": "暂无员工档案，请点击右上角新建首位员工。",
+    "overtimeProhibited": "兼职 · 禁常规加班",
+    "columns": {
+      "code": "工号",
+      "employee": "员工",
+      "store": "所属门店",
+      "schedule": "合同 / 工时",
+      "nieMasked": "证件（脱敏）",
+      "status": "状态"
+    },
+    "contractTypes": {
+      "indefinido": "无固定期限 (Indefinido)",
+      "temporal": "临时合同 (Temporal)",
+      "fijo_discontinuo": "固定间断 (Fijo discontinuo)",
+      "practicas": "实习/培训 (Prácticas)"
+    },
+    "scheduleTypes": {
+      "full_time": "全职",
+      "part_time": "兼职"
+    },
+    "employmentStatuses": {
+      "active": "在职",
+      "on_leave": "休假中",
+      "terminated": "已离职",
+      "legal_hold": "4年法定留存冻结",
+      "anonymized": "已匿名化"
+    },
+    "fields": {
+      "code": "员工工号",
+      "fullName": "法定全名（西语证件名）",
+      "preferredName": "中文常用名",
+      "email": "联系邮箱",
+      "phone": "联系电话",
+      "primaryStore": "主属门店",
+      "birthDate": "出生日期（未成年工时校验用）",
+      "hireDate": "入职日期",
+      "contractType": "西班牙合同类型",
+      "scheduleType": "全职 / 兼职",
+      "weeklyHours": "合同周工时（<= 40h）",
+      "vacationDays": "法定年假天数（>= 30 自然日）",
+      "nieDni": "NIE / DNI（AES-256-GCM 加密存储）",
+      "iban": "IBAN 工资卡号（加密存储）",
+      "naf": "NAF 社保号 12 位（加密存储）"
+    },
+    "drawer": {
+      "createTitle": "新建员工档案",
+      "description": "NIE、IBAN 与 NAF 均经应用层 AES-256-GCM 加密入库，列表接口绝不返回明文。",
+      "save": "创建员工档案",
+      "saving": "正在保存…",
+      "cancel": "取消"
+    },
+    "profile": {
+      "backToList": "返回员工名册",
+      "navBasic": "基本资料",
+      "navContract": "合同与工时",
+      "navPii": "敏感合规证件",
+      "navRetention": "离职与 4 年留存",
+      "savedNotice": "员工档案已保存。",
+      "frozenBanner": "该员工已进入西班牙 4 年法定留存冻结或已完成匿名化，档案处于只读锁定状态。",
+      "piiSubtitle": "默认仅展示脱敏掩码；授权角色可临时解密查看，15 秒后自动重新隐藏。",
+      "storeManagerNoPii": "依据 GDPR 最小必要原则，门店经理无权解密查看 NIE / IBAN / NAF 明文。",
+      "revealPii": "临时查看明文（15 秒）",
+      "revealing": "解密中…",
+      "hidePii": "立即隐藏（{{seconds}}s）",
+      "piiRotateHint": "留空则保留现有密文不变；填入新值将重新加密覆盖。",
+      "notSet": "未填写",
+      "retentionSubtitle": "西班牙《工人法》要求人事与考勤记录至少留存 4 年；未到期前系统禁止匿名化销毁。",
+      "terminationDate": "离职日期",
+      "retentionUntil": "法定留存到期日（UTC）",
+      "terminateAction": "办理离职并冻结 4 年",
+      "anonymizeAction": "执行 GDPR 匿名化",
+      "anonymizeLockedHint": "4 年法定留存期未满，无法执行匿名化。",
+      "terminateDialog": {
+        "title": "确认办理离职并进入 4 年法定留存冻结？",
+        "description": "档案将立即锁定为只读冻结态（绝不物理删除），并在离职日起计算 4 年法定留存期限。",
+        "confirm": "确认离职冻结",
+        "cancel": "取消"
+      },
+      "anonymizeDialog": {
+        "title": "确认执行不可逆 GDPR 匿名化？",
+        "description": "将永久清除姓名、联系方式及全部加密证件（NIE/IBAN/NAF），仅保留去标识化聚合记录。",
+        "confirm": "确认匿名化",
+        "cancel": "取消"
+      }
+    }
+  },
   "common": {
-    "loading": "加载中...",
+    "loading": "加载中…",
     "error": "操作失败，请稍后重试。"
   }
 }

@@ -11,7 +11,9 @@ from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domain.employees import PiiCipher
 from app.domain.repositories import (
+    EmployeeRepository,
     MembershipRepository,
     StoreRepository,
     TenantRepository,
@@ -24,7 +26,9 @@ from app.domain.security import (
 )
 from app.infrastructure.config import get_settings
 from app.infrastructure.database import get_db_session
+from app.infrastructure.pii_crypto import AesGcmPiiCipher
 from app.infrastructure.repositories import (
+    SqlAlchemyEmployeeRepository,
     SqlAlchemyMembershipRepository,
     SqlAlchemyStoreRepository,
     SqlAlchemyTenantRepository,
@@ -61,6 +65,18 @@ def get_membership_repository(
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> MembershipRepository:
     return SqlAlchemyMembershipRepository(session)
+
+
+def get_employee_repository(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> EmployeeRepository:
+    return SqlAlchemyEmployeeRepository(session)
+
+
+@lru_cache(maxsize=1)
+def get_pii_cipher() -> PiiCipher:
+    settings = get_settings()
+    return AesGcmPiiCipher(settings.pii_encryption_key)
 
 
 def get_commit_fn(

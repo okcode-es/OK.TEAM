@@ -35,3 +35,9 @@
 - **Context**: Storing `store_ids` and `role` solely inside Supabase JWT `app_metadata` introduces revocation lag until token expiry, couples routine store/role changes to Supabase Admin API, and complicates multi-tenant switching for external accountants (*Gestoría*).
 - **Decision**: Verify `user_id` (`sub`) from Supabase JWT (`VerifiedIdentity`), then resolve active `Membership` + `store_ids` live from PostgreSQL (`memberships`, `membership_stores`) scoped by `X-Tenant-Id`. Revocation and store reassignment take effect in 0 seconds, and no cross-schema FK touches Supabase `auth.users`.
 
+## ADR-008: Application-Layer AES-256-GCM PII Encryption & Art. 32 LOPDGDD Bloqueo de Datos
+- **Status**: Accepted (Phase 2)
+- **Context**: Spanish employee identifiers (`NIE/DNI`, `IBAN`, `NAF`) must never be stored or logged in plaintext, yet require duplicate-NIE checks and selective access for HR/Gestoría while minimizing exposure to store managers and reconciling GDPR erasure with Spain's 4-year retention law.
+- **Decision**: Encrypt `NIE/DNI`, `IBAN`, and `NAF` with `AES-256-GCM` (random 96-bit nonce, AAD bound to `tenant_id:employee_id:field_name`) and domain-separated `HMAC-SHA256` blind index for `NIE/DNI`. List/detail endpoints return masks only; `/sensitive` (`Cache-Control: no-store`) blocks `store_manager` (`403`). Termination freezes records into immutable 4-year `legal_hold` (hidden from daily `store_manager` ops under Art. 32 LOPDGDD) until `retention_until` expires, after which irreversible anonymization is unlocked.
+
+

@@ -5,10 +5,17 @@ Pure Python standard library only (enforced by scripts/check_domain_purity.py).
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
+from decimal import Decimal
 from typing import Protocol
 from uuid import UUID
 
+from app.domain.employees import (
+    ContractType,
+    Employee,
+    EmploymentStatus,
+    WorkScheduleType,
+)
 from app.domain.organization import Membership, Store, Tenant, TenantMembershipSummary
 from app.domain.security import MembershipStatus, UserRole
 
@@ -133,3 +140,84 @@ class MembershipRepository(Protocol):
         *,
         deleted_at: datetime,
     ) -> bool: ...
+
+
+class EmployeeRepository(Protocol):
+    async def list_by_tenant(
+        self,
+        tenant_id: UUID,
+        *,
+        allowed_store_ids: frozenset[UUID] | None = None,
+        allowed_statuses: frozenset[EmploymentStatus] | None = None,
+        only_user_id: UUID | None = None,
+        store_id: UUID | None = None,
+        status: EmploymentStatus | None = None,
+    ) -> list[Employee]: ...
+
+    async def get_by_id(self, tenant_id: UUID, employee_id: UUID) -> Employee | None: ...
+
+    async def exists_active_code(
+        self,
+        tenant_id: UUID,
+        employee_code: str,
+        *,
+        exclude_employee_id: UUID | None = None,
+    ) -> bool: ...
+
+    async def exists_active_nie_blind_index(
+        self,
+        tenant_id: UUID,
+        nie_dni_blind_index: str,
+        *,
+        exclude_employee_id: UUID | None = None,
+    ) -> bool: ...
+
+    async def create(self, employee: Employee) -> Employee: ...
+
+    async def update(
+        self,
+        tenant_id: UUID,
+        employee_id: UUID,
+        *,
+        primary_store_id: UUID,
+        user_id: UUID | None,
+        employee_code: str,
+        full_name: str,
+        preferred_name: str,
+        email: str,
+        phone: str,
+        birth_date: date | None,
+        contract_type: ContractType,
+        work_schedule_type: WorkScheduleType,
+        contracted_weekly_hours: Decimal,
+        annual_vacation_days: int,
+        hire_date: date,
+        employment_status: EmploymentStatus,
+        nie_dni_enc: str | None,
+        nie_dni_masked: str | None,
+        nie_dni_blind_index: str | None,
+        iban_enc: str | None,
+        iban_masked: str | None,
+        naf_enc: str | None,
+        naf_masked: str | None,
+        updated_at: datetime,
+    ) -> Employee | None: ...
+
+    async def terminate_and_hold(
+        self,
+        tenant_id: UUID,
+        employee_id: UUID,
+        *,
+        termination_date: date,
+        retention_until: datetime,
+        updated_at: datetime,
+    ) -> Employee | None: ...
+
+    async def anonymize(
+        self,
+        tenant_id: UUID,
+        employee_id: UUID,
+        *,
+        anonymized_full_name: str,
+        anonymized_at: datetime,
+    ) -> Employee | None: ...

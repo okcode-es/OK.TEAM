@@ -1,21 +1,20 @@
 # okTeam Session State (Hard Limit <= 50 Lines)
 
-- **Current Phase**: Phase 1 — Multi-Tenant Organization, Stores & 5-Role RBAC (Complete, Red Team PASS)
+- **Current Phase**: Phase 2 — Employee HR Profiles, Spanish Contracts & Encrypted PII (Complete, Red Team PASS)
 - **Last Updated**: 2026-11-25
-- **Active Branch**: main (synced with origin/main)
+- **Active Branch**: main (Phase 2 synced with origin/main)
 
-## Phase 1 Delivered
-- **DB & Migration**: `0001_phase1_org_rbac` (`tenants`, `stores`, `memberships`, `membership_stores` in `public` schema; UTC `TIMESTAMPTZ`, soft-delete `deleted_at`; `alembic/env.py` allowlists `public` and excludes 6 Supabase system schemas).
-- **Backend Clean Architecture**: Pure stdlib `domain` (`security`, `organization`, `repositories`), `application` use cases (last-owner guard + 5-role scope matrix), `infrastructure` async SQLAlchemy 2.0 repos + Hybrid JWT, `interfaces` REST API (`auth`, `tenants`, `stores`, `memberships`, dev-only `dev_auth`).
-- **Frontend (`shadcn/ui` + Bulletproof React)**: 12 official `shadcn` primitives via `shadcn` MCP; Login + Onboarding + `AppShell` (tenant & `zh-CN`/`es-ES` switch) + Stores & Members (Template 1: TanStack Table + right `Sheet` + `AlertDialog`) + Org Settings (Template 2); 100% generated `schema.d.ts` types, zero direct Supabase DB queries.
+## Phase 2 Delivered
+- **DB & Migration**: `0002_phase2_employees` (`employees` table in `public` schema, UTC `TIMESTAMPTZ`, encrypted PII columns + blind index, no physical DELETE).
+- **AES-256-GCM PII & Spanish Compliance**: `pii_crypto.py` (random 96-bit nonce + AAD `tenant_id:employee_id:field_name` + HMAC-SHA256 blind index + `repr=False`); weekly hours `<= 40h` (`part_time < 40h` + `is_overtime_prohibited`), vacation `>= 30` natural days, immutable 4-year `legal_hold` (`retention_until`), Art. 32 LOPDGDD operational block for `store_manager`, retention-locked GDPR anonymization.
+- **API & Frontend**: `/api/v1/employees` (+ `/sensitive` with `Cache-Control: no-store`, `store_manager` `403`, `/terminate`, `/anonymize`); `EmployeesPage` (Template 1) & `EmployeeProfilePage` (Template 2 + 15s auto-masking plaintext viewer), 100% generated `schema.d.ts` types.
 
 ## Verified Gates (All Passed)
-- Backend (`uv` + Py 3.12): `domain-purity` PASS | `ruff` PASS | `mypy` PASS (27 files) | `pytest` PASS (21/21)
-- Migration: `alembic upgrade head -> downgrade base -> upgrade head` PASS on local Postgres 16 (port 5433)
-- Contracts: `sync-contracts.ps1` PASS (`contracts/openapi.json` <-> `schema.d.ts`)
-- Frontend: `tsc -p tsconfig.app.json --noEmit` PASS | `eslint` PASS (0 errors/0 warnings) | `vite build` PASS
-- Visual Audit: `web-design-guidelines` + `chrome-devtools` `es-ES` at `1440px` & `390px` (0 horizontal overflow)
-- Red Team Gatekeeper: **PASS** (Round 2/2 — P0: None, P1: None; 1 non-blocking P2 noted)
+- Backend (`uv` + Py 3.12): `domain-purity` PASS (5 files) | `ruff` PASS | `mypy` PASS (31 files) | `pytest` PASS (25/25)
+- Migration & E2E: `alembic 0001 -> 0002 -> 0001 -> 0002` + real Postgres 16 AES-256-GCM decrypt (`owner` 200 / `store_manager` 403) PASS
+- Contracts & Frontend: `sync-contracts.ps1` PASS | `tsc --noEmit` PASS | `eslint` PASS (0 errors/0 warnings) | `vite build` PASS
+- Visual Audit: `chrome-devtools` `es-ES` `1440px` & `390px` (0 overflow, live 15s plaintext reveal verified)
+- Red Team Gatekeeper: **PASS** (Round 2/2 — P0: None, P1: None; 2 non-blocking P2 noted)
 
-## Next Action (Phase 2 Entry — Wait for User Kickoff)
-- Phase 2: Employee HR profiles, full-time/part-time contract rules, AES-256-GCM PII encryption (`NIE/DNI`, `IBAN`, `NAF`).
+## Next Action (Phase 3 Entry — Wait for User Kickoff)
+- Phase 3: Append-only daily time tracking (*Registro Diario de Jornada*, RDL 8/2019), 9h/day & 12h rest & 6h->15m break & 80h/yr overtime alerts, Kiosk 3s auto-clear.

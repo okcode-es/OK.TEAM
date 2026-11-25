@@ -108,3 +108,24 @@ class AuthenticatedPrincipal:
             raise ForbiddenScopeError("Only owners or HR may manage tenant memberships")
         if self.role == UserRole.HR and target_role == UserRole.OWNER:
             raise ForbiddenScopeError("HR cannot assign or modify the owner role")
+
+    def can_manage_employees(self) -> bool:
+        return self.role in ADMIN_ROLES
+
+    def require_employee_manage(self) -> None:
+        if not self.can_manage_employees():
+            raise ForbiddenScopeError("Only owners or HR may create, update, or freeze employees")
+
+    def can_view_sensitive_pii(self, *, target_user_id: UUID | None) -> bool:
+        # GDPR Data Minimization: store_manager NEVER decrypts NIE/IBAN/NAF.
+        if self.role in TENANT_WIDE_ROLES:
+            return True
+        if self.role == UserRole.EMPLOYEE and target_user_id is not None:
+            return self.user_id == target_user_id
+        return False
+
+    def require_sensitive_pii_access(self, *, target_user_id: UUID | None) -> None:
+        if not self.can_view_sensitive_pii(target_user_id=target_user_id):
+            raise ForbiddenScopeError(
+                "Current role is not authorized to decrypt employee sensitive PII"
+            )

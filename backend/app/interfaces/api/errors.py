@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
+from app.domain.employees import FrozenRecordError, RetentionLockError
 from app.domain.organization import (
     ConflictError,
     EntityNotFoundError,
@@ -12,6 +13,7 @@ from app.domain.organization import (
     ValidationDomainError,
 )
 from app.domain.security import ForbiddenScopeError, TokenVerificationError
+from app.infrastructure.pii_crypto import PiiEncryptionError
 
 
 def register_exception_handlers(app: FastAPI) -> None:
@@ -74,4 +76,35 @@ def register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             content={"detail": str(exc)},
+        )
+
+    @app.exception_handler(RetentionLockError)
+    async def _handle_retention_lock(
+        _request: Request,
+        exc: RetentionLockError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            content={"detail": str(exc)},
+        )
+
+    @app.exception_handler(FrozenRecordError)
+    async def _handle_frozen_record(
+        _request: Request,
+        exc: FrozenRecordError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            content={"detail": str(exc)},
+        )
+
+    @app.exception_handler(PiiEncryptionError)
+    async def _handle_pii_crypto_error(
+        _request: Request,
+        _exc: PiiEncryptionError,
+    ) -> JSONResponse:
+        # Never leak cipher internals, keys, or plaintext fragments in HTTP responses.
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"detail": "PII encryption service error"},
         )

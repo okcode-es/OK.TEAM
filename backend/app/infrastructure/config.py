@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     supabase_jwt_audience: str = "authenticated"
     supabase_jwt_secret: str = ""
 
+    # 32-byte base64url AES-256-GCM key for NIE/IBAN/NAF encryption
+    pii_encryption_key: str = ""
+
     @property
     def is_dev_auth_active(self) -> bool:
         return (

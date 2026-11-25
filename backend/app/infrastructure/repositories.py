@@ -2,16 +2,24 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.domain.employees import (
+    ContractType,
+    Employee,
+    EmploymentStatus,
+    WorkScheduleType,
+)
 from app.domain.organization import Membership, Store, Tenant, TenantMembershipSummary
 from app.domain.security import MembershipStatus, UserRole
 from app.infrastructure.models import (
+    EmployeeModel,
     MembershipModel,
     MembershipStoreModel,
     StoreModel,
@@ -519,3 +527,287 @@ class SqlAlchemyMembershipRepository:
         model.updated_at = deleted_at
         await self._session.flush()
         return True
+
+
+def _to_employee(model: EmployeeModel) -> Employee:
+    return Employee(
+        id=model.id,
+        tenant_id=model.tenant_id,
+        primary_store_id=model.primary_store_id,
+        user_id=model.user_id,
+        employee_code=model.employee_code,
+        full_name=model.full_name,
+        preferred_name=model.preferred_name,
+        email=model.email,
+        phone=model.phone,
+        birth_date=model.birth_date,
+        contract_type=ContractType(model.contract_type),
+        work_schedule_type=WorkScheduleType(model.work_schedule_type),
+        contracted_weekly_hours=Decimal(model.contracted_weekly_hours),
+        annual_vacation_days=model.annual_vacation_days,
+        hire_date=model.hire_date,
+        termination_date=model.termination_date,
+        nie_dni_enc=model.nie_dni_enc,
+        nie_dni_masked=model.nie_dni_masked,
+        nie_dni_blind_index=model.nie_dni_blind_index,
+        iban_enc=model.iban_enc,
+        iban_masked=model.iban_masked,
+        naf_enc=model.naf_enc,
+        naf_masked=model.naf_masked,
+        employment_status=EmploymentStatus(model.employment_status),
+        retention_until=model.retention_until,
+        anonymized_at=model.anonymized_at,
+        created_at=model.created_at,
+        updated_at=model.updated_at,
+        deleted_at=model.deleted_at,
+    )
+
+
+class SqlAlchemyEmployeeRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def list_by_tenant(
+        self,
+        tenant_id: UUID,
+        *,
+        allowed_store_ids: frozenset[UUID] | None = None,
+        allowed_statuses: frozenset[EmploymentStatus] | None = None,
+        only_user_id: UUID | None = None,
+        store_id: UUID | None = None,
+        status: EmploymentStatus | None = None,
+    ) -> list[Employee]:
+        if allowed_store_ids is not None and len(allowed_store_ids) == 0:
+            return []
+        if allowed_statuses is not None and len(allowed_statuses) == 0:
+            return []
+
+        stmt = select(EmployeeModel).where(EmployeeModel.tenant_id == tenant_id)
+        if allowed_store_ids is not None:
+            stmt = stmt.where(EmployeeModel.primary_store_id.in_(allowed_store_ids))
+        if allowed_statuses is not None:
+            stmt = stmt.where(
+                EmployeeModel.employment_status.in_([s.value for s in allowed_statuses]),
+                EmployeeModel.deleted_at.is_(None),
+            )
+        if only_user_id is not None:
+            stmt = stmt.where(EmployeeModel.user_id == only_user_id)
+        if store_id is not None:
+            stmt = stmt.where(EmployeeModel.primary_store_id == store_id)
+        if status is not None:
+            stmt = stmt.where(EmployeeModel.employment_status == status.value)
+
+        stmt = stmt.order_by(EmployeeModel.employee_code.asc(), EmployeeModel.full_name.asc())
+        result = await self._session.execute(stmt)
+        return [_to_employee(row) for row in result.scalars().all()]
+
+    async def get_by_id(self, tenant_id: UUID, employee_id: UUID) -> Employee | None:
+        stmt = select(EmployeeModel).where(
+            EmployeeModel.tenant_id == tenant_id,
+            EmployeeModel.id == employee_id,
+        )
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+        return _to_employee(model) if model is not None else None
+
+    async def exists_active_code(
+        self,
+        tenant_id: UUID,
+        employee_code: str,
+        *,
+        exclude_employee_id: UUID | None = None,
+    ) -> bool:
+        stmt = select(EmployeeModel.id).where(
+            EmployeeModel.tenant_id == tenant_id,
+            func.upper(EmployeeModel.employee_code) == employee_code.upper(),
+            EmployeeModel.deleted_at.is_(None),
+        )
+        if exclude_employee_id is not None:
+            stmt = stmt.where(EmployeeModel.id != exclude_employee_id)
+        result = await self._session.execute(stmt.limit(1))
+        return result.scalar_one_or_none() is not None
+
+    async def exists_active_nie_blind_index(
+        self,
+        tenant_id: UUID,
+        nie_dni_blind_index: str,
+        *,
+        exclude_employee_id: UUID | None = None,
+    ) -> bool:
+        stmt = select(EmployeeModel.id).where(
+            EmployeeModel.tenant_id == tenant_id,
+            EmployeeModel.nie_dni_blind_index == nie_dni_blind_index,
+            EmployeeModel.deleted_at.is_(None),
+        )
+        if exclude_employee_id is not None:
+            stmt = stmt.where(EmployeeModel.id != exclude_employee_id)
+        result = await self._session.execute(stmt.limit(1))
+        return result.scalar_one_or_none() is not None
+
+    async def create(self, employee: Employee) -> Employee:
+        model = EmployeeModel(
+            id=employee.id,
+            tenant_id=employee.tenant_id,
+            primary_store_id=employee.primary_store_id,
+            user_id=employee.user_id,
+            employee_code=employee.employee_code,
+            full_name=employee.full_name,
+            preferred_name=employee.preferred_name,
+            email=employee.email,
+            phone=employee.phone,
+            birth_date=employee.birth_date,
+            contract_type=employee.contract_type.value,
+            work_schedule_type=employee.work_schedule_type.value,
+            contracted_weekly_hours=employee.contracted_weekly_hours,
+            annual_vacation_days=employee.annual_vacation_days,
+            hire_date=employee.hire_date,
+            termination_date=employee.termination_date,
+            nie_dni_enc=employee.nie_dni_enc,
+            nie_dni_masked=employee.nie_dni_masked,
+            nie_dni_blind_index=employee.nie_dni_blind_index,
+            iban_enc=employee.iban_enc,
+            iban_masked=employee.iban_masked,
+            naf_enc=employee.naf_enc,
+            naf_masked=employee.naf_masked,
+            employment_status=employee.employment_status.value,
+            retention_until=employee.retention_until,
+            anonymized_at=employee.anonymized_at,
+            created_at=employee.created_at,
+            updated_at=employee.updated_at,
+            deleted_at=employee.deleted_at,
+        )
+        self._session.add(model)
+        await self._session.flush()
+        return _to_employee(model)
+
+    async def update(
+        self,
+        tenant_id: UUID,
+        employee_id: UUID,
+        *,
+        primary_store_id: UUID,
+        user_id: UUID | None,
+        employee_code: str,
+        full_name: str,
+        preferred_name: str,
+        email: str,
+        phone: str,
+        birth_date: date | None,
+        contract_type: ContractType,
+        work_schedule_type: WorkScheduleType,
+        contracted_weekly_hours: Decimal,
+        annual_vacation_days: int,
+        hire_date: date,
+        employment_status: EmploymentStatus,
+        nie_dni_enc: str | None,
+        nie_dni_masked: str | None,
+        nie_dni_blind_index: str | None,
+        iban_enc: str | None,
+        iban_masked: str | None,
+        naf_enc: str | None,
+        naf_masked: str | None,
+        updated_at: datetime,
+    ) -> Employee | None:
+        stmt = select(EmployeeModel).where(
+            EmployeeModel.tenant_id == tenant_id,
+            EmployeeModel.id == employee_id,
+            EmployeeModel.deleted_at.is_(None),
+            EmployeeModel.employment_status.in_(
+                [EmploymentStatus.ACTIVE.value, EmploymentStatus.ON_LEAVE.value]
+            ),
+        )
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+        if model is None:
+            return None
+
+        model.primary_store_id = primary_store_id
+        model.user_id = user_id
+        model.employee_code = employee_code
+        model.full_name = full_name
+        model.preferred_name = preferred_name
+        model.email = email
+        model.phone = phone
+        model.birth_date = birth_date
+        model.contract_type = contract_type.value
+        model.work_schedule_type = work_schedule_type.value
+        model.contracted_weekly_hours = contracted_weekly_hours
+        model.annual_vacation_days = annual_vacation_days
+        model.hire_date = hire_date
+        model.employment_status = employment_status.value
+        model.nie_dni_enc = nie_dni_enc
+        model.nie_dni_masked = nie_dni_masked
+        model.nie_dni_blind_index = nie_dni_blind_index
+        model.iban_enc = iban_enc
+        model.iban_masked = iban_masked
+        model.naf_enc = naf_enc
+        model.naf_masked = naf_masked
+        model.updated_at = updated_at
+        await self._session.flush()
+        return _to_employee(model)
+
+    async def terminate_and_hold(
+        self,
+        tenant_id: UUID,
+        employee_id: UUID,
+        *,
+        termination_date: date,
+        retention_until: datetime,
+        updated_at: datetime,
+    ) -> Employee | None:
+        stmt = select(EmployeeModel).where(
+            EmployeeModel.tenant_id == tenant_id,
+            EmployeeModel.id == employee_id,
+            EmployeeModel.deleted_at.is_(None),
+            EmployeeModel.employment_status.in_(
+                [EmploymentStatus.ACTIVE.value, EmploymentStatus.ON_LEAVE.value]
+            ),
+        )
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+        if model is None:
+            return None
+
+        model.termination_date = termination_date
+        model.employment_status = EmploymentStatus.LEGAL_HOLD.value
+        model.retention_until = retention_until
+        model.updated_at = updated_at
+        await self._session.flush()
+        return _to_employee(model)
+
+    async def anonymize(
+        self,
+        tenant_id: UUID,
+        employee_id: UUID,
+        *,
+        anonymized_full_name: str,
+        anonymized_at: datetime,
+    ) -> Employee | None:
+        stmt = select(EmployeeModel).where(
+            EmployeeModel.tenant_id == tenant_id,
+            EmployeeModel.id == employee_id,
+        )
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+        if model is None:
+            return None
+
+        model.user_id = None
+        model.full_name = anonymized_full_name
+        model.preferred_name = ""
+        model.email = ""
+        model.phone = ""
+        model.birth_date = None
+        model.nie_dni_enc = None
+        model.nie_dni_masked = None
+        model.nie_dni_blind_index = None
+        model.iban_enc = None
+        model.iban_masked = None
+        model.naf_enc = None
+        model.naf_masked = None
+        model.employment_status = EmploymentStatus.ANONYMIZED.value
+        model.anonymized_at = anonymized_at
+        model.deleted_at = anonymized_at
+        model.updated_at = anonymized_at
+        await self._session.flush()
+        return _to_employee(model)

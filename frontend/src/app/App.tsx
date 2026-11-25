@@ -5,6 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { AuthProvider, useAuth } from '@/features/auth/AuthContext'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { OnboardingPage } from '@/features/auth/OnboardingPage'
+import { EmployeesPage } from '@/features/employees/EmployeesPage'
 import { MembersPage } from '@/features/members/MembersPage'
 import { OrganizationSettingsPage } from '@/features/organization/OrganizationSettingsPage'
 import { StoresPage } from '@/features/stores/StoresPage'
@@ -12,7 +13,7 @@ import { StoresPage } from '@/features/stores/StoresPage'
 function WorkspaceRouter() {
   const { i18n } = useTranslation()
   const { isLoading, isAuthenticated, activeTenant } = useAuth()
-  const [section, setSection] = useState<NavSection>('stores')
+  const [section, setSection] = useState<NavSection>('employees')
 
   useEffect(() => {
     document.documentElement.lang = i18n.language || 'zh-CN'
@@ -40,6 +41,7 @@ function WorkspaceRouter() {
 
   return (
     <AppShell activeSection={section} onNavigate={setSection}>
+      {section === 'employees' && <EmployeesPage />}
       {section === 'stores' && <StoresPage />}
       {section === 'members' && <MembersPage />}
       {section === 'organization' && <OrganizationSettingsPage />}

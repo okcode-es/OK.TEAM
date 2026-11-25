@@ -20,3 +20,14 @@ export type MembershipUpdateRequest =
   components['schemas']['MembershipUpdateRequest']
 export type UserRole = components['schemas']['UserRole']
 export type MembershipStatus = components['schemas']['MembershipStatus']
+
+export type EmployeeResponse = components['schemas']['EmployeeResponse']
+export type EmployeeCreateRequest =
+  components['schemas']['EmployeeCreateRequest']
+export type EmployeeUpdateRequest =
+  components['schemas']['EmployeeUpdateRequest']
+export type EmployeeSensitivePiiResponse =
+  components['schemas']['EmployeeSensitivePiiResponse']
+export type ContractType = components['schemas']['ContractType']
+export type WorkScheduleType = components['schemas']['WorkScheduleType']
+export type EmploymentStatus = components['schemas']['EmploymentStatus']

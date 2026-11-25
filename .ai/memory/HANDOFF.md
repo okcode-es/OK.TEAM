@@ -1,35 +1,33 @@
-# Cross-Agent Handoff — Phase 1 Sign-Off
+# Cross-Agent Handoff — Phase 2 Sign-Off
 
 ## Task ID & Title
-- **Task**: `Phase 1 / Multi-Tenant Organization, Stores & 5-Role Membership RBAC`
-- **Owner**: `brain` (orchestrated Backend + Frontend + Red Team)
-- **Target**: `user` (Phase 1 Acceptance -> Phase 2 Entry)
+- **Task**: `Phase 2 / Employee HR Profiles, Spanish Contracts & AES-256-GCM Encrypted PII`
+- **Owner**: `brain`
+- **Target**: `user` (Phase 2 Acceptance -> Phase 3 Entry)
 
 ## Scope & Changed Files
-- `backend/app/domain/{security,organization,repositories}.py` — Pure stdlib RBAC & org domain entities/invariants
-- `backend/app/application/{onboarding,tenants,stores,memberships}.py` — Scoped use cases & last-owner protection
-- `backend/app/infrastructure/{config,models,repositories,supabase_jwt}.py` — Async SQLAlchemy 2.0 repos + Hybrid JWT
-- `backend/app/interfaces/api/{deps,errors,auth,tenants,stores,memberships,dev_auth}.py` + `backend/app/main.py`
-- `backend/alembic/env.py` & `backend/alembic/versions/0001_phase1_org_rbac.py` — Reversible public-schema migration
-- `frontend/src/components/ui/*` — 12 official shadcn/ui primitives via `shadcn` MCP
-- `frontend/src/features/{auth,stores,members,organization}/*` + `frontend/src/components/layout/AppShell.tsx`
+- `backend/app/domain/{security,employees,repositories}.py` — Spanish contract limits (<=40h, part-time <40h & overtime-prohibited flag, >=30d vacation), PII validators/maskers, 4y retention lock
+- `backend/app/application/employees.py` — Scoped use cases, Art. 32 LOPDGDD `legal_hold` operational block, immutable termination, retention-locked anonymization
+- `backend/app/infrastructure/{config,pii_crypto,models,repositories}.py` — AES-256-GCM + AAD + HMAC-SHA256 blind index + SQLAlchemy 2.0 repo
+- `backend/app/interfaces/api/{deps,errors,employees}.py` + `backend/app/main.py`
+- `backend/alembic/versions/0002_phase2_employees.py` — Reversible public-schema migration
+- `frontend/src/features/employees/{EmployeesPage,EmployeeProfilePage}.tsx` + `AppShell.tsx` + `App.tsx` + `zh-CN`/`es-ES`
 
 ## Contract & Migration Impact
 - **OpenAPI Synced (`contracts/openapi.json` & `schema.d.ts`)**: `Yes`
-- **Alembic Migration Added**: `Yes (0001_phase1_org_rbac, upgrade -> downgrade -> upgrade verified on Postgres 16)`
+- **Alembic Migration Added**: `Yes (0002_phase2_employees, upgrade -> downgrade 0001 -> upgrade verified on Postgres 16)`
 
 ## Zero-Token Gate Evidence
-- Backend (`domain-purity` / `ruff` / `mypy` / `21 pytest`): `PASS`
+- Backend (`domain-purity` / `ruff` / `mypy` / `25 pytest`): `PASS`
 - Frontend (`tsc -p tsconfig.app.json --noEmit` / `eslint` / `vite build`): `PASS`
-- Visual Audit (`web-design-guidelines` + `chrome-devtools` `es-ES` 1440px & 390px): `PASS (0 overflow)`
+- Visual Audit (`chrome-devtools` `es-ES` 1440px & 390px + 15s PII reveal): `PASS (0 overflow)`
 
 ## High-Risk Trigger Check (Red Team Gatekeeper)
-- [x] DB Schema / Alembic migration
-- [x] RBAC / `tenant_id` / Store scope isolation
-- [ ] Spain labor law core calculation (Phase 2/3)
-- [ ] Private file signed URL / compliance export / PII encryption (Phase 2/4)
+- [x] DB Schema / Alembic migration (`0002_phase2_employees`)
+- [x] RBAC / `tenant_id` / Store scope isolation (`store_manager` blocked from `/sensitive` & `legal_hold`)
+- [x] Spain labor law core calculation (40h cap, part-time flag, >=30d vacation, 4y retention lock)
+- [x] PII encryption (`AES-256-GCM` + AAD + blind index)
 - [x] Phase completion sign-off
 
 ## Notes / Follow-ups
-- Local Postgres 16 container (`okteam-local-db` on port `5433`) remains available via `docker compose --profile local-db`.
-- Phase 2 next: Employee HR records, contract types, encrypted PII (`NIE/DNI`, `IBAN`, `NAF`).
+- Phase 3 next: Append-only daily time tracking (*Registro Diario de Jornada*, RDL 8/2019), 9h/day & 12h rest & 6h->15m break & 80h/yr overtime alerts, Kiosk 3s auto-clear mode.

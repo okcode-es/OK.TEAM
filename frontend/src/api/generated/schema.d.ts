@@ -146,6 +146,93 @@ export interface paths {
         patch: operations["updateMembership"];
         trace?: never;
     };
+    "/api/v1/employees": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List employees visible within caller tenant and store scope (masked PII only) */
+        get: operations["listEmployees"];
+        put?: never;
+        /** Create an employee profile with AES-256-GCM encrypted PII (owner / hr only) */
+        post: operations["createEmployee"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/employees/{employee_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a single employee HR profile (masked PII only) */
+        get: operations["getEmployee"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update employee profile and optionally rotate encrypted PII (owner / hr only) */
+        patch: operations["updateEmployee"];
+        trace?: never;
+    };
+    "/api/v1/employees/{employee_id}/sensitive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Decrypt NIE/DNI, IBAN, and NAF on demand (owner / hr / accountant / self only) */
+        get: operations["getEmployeeSensitivePii"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/employees/{employee_id}/terminate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Terminate employee into Spanish 4-year statutory legal hold (owner / hr only) */
+        post: operations["terminateEmployee"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/employees/{employee_id}/anonymize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Irreversibly anonymize PII after 4-year legal hold expires (owner / hr only) */
+        post: operations["anonymizeEmployee"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -164,6 +251,231 @@ export interface components {
             /** Tenants */
             tenants: components["schemas"]["TenantMembershipSummaryResponse"][];
         };
+        /**
+         * ContractType
+         * @enum {string}
+         */
+        ContractType: "indefinido" | "temporal" | "fijo_discontinuo" | "practicas";
+        /** EmployeeCreateRequest */
+        EmployeeCreateRequest: {
+            /**
+             * Primary Store Id
+             * Format: uuid
+             */
+            primary_store_id: string;
+            /** Employee Code */
+            employee_code: string;
+            /** Full Name */
+            full_name: string;
+            /**
+             * Preferred Name
+             * @default
+             */
+            preferred_name: string;
+            /**
+             * Email
+             * @default
+             */
+            email: string;
+            /**
+             * Phone
+             * @default
+             */
+            phone: string;
+            /** User Id */
+            user_id?: string | null;
+            /** Birth Date */
+            birth_date?: string | null;
+            /** @default indefinido */
+            contract_type: components["schemas"]["ContractType"];
+            /** @default full_time */
+            work_schedule_type: components["schemas"]["WorkScheduleType"];
+            /**
+             * Contracted Weekly Hours
+             * @default 40.00
+             */
+            contracted_weekly_hours: number | string;
+            /**
+             * Annual Vacation Days
+             * @default 30
+             */
+            annual_vacation_days: number;
+            /**
+             * Hire Date
+             * Format: date
+             */
+            hire_date: string;
+            /** Nie Dni */
+            nie_dni?: string | null;
+            /** Iban */
+            iban?: string | null;
+            /** Naf */
+            naf?: string | null;
+        };
+        /** EmployeeListResponse */
+        EmployeeListResponse: {
+            /** Items */
+            items: components["schemas"]["EmployeeResponse"][];
+            /** Total */
+            total: number;
+        };
+        /**
+         * EmployeeResponse
+         * @description Masked HR profile response — NEVER exposes plaintext NIE/DNI, IBAN, or NAF.
+         */
+        EmployeeResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /**
+             * Primary Store Id
+             * Format: uuid
+             */
+            primary_store_id: string;
+            /** User Id */
+            user_id: string | null;
+            /** Employee Code */
+            employee_code: string;
+            /** Full Name */
+            full_name: string;
+            /** Preferred Name */
+            preferred_name: string;
+            /** Email */
+            email: string;
+            /** Phone */
+            phone: string;
+            /** Birth Date */
+            birth_date: string | null;
+            contract_type: components["schemas"]["ContractType"];
+            work_schedule_type: components["schemas"]["WorkScheduleType"];
+            /** Contracted Weekly Hours */
+            contracted_weekly_hours: string;
+            /** Annual Vacation Days */
+            annual_vacation_days: number;
+            /** Is Overtime Prohibited */
+            is_overtime_prohibited: boolean;
+            /**
+             * Hire Date
+             * Format: date
+             */
+            hire_date: string;
+            /** Termination Date */
+            termination_date: string | null;
+            /** Nie Dni Masked */
+            nie_dni_masked: string | null;
+            /** Iban Masked */
+            iban_masked: string | null;
+            /** Naf Masked */
+            naf_masked: string | null;
+            /** Has Nie Dni */
+            has_nie_dni: boolean;
+            /** Has Iban */
+            has_iban: boolean;
+            /** Has Naf */
+            has_naf: boolean;
+            employment_status: components["schemas"]["EmploymentStatus"];
+            /** Retention Until */
+            retention_until: string | null;
+            /** Anonymized At */
+            anonymized_at: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * EmployeeSensitivePiiResponse
+         * @description On-demand decrypted PII — strictly authorized roles only, never cached.
+         */
+        EmployeeSensitivePiiResponse: {
+            /**
+             * Employee Id
+             * Format: uuid
+             */
+            employee_id: string;
+            /** Nie Dni */
+            nie_dni: string | null;
+            /** Iban */
+            iban: string | null;
+            /** Naf */
+            naf: string | null;
+        };
+        /** EmployeeTerminateRequest */
+        EmployeeTerminateRequest: {
+            /**
+             * Termination Date
+             * Format: date
+             */
+            termination_date: string;
+        };
+        /** EmployeeUpdateRequest */
+        EmployeeUpdateRequest: {
+            /**
+             * Primary Store Id
+             * Format: uuid
+             */
+            primary_store_id: string;
+            /** Employee Code */
+            employee_code: string;
+            /** Full Name */
+            full_name: string;
+            /**
+             * Preferred Name
+             * @default
+             */
+            preferred_name: string;
+            /**
+             * Email
+             * @default
+             */
+            email: string;
+            /**
+             * Phone
+             * @default
+             */
+            phone: string;
+            /** User Id */
+            user_id?: string | null;
+            /** Birth Date */
+            birth_date?: string | null;
+            contract_type: components["schemas"]["ContractType"];
+            work_schedule_type: components["schemas"]["WorkScheduleType"];
+            /** Contracted Weekly Hours */
+            contracted_weekly_hours: number | string;
+            /** Annual Vacation Days */
+            annual_vacation_days: number;
+            /**
+             * Hire Date
+             * Format: date
+             */
+            hire_date: string;
+            /** @default active */
+            employment_status: components["schemas"]["EmploymentStatus"];
+            /** Nie Dni */
+            nie_dni?: string | null;
+            /** Iban */
+            iban?: string | null;
+            /** Naf */
+            naf?: string | null;
+        };
+        /**
+         * EmploymentStatus
+         * @enum {string}
+         */
+        EmploymentStatus: "active" | "on_leave" | "terminated" | "legal_hold" | "anonymized";
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -469,6 +781,11 @@ export interface components {
             /** Context */
             ctx?: Record<string, never>;
         };
+        /**
+         * WorkScheduleType
+         * @enum {string}
+         */
+        WorkScheduleType: "full_time" | "part_time";
     };
     responses: never;
     parameters: never;
@@ -907,6 +1224,248 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MembershipResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    listEmployees: {
+        parameters: {
+            query?: {
+                store_id?: string | null;
+                status?: components["schemas"]["EmploymentStatus"] | null;
+            };
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmployeeListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    createEmployee: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmployeeCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmployeeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getEmployee: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                employee_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmployeeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    updateEmployee: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                employee_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmployeeUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmployeeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getEmployeeSensitivePii: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                employee_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmployeeSensitivePiiResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    terminateEmployee: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                employee_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmployeeTerminateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmployeeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    anonymizeEmployee: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                employee_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmployeeResponse"];
                 };
             };
             /** @description Validation Error */

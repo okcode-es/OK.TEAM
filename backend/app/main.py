@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.infrastructure.config import Settings, get_settings
 from app.interfaces.api.auth import router as auth_router
 from app.interfaces.api.dev_auth import build_dev_auth_router
+from app.interfaces.api.employees import router as employees_router
 from app.interfaces.api.errors import register_exception_handlers
 from app.interfaces.api.health import router as health_router
 from app.interfaces.api.memberships import router as memberships_router
@@ -38,6 +39,7 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
     application.include_router(tenants_router, prefix=settings.api_v1_prefix)
     application.include_router(stores_router, prefix=settings.api_v1_prefix)
     application.include_router(memberships_router, prefix=settings.api_v1_prefix)
+    application.include_router(employees_router, prefix=settings.api_v1_prefix)
 
     if settings.is_dev_auth_active:
         application.include_router(

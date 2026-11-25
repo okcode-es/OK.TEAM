@@ -786,6 +786,500 @@
           }
         }
       }
+    },
+    "/api/v1/employees": {
+      "get": {
+        "tags": [
+          "employees"
+        ],
+        "summary": "List employees visible within caller tenant and store scope (masked PII only)",
+        "operationId": "listEmployees",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "store_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Store Id"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/EmploymentStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmployeeListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "employees"
+        ],
+        "summary": "Create an employee profile with AES-256-GCM encrypted PII (owner / hr only)",
+        "operationId": "createEmployee",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmployeeCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmployeeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/employees/{employee_id}": {
+      "get": {
+        "tags": [
+          "employees"
+        ],
+        "summary": "Get a single employee HR profile (masked PII only)",
+        "operationId": "getEmployee",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "employee_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Employee Id"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmployeeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "employees"
+        ],
+        "summary": "Update employee profile and optionally rotate encrypted PII (owner / hr only)",
+        "operationId": "updateEmployee",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "employee_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Employee Id"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmployeeUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmployeeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/employees/{employee_id}/sensitive": {
+      "get": {
+        "tags": [
+          "employees"
+        ],
+        "summary": "Decrypt NIE/DNI, IBAN, and NAF on demand (owner / hr / accountant / self only)",
+        "operationId": "getEmployeeSensitivePii",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "employee_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Employee Id"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmployeeSensitivePiiResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/employees/{employee_id}/terminate": {
+      "post": {
+        "tags": [
+          "employees"
+        ],
+        "summary": "Terminate employee into Spanish 4-year statutory legal hold (owner / hr only)",
+        "operationId": "terminateEmployee",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "employee_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Employee Id"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmployeeTerminateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmployeeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/employees/{employee_id}/anonymize": {
+      "post": {
+        "tags": [
+          "employees"
+        ],
+        "summary": "Irreversibly anonymize PII after 4-year legal hold expires (owner / hr only)",
+        "operationId": "anonymizeEmployee",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "employee_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Employee Id"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmployeeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -828,6 +1322,612 @@
           "tenants"
         ],
         "title": "AuthMeResponse"
+      },
+      "ContractType": {
+        "type": "string",
+        "enum": [
+          "indefinido",
+          "temporal",
+          "fijo_discontinuo",
+          "practicas"
+        ],
+        "title": "ContractType"
+      },
+      "EmployeeCreateRequest": {
+        "properties": {
+          "primary_store_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Primary Store Id"
+          },
+          "employee_code": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Employee Code"
+          },
+          "full_name": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Full Name"
+          },
+          "preferred_name": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Preferred Name",
+            "default": ""
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 255,
+            "title": "Email",
+            "default": ""
+          },
+          "phone": {
+            "type": "string",
+            "maxLength": 40,
+            "title": "Phone",
+            "default": ""
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
+          "birth_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Birth Date"
+          },
+          "contract_type": {
+            "$ref": "#/components/schemas/ContractType",
+            "default": "indefinido"
+          },
+          "work_schedule_type": {
+            "$ref": "#/components/schemas/WorkScheduleType",
+            "default": "full_time"
+          },
+          "contracted_weekly_hours": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 40.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Contracted Weekly Hours",
+            "default": "40.00"
+          },
+          "annual_vacation_days": {
+            "type": "integer",
+            "maximum": 90.0,
+            "minimum": 30.0,
+            "title": "Annual Vacation Days",
+            "default": 30
+          },
+          "hire_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Hire Date"
+          },
+          "nie_dni": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nie Dni"
+          },
+          "iban": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 40
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iban"
+          },
+          "naf": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Naf"
+          }
+        },
+        "type": "object",
+        "required": [
+          "primary_store_id",
+          "employee_code",
+          "full_name",
+          "hire_date"
+        ],
+        "title": "EmployeeCreateRequest"
+      },
+      "EmployeeListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EmployeeResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "EmployeeListResponse"
+      },
+      "EmployeeResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "tenant_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Tenant Id"
+          },
+          "primary_store_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Primary Store Id"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
+          "employee_code": {
+            "type": "string",
+            "title": "Employee Code"
+          },
+          "full_name": {
+            "type": "string",
+            "title": "Full Name"
+          },
+          "preferred_name": {
+            "type": "string",
+            "title": "Preferred Name"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "phone": {
+            "type": "string",
+            "title": "Phone"
+          },
+          "birth_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Birth Date"
+          },
+          "contract_type": {
+            "$ref": "#/components/schemas/ContractType"
+          },
+          "work_schedule_type": {
+            "$ref": "#/components/schemas/WorkScheduleType"
+          },
+          "contracted_weekly_hours": {
+            "type": "string",
+            "title": "Contracted Weekly Hours"
+          },
+          "annual_vacation_days": {
+            "type": "integer",
+            "title": "Annual Vacation Days"
+          },
+          "is_overtime_prohibited": {
+            "type": "boolean",
+            "title": "Is Overtime Prohibited"
+          },
+          "hire_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Hire Date"
+          },
+          "termination_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Termination Date"
+          },
+          "nie_dni_masked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nie Dni Masked"
+          },
+          "iban_masked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iban Masked"
+          },
+          "naf_masked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Naf Masked"
+          },
+          "has_nie_dni": {
+            "type": "boolean",
+            "title": "Has Nie Dni"
+          },
+          "has_iban": {
+            "type": "boolean",
+            "title": "Has Iban"
+          },
+          "has_naf": {
+            "type": "boolean",
+            "title": "Has Naf"
+          },
+          "employment_status": {
+            "$ref": "#/components/schemas/EmploymentStatus"
+          },
+          "retention_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retention Until"
+          },
+          "anonymized_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anonymized At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "primary_store_id",
+          "user_id",
+          "employee_code",
+          "full_name",
+          "preferred_name",
+          "email",
+          "phone",
+          "birth_date",
+          "contract_type",
+          "work_schedule_type",
+          "contracted_weekly_hours",
+          "annual_vacation_days",
+          "is_overtime_prohibited",
+          "hire_date",
+          "termination_date",
+          "nie_dni_masked",
+          "iban_masked",
+          "naf_masked",
+          "has_nie_dni",
+          "has_iban",
+          "has_naf",
+          "employment_status",
+          "retention_until",
+          "anonymized_at",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "EmployeeResponse",
+        "description": "Masked HR profile response — NEVER exposes plaintext NIE/DNI, IBAN, or NAF."
+      },
+      "EmployeeSensitivePiiResponse": {
+        "properties": {
+          "employee_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Employee Id"
+          },
+          "nie_dni": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nie Dni"
+          },
+          "iban": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iban"
+          },
+          "naf": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Naf"
+          }
+        },
+        "type": "object",
+        "required": [
+          "employee_id",
+          "nie_dni",
+          "iban",
+          "naf"
+        ],
+        "title": "EmployeeSensitivePiiResponse",
+        "description": "On-demand decrypted PII — strictly authorized roles only, never cached."
+      },
+      "EmployeeTerminateRequest": {
+        "properties": {
+          "termination_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Termination Date"
+          }
+        },
+        "type": "object",
+        "required": [
+          "termination_date"
+        ],
+        "title": "EmployeeTerminateRequest"
+      },
+      "EmployeeUpdateRequest": {
+        "properties": {
+          "primary_store_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Primary Store Id"
+          },
+          "employee_code": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Employee Code"
+          },
+          "full_name": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Full Name"
+          },
+          "preferred_name": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Preferred Name",
+            "default": ""
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 255,
+            "title": "Email",
+            "default": ""
+          },
+          "phone": {
+            "type": "string",
+            "maxLength": 40,
+            "title": "Phone",
+            "default": ""
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
+          "birth_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Birth Date"
+          },
+          "contract_type": {
+            "$ref": "#/components/schemas/ContractType"
+          },
+          "work_schedule_type": {
+            "$ref": "#/components/schemas/WorkScheduleType"
+          },
+          "contracted_weekly_hours": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 40.0,
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Contracted Weekly Hours"
+          },
+          "annual_vacation_days": {
+            "type": "integer",
+            "maximum": 90.0,
+            "minimum": 30.0,
+            "title": "Annual Vacation Days"
+          },
+          "hire_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Hire Date"
+          },
+          "employment_status": {
+            "$ref": "#/components/schemas/EmploymentStatus",
+            "default": "active"
+          },
+          "nie_dni": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nie Dni"
+          },
+          "iban": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 40
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iban"
+          },
+          "naf": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Naf"
+          }
+        },
+        "type": "object",
+        "required": [
+          "primary_store_id",
+          "employee_code",
+          "full_name",
+          "contract_type",
+          "work_schedule_type",
+          "contracted_weekly_hours",
+          "annual_vacation_days",
+          "hire_date"
+        ],
+        "title": "EmployeeUpdateRequest"
+      },
+      "EmploymentStatus": {
+        "type": "string",
+        "enum": [
+          "active",
+          "on_leave",
+          "terminated",
+          "legal_hold",
+          "anonymized"
+        ],
+        "title": "EmploymentStatus"
       },
       "HTTPValidationError": {
         "properties": {
@@ -1477,6 +2577,14 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "WorkScheduleType": {
+        "type": "string",
+        "enum": [
+          "full_time",
+          "part_time"
+        ],
+        "title": "WorkScheduleType"
       }
     },
     "securitySchemes": {

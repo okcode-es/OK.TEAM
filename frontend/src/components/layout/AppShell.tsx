@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import {
   Building2,
   Globe,
+  IdCard,
   LogOut,
   Menu,
   Store as StoreIcon,
@@ -29,7 +30,7 @@ import { useAuth } from '@/features/auth/AuthContext'
 import { SUPPORTED_LOCALES, type SupportedLocale } from '@/i18n'
 import { cn } from '@/lib/utils'
 
-export type NavSection = 'stores' | 'members' | 'organization'
+export type NavSection = 'employees' | 'stores' | 'members' | 'organization'
 
 interface AppShellProps {
   activeSection: NavSection
@@ -53,6 +54,7 @@ export function AppShell({
     label: string
     icon: typeof StoreIcon
   }> = [
+    { id: 'employees', label: t('nav.employees'), icon: IdCard },
     { id: 'stores', label: t('nav.stores'), icon: StoreIcon },
     { id: 'members', label: t('nav.members'), icon: Users },
     { id: 'organization', label: t('nav.organization'), icon: Building2 },
