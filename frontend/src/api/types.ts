@@ -31,3 +31,26 @@ export type EmployeeSensitivePiiResponse =
 export type ContractType = components['schemas']['ContractType']
 export type WorkScheduleType = components['schemas']['WorkScheduleType']
 export type EmploymentStatus = components['schemas']['EmploymentStatus']
+
+export type AlertCode = components['schemas']['AlertCode']
+export type AlertSeverity = components['schemas']['AlertSeverity']
+export type AppendCorrectionRequest =
+  components['schemas']['AppendCorrectionRequest']
+export type AttendanceEventResponse =
+  components['schemas']['AttendanceEventResponse']
+export type AttendanceEventType = components['schemas']['AttendanceEventType']
+export type AttendanceLedgerResponse =
+  components['schemas']['AttendanceLedgerResponse']
+export type AttendanceSource = components['schemas']['AttendanceSource']
+export type ClockAttendanceRequest =
+  components['schemas']['ClockAttendanceRequest']
+export type ClockAttendanceResponse =
+  components['schemas']['ClockAttendanceResponse']
+export type ComplianceAlertResponse =
+  components['schemas']['ComplianceAlertResponse']
+export type CorrectedEventType = components['schemas']['CorrectedEventType']
+export type DailyAttendanceSummaryResponse =
+  components['schemas']['DailyAttendanceSummaryResponse']
+export type EmployeeAttendanceLedgerResponse =
+  components['schemas']['EmployeeAttendanceLedgerResponse']
+export type WorkSessionResponse = components['schemas']['WorkSessionResponse']

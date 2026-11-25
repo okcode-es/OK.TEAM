@@ -233,10 +233,175 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/attendance/clock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Clock Attendance */
+        post: operations["clockAttendance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/attendance/corrections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Append Attendance Correction */
+        post: operations["appendAttendanceCorrection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/attendance/ledger": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Attendance Ledger */
+        get: operations["getAttendanceLedger"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/attendance/export.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Attendance Csv */
+        get: operations["exportAttendanceCsv"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AlertCode
+         * @enum {string}
+         */
+        AlertCode: "DAILY_MAX_EXCEEDED" | "INTER_SHIFT_REST_VIOLATION" | "MISSING_CONTINUOUS_BREAK" | "WEEKLY_OVERTIME" | "PART_TIME_OVERTIME_PROHIBITED" | "ANNUAL_OVERTIME_WARNING" | "ANNUAL_OVERTIME_EXCEEDED";
+        /**
+         * AlertSeverity
+         * @enum {string}
+         */
+        AlertSeverity: "warning" | "violation";
+        /** AppendCorrectionRequest */
+        AppendCorrectionRequest: {
+            /**
+             * Employee Id
+             * Format: uuid
+             */
+            employee_id: string;
+            corrected_event_type: components["schemas"]["CorrectedEventType"];
+            /**
+             * Occurred At Utc
+             * Format: date-time
+             */
+            occurred_at_utc: string;
+            /** Correction Reason */
+            correction_reason: string;
+            /** Store Id */
+            store_id?: string | null;
+            /** Supersedes Event Id */
+            supersedes_event_id?: string | null;
+        };
+        /** AttendanceEventResponse */
+        AttendanceEventResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /**
+             * Store Id
+             * Format: uuid
+             */
+            store_id: string;
+            /**
+             * Employee Id
+             * Format: uuid
+             */
+            employee_id: string;
+            event_type: components["schemas"]["AttendanceEventType"];
+            /**
+             * Occurred At Utc
+             * Format: date-time
+             */
+            occurred_at_utc: string;
+            /** Store Timezone */
+            store_timezone: string;
+            source: components["schemas"]["AttendanceSource"];
+            /**
+             * Recorded By User Id
+             * Format: uuid
+             */
+            recorded_by_user_id: string;
+            /**
+             * Recorded At Utc
+             * Format: date-time
+             */
+            recorded_at_utc: string;
+            /**
+             * Retention Until
+             * Format: date-time
+             */
+            retention_until: string;
+            /** Supersedes Event Id */
+            supersedes_event_id: string | null;
+            corrected_event_type: components["schemas"]["CorrectedEventType"] | null;
+            /** Correction Reason */
+            correction_reason: string;
+        };
+        /**
+         * AttendanceEventType
+         * @enum {string}
+         */
+        AttendanceEventType: "clock_in" | "break_start" | "break_end" | "clock_out" | "correction";
+        /** AttendanceLedgerResponse */
+        AttendanceLedgerResponse: {
+            /** Items */
+            items: components["schemas"]["EmployeeAttendanceLedgerResponse"][];
+        };
+        /**
+         * AttendanceSource
+         * @enum {string}
+         */
+        AttendanceSource: "web" | "kiosk" | "manager_correction";
         /** AuthMeResponse */
         AuthMeResponse: {
             /**
@@ -251,11 +416,138 @@ export interface components {
             /** Tenants */
             tenants: components["schemas"]["TenantMembershipSummaryResponse"][];
         };
+        /** ClockAttendanceRequest */
+        ClockAttendanceRequest: {
+            event_type: components["schemas"]["AttendanceEventType"];
+            /** @default web */
+            source: components["schemas"]["AttendanceSource"];
+            /** Store Id */
+            store_id?: string | null;
+            /** Employee Code */
+            employee_code?: string | null;
+        };
+        /** ClockAttendanceResponse */
+        ClockAttendanceResponse: {
+            event: components["schemas"]["AttendanceEventResponse"];
+            /**
+             * Employee Id
+             * Format: uuid
+             */
+            employee_id: string;
+            /** Employee Code */
+            employee_code: string;
+            /** Employee Name */
+            employee_name: string;
+            /**
+             * Store Id
+             * Format: uuid
+             */
+            store_id: string;
+            /** Store Name */
+            store_name: string;
+        };
+        /** ComplianceAlertResponse */
+        ComplianceAlertResponse: {
+            code: components["schemas"]["AlertCode"];
+            severity: components["schemas"]["AlertSeverity"];
+            /**
+             * Employee Id
+             * Format: uuid
+             */
+            employee_id: string;
+            /**
+             * Local Date
+             * Format: date
+             */
+            local_date: string;
+            /** Message */
+            message: string;
+            /** Actual Value */
+            actual_value: string | null;
+            /** Limit Value */
+            limit_value: string | null;
+        };
         /**
          * ContractType
          * @enum {string}
          */
         ContractType: "indefinido" | "temporal" | "fijo_discontinuo" | "practicas";
+        /**
+         * CorrectedEventType
+         * @enum {string}
+         */
+        CorrectedEventType: "clock_in" | "break_start" | "break_end" | "clock_out" | "void";
+        /** DailyAttendanceSummaryResponse */
+        DailyAttendanceSummaryResponse: {
+            /**
+             * Employee Id
+             * Format: uuid
+             */
+            employee_id: string;
+            /**
+             * Store Id
+             * Format: uuid
+             */
+            store_id: string;
+            /** Store Timezone */
+            store_timezone: string;
+            /**
+             * Local Date
+             * Format: date
+             */
+            local_date: string;
+            /** Sessions */
+            sessions: components["schemas"]["WorkSessionResponse"][];
+            /** Total Break Minutes */
+            total_break_minutes: number;
+            /** Total Net Minutes */
+            total_net_minutes: number;
+            /** Total Net Hours */
+            total_net_hours: string;
+            /** Has Corrections */
+            has_corrections: boolean;
+            /** Alerts */
+            alerts: components["schemas"]["ComplianceAlertResponse"][];
+        };
+        /** EmployeeAttendanceLedgerResponse */
+        EmployeeAttendanceLedgerResponse: {
+            /**
+             * Employee Id
+             * Format: uuid
+             */
+            employee_id: string;
+            /** Employee Code */
+            employee_code: string;
+            /** Full Name */
+            full_name: string;
+            /**
+             * Store Id
+             * Format: uuid
+             */
+            store_id: string;
+            /** Store Code */
+            store_code: string;
+            /** Store Name */
+            store_name: string;
+            /** Store Timezone */
+            store_timezone: string;
+            /** Total Net Hours */
+            total_net_hours: string;
+            /** Regular Hours */
+            regular_hours: string;
+            /** Overtime Hours */
+            overtime_hours: string;
+            /** Annual Overtime Hours */
+            annual_overtime_hours: string;
+            /** Daily Summaries */
+            daily_summaries: components["schemas"]["DailyAttendanceSummaryResponse"][];
+            /** Sessions */
+            sessions: components["schemas"]["WorkSessionResponse"][];
+            /** Alerts */
+            alerts: components["schemas"]["ComplianceAlertResponse"][];
+            /** Events */
+            events: components["schemas"]["AttendanceEventResponse"][];
+        };
         /** EmployeeCreateRequest */
         EmployeeCreateRequest: {
             /**
@@ -786,6 +1078,47 @@ export interface components {
          * @enum {string}
          */
         WorkScheduleType: "full_time" | "part_time";
+        /** WorkSessionResponse */
+        WorkSessionResponse: {
+            /**
+             * Employee Id
+             * Format: uuid
+             */
+            employee_id: string;
+            /**
+             * Store Id
+             * Format: uuid
+             */
+            store_id: string;
+            /** Store Timezone */
+            store_timezone: string;
+            /**
+             * Local Date
+             * Format: date
+             */
+            local_date: string;
+            /**
+             * Clock In Utc
+             * Format: date-time
+             */
+            clock_in_utc: string;
+            /** Clock Out Utc */
+            clock_out_utc: string | null;
+            /** Break Minutes */
+            break_minutes: number;
+            /** Net Minutes */
+            net_minutes: number;
+            /** Net Hours */
+            net_hours: string;
+            /** Has Corrections */
+            has_corrections: boolean;
+            /** Is Open */
+            is_open: boolean;
+            /** Has Open Break */
+            has_open_break: boolean;
+            /** Source Event Ids */
+            source_event_ids: string[];
+        };
     };
     responses: never;
     parameters: never;
@@ -1466,6 +1799,149 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EmployeeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    clockAttendance: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClockAttendanceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClockAttendanceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    appendAttendanceCorrection: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppendCorrectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttendanceEventResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getAttendanceLedger: {
+        parameters: {
+            query?: {
+                store_id?: string | null;
+                employee_id?: string | null;
+                date_from?: string | null;
+                date_to?: string | null;
+            };
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttendanceLedgerResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    exportAttendanceCsv: {
+        parameters: {
+            query?: {
+                store_id?: string | null;
+                employee_id?: string | null;
+                date_from?: string | null;
+                date_to?: string | null;
+            };
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ITSS-compliant Spanish (es-ES) attendance CSV export */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                    "text/csv": unknown;
                 };
             };
             /** @description Validation Error */

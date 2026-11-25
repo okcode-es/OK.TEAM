@@ -17,6 +17,18 @@ export function getApiBaseUrl(): string {
   return import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
 }
 
+export async function getAuthHeaders(): Promise<Record<string, string>> {
+  const headers: Record<string, string> = {}
+  const token = _devToken ?? (await getAccessToken())
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+  if (_activeTenantId) {
+    headers['X-Tenant-Id'] = _activeTenantId
+  }
+  return headers
+}
+
 const authAndTenantMiddleware: Middleware = {
   async onRequest({ request }) {
     const token = _devToken ?? (await getAccessToken())

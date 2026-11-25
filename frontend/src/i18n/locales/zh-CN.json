@@ -20,6 +20,8 @@
   },
   "nav": {
     "employees": "员工档案",
+    "attendance": "考勤台账",
+    "kiosk": "平板打卡",
     "stores": "门店管理",
     "members": "成员与权限",
     "organization": "企业设置",
@@ -242,6 +244,116 @@
         "cancel": "取消"
       }
     }
+  },
+  "attendance": {
+    "title": "考勤台账与合规预警",
+    "subtitle": "依据西班牙 RDL 8/2019 不可变追加记账，自动按门店 IANA 时区核算工时与法定红线。",
+    "readOnlyHint": "当前角色为只读视图，不可追加考勤修正。",
+    "kpi": {
+      "totalHours": "累计净工时",
+      "overtimeHours": "加班工时",
+      "activeAlerts": "合规预警",
+      "corrections": "人工修正"
+    },
+    "filters": {
+      "allStores": "全部门店",
+      "allEmployees": "全部员工",
+      "dateFrom": "开始日期",
+      "dateTo": "结束日期",
+      "storeLabel": "按门店筛选",
+      "employeeLabel": "按员工筛选"
+    },
+    "exportCsv": "导出 ITSS 合规 CSV",
+    "exporting": "正在导出…",
+    "selfClock": {
+      "title": "我的 Web 考勤打卡",
+      "subtitle": "实时写入不可变考勤账本",
+      "success": "打卡成功：{{action}} · {{time}}"
+    },
+    "actions": {
+      "clock_in": "上班打卡",
+      "break_start": "开始休息",
+      "break_end": "结束休息",
+      "clock_out": "下班签退"
+    },
+    "correctedTypes": {
+      "clock_in": "补录 / 修正上班",
+      "break_start": "补录 / 修正开始休息",
+      "break_end": "补录 / 修正结束休息",
+      "clock_out": "补录 / 修正下班",
+      "void": "作废原事件"
+    },
+    "sources": {
+      "web": "Web 网页",
+      "kiosk": "门店平板",
+      "manager_correction": "管理员修正"
+    },
+    "columns": {
+      "employee": "员工",
+      "date": "本地日期",
+      "clockInOut": "上班 / 下班",
+      "breakMinutes": "休息 (分)",
+      "netHours": "净工时",
+      "correction": "修正状态",
+      "alerts": "合规状态"
+    },
+    "tableHeading": "每日考勤汇总表",
+    "count": "共 {{count}} 条日结记录",
+    "empty": "当前筛选条件下暂无考勤记录。",
+    "inProgress": "进行中",
+    "onBreak": "休息中",
+    "corrected": "已修正",
+    "original": "原始",
+    "compliant": "合规",
+    "alertCodes": {
+      "DAILY_MAX_EXCEEDED": "超出日上限工时 (Art. 34.3 ET)",
+      "INTER_SHIFT_REST_VIOLATION": "班次间隔不足 12 小时 (Art. 34.3 ET)",
+      "MISSING_CONTINUOUS_BREAK": "连续工作超时未休 (Art. 34.4 ET)",
+      "WEEKLY_OVERTIME": "周工时超合同/40h 上限 (Art. 34.1 ET)",
+      "PART_TIME_OVERTIME_PROHIBITED": "兼职禁止常规加班 (Art. 12.4.c ET)",
+      "ANNUAL_OVERTIME_WARNING": "年度加班接近 80h 上限 (Art. 35.2 ET)",
+      "ANNUAL_OVERTIME_EXCEEDED": "超出年度 80h 加班上限 (Art. 35.2 ET)"
+    },
+    "drawer": {
+      "title": "不可变审计链与追加修正",
+      "description": "严禁修改或删除历史打卡记录；任何调整均以追加新事件方式留痕并保留 4 年。",
+      "daySummary": "当日汇总",
+      "auditTrail": "不可变事件审计链",
+      "noEvents": "暂无原始事件记录。",
+      "supersedes": "替代事件",
+      "reason": "修正原因",
+      "recordedAt": "记录时间",
+      "retentionUntil": "4 年留存至",
+      "correctionTitle": "追加修正事件",
+      "readOnlyNotice": "当前角色仅可查看审计链，无权追加修正。",
+      "correctedEventType": "修正类型",
+      "occurredAtLocal": "实际发生时间（门店本地时间）",
+      "supersedesEvent": "替代原事件（可选）",
+      "noSupersede": "不替代（补录新事件）",
+      "correctionReason": "修正原因（必填）",
+      "correctionReasonPlaceholder": "例如：员工忘记打下班卡，核实 22:05 离店…",
+      "reasonRequired": "请填写修正原因。",
+      "submit": "追加修正记录",
+      "submitting": "正在提交…",
+      "savedNotice": "修正事件已追加并重新核算合规状态。"
+    }
+  },
+  "kiosk": {
+    "title": "门店公用平板打卡终端",
+    "subtitle": "专为西班牙门店公共平板设计：每次打卡后 3 秒自动清屏重置，防止隐私泄露。",
+    "unauthorizedTitle": "无权访问平板打卡终端",
+    "unauthorizedDescription": "仅企业主、人事主管或门店经理可开启公用平板打卡终端。",
+    "selectStore": "当前门店",
+    "noStores": "当前账号暂无可用门店，请先在门店管理中创建或分配门店。",
+    "employeeCode": "员工工号",
+    "employeeCodePlaceholder": "输入工号，例如 EMP-001…",
+    "employeeCodeRequired": "请先输入员工工号。",
+    "storeRequired": "请先选择打卡门店。",
+    "receiptTitle": "打卡成功",
+    "receiptTime": "门店当地时间",
+    "autoClearNotice": "{{seconds}} 秒后自动清屏…",
+    "clearNow": "立即清屏",
+    "submitting": "正在记录…"
   },
   "common": {
     "loading": "加载中…",

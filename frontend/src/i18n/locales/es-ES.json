@@ -20,6 +20,8 @@
   },
   "nav": {
     "employees": "Empleados",
+    "attendance": "Registro de jornada",
+    "kiosk": "Terminal Kiosk",
     "stores": "Centros de trabajo",
     "members": "Miembros y permisos",
     "organization": "Empresa",
@@ -242,6 +244,116 @@
         "cancel": "Cancelar"
       }
     }
+  },
+  "attendance": {
+    "title": "Registro de jornada y cumplimiento",
+    "subtitle": "Libro inmutable conforme al RDL 8/2019 con cálculo horario según zona IANA del centro.",
+    "readOnlyHint": "Su rol es de solo lectura y no permite añadir correcciones.",
+    "kpi": {
+      "totalHours": "Horas totales",
+      "overtimeHours": "Horas extra",
+      "activeAlerts": "Alertas legales",
+      "corrections": "Correcciones"
+    },
+    "filters": {
+      "allStores": "Todos los centros",
+      "allEmployees": "Todos los empleados",
+      "dateFrom": "Desde",
+      "dateTo": "Hasta",
+      "storeLabel": "Filtrar por centro",
+      "employeeLabel": "Filtrar por empleado"
+    },
+    "exportCsv": "Exportar CSV ITSS",
+    "exporting": "Exportando…",
+    "selfClock": {
+      "title": "Mi fichaje web",
+      "subtitle": "Registro en tiempo real en el libro inmutable",
+      "success": "Fichaje registrado: {{action}} · {{time}}"
+    },
+    "actions": {
+      "clock_in": "Entrada",
+      "break_start": "Inicio pausa",
+      "break_end": "Fin pausa",
+      "clock_out": "Salida"
+    },
+    "correctedTypes": {
+      "clock_in": "Corregir / añadir entrada",
+      "break_start": "Corregir / añadir inicio pausa",
+      "break_end": "Corregir / añadir fin pausa",
+      "clock_out": "Corregir / añadir salida",
+      "void": "Anular evento original"
+    },
+    "sources": {
+      "web": "Web",
+      "kiosk": "Terminal Kiosk",
+      "manager_correction": "Corrección"
+    },
+    "columns": {
+      "employee": "Empleado",
+      "date": "Fecha local",
+      "clockInOut": "Entrada / Salida",
+      "breakMinutes": "Pausa (min)",
+      "netHours": "Horas netas",
+      "correction": "Correcciones",
+      "alerts": "Cumplimiento"
+    },
+    "tableHeading": "Resumen diario de jornada",
+    "count": "{{count}} registros diarios",
+    "empty": "No hay registros de jornada para los filtros seleccionados.",
+    "inProgress": "En curso",
+    "onBreak": "En pausa",
+    "corrected": "Corregido",
+    "original": "Original",
+    "compliant": "Conforme",
+    "alertCodes": {
+      "DAILY_MAX_EXCEEDED": "Exceso de jornada diaria (Art. 34.3 ET)",
+      "INTER_SHIFT_REST_VIOLATION": "Descanso entre jornadas < 12 h (Art. 34.3 ET)",
+      "MISSING_CONTINUOUS_BREAK": "Falta pausa obligatoria en jornada continua (Art. 34.4 ET)",
+      "WEEKLY_OVERTIME": "Exceso de jornada semanal (Art. 34.1 ET)",
+      "PART_TIME_OVERTIME_PROHIBITED": "Horas extra prohibidas a tiempo parcial (Art. 12.4.c ET)",
+      "ANNUAL_OVERTIME_WARNING": "Aviso: horas extra anuales >= 60 h (Art. 35.2 ET)",
+      "ANNUAL_OVERTIME_EXCEEDED": "Límite anual de 80 h extra superado (Art. 35.2 ET)"
+    },
+    "drawer": {
+      "title": "Auditoría inmutable y correcciones",
+      "description": "Los fichajes nunca se editan ni borran; cada ajuste se añade como nuevo evento conservado 4 años.",
+      "daySummary": "Resumen del día",
+      "auditTrail": "Cadena de eventos inmutable",
+      "noEvents": "Sin eventos registrados.",
+      "supersedes": "Sustituye a",
+      "reason": "Motivo",
+      "recordedAt": "Registrado",
+      "retentionUntil": "Conservación 4 años hasta",
+      "correctionTitle": "Añadir evento de corrección",
+      "readOnlyNotice": "Su rol es de solo lectura y no puede añadir correcciones.",
+      "correctedEventType": "Tipo de evento",
+      "occurredAtLocal": "Fecha y hora local del centro",
+      "supersedesEvent": "Evento sustituido (opcional)",
+      "noSupersede": "Ninguno (nuevo registro)",
+      "correctionReason": "Motivo de la corrección (obligatorio)",
+      "correctionReasonPlaceholder": "Ej.: Olvido de fichaje de salida, verificado a las 22:05…",
+      "reasonRequired": "El motivo de la corrección es obligatorio.",
+      "submit": "Registrar corrección",
+      "submitting": "Guardando…",
+      "savedNotice": "Corrección registrada y cumplimiento recalculado."
+    }
+  },
+  "kiosk": {
+    "title": "Terminal de fichaje (Modo Kiosk)",
+    "subtitle": "Diseñado para tablet compartida: limpia la pantalla automáticamente a los 3 segundos.",
+    "unauthorizedTitle": "Acceso no autorizado al Terminal Kiosk",
+    "unauthorizedDescription": "Solo Propietario, RR. HH. o Encargado de tienda pueden operar el terminal compartido.",
+    "selectStore": "Centro de trabajo",
+    "noStores": "No hay centros disponibles para operar el terminal.",
+    "employeeCode": "Código de empleado",
+    "employeeCodePlaceholder": "Introduzca su código, ej. EMP-001…",
+    "employeeCodeRequired": "Introduzca primero su código de empleado.",
+    "storeRequired": "Seleccione un centro de trabajo.",
+    "receiptTitle": "Fichaje registrado",
+    "receiptTime": "Hora local del centro",
+    "autoClearNotice": "Limpiando pantalla en {{seconds}} s…",
+    "clearNow": "Limpiar ahora",
+    "submitting": "Registrando…"
   },
   "common": {
     "loading": "Cargando…",

@@ -10,6 +10,12 @@ from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.domain.attendance import (
+    AttendanceEvent,
+    AttendanceEventType,
+    AttendanceSource,
+    CorrectedEventType,
+)
 from app.domain.employees import (
     ContractType,
     Employee,
@@ -19,6 +25,7 @@ from app.domain.employees import (
 from app.domain.organization import Membership, Store, Tenant, TenantMembershipSummary
 from app.domain.security import MembershipStatus, UserRole
 from app.infrastructure.models import (
+    AttendanceEventModel,
     EmployeeModel,
     MembershipModel,
     MembershipStoreModel,
@@ -811,3 +818,125 @@ class SqlAlchemyEmployeeRepository:
         model.updated_at = anonymized_at
         await self._session.flush()
         return _to_employee(model)
+
+
+def _to_attendance_event(model: AttendanceEventModel) -> AttendanceEvent:
+    return AttendanceEvent(
+        id=model.id,
+        tenant_id=model.tenant_id,
+        store_id=model.store_id,
+        employee_id=model.employee_id,
+        event_type=AttendanceEventType(model.event_type),
+        occurred_at_utc=model.occurred_at_utc,
+        store_timezone=model.store_timezone,
+        source=AttendanceSource(model.source),
+        recorded_by_user_id=model.recorded_by_user_id,
+        recorded_at_utc=model.recorded_at_utc,
+        retention_until=model.retention_until,
+        supersedes_event_id=model.supersedes_event_id,
+        corrected_event_type=(
+            CorrectedEventType(model.corrected_event_type)
+            if model.corrected_event_type is not None
+            else None
+        ),
+        correction_reason=model.correction_reason,
+    )
+
+
+class SqlAlchemyAttendanceRepository:
+    """Strictly append-only & read-only repository for attendance_events."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def append(self, event: AttendanceEvent) -> AttendanceEvent:
+        model = AttendanceEventModel(
+            id=event.id,
+            tenant_id=event.tenant_id,
+            store_id=event.store_id,
+            employee_id=event.employee_id,
+            event_type=event.event_type.value,
+            occurred_at_utc=event.occurred_at_utc,
+            store_timezone=event.store_timezone,
+            source=event.source.value,
+            recorded_by_user_id=event.recorded_by_user_id,
+            recorded_at_utc=event.recorded_at_utc,
+            supersedes_event_id=event.supersedes_event_id,
+            corrected_event_type=(
+                event.corrected_event_type.value
+                if event.corrected_event_type is not None
+                else None
+            ),
+            correction_reason=event.correction_reason,
+            retention_until=event.retention_until,
+        )
+        self._session.add(model)
+        await self._session.flush()
+        return _to_attendance_event(model)
+
+    async def get_by_id(self, tenant_id: UUID, event_id: UUID) -> AttendanceEvent | None:
+        stmt = select(AttendanceEventModel).where(
+            AttendanceEventModel.tenant_id == tenant_id,
+            AttendanceEventModel.id == event_id,
+        )
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+        return _to_attendance_event(model) if model is not None else None
+
+    async def list_by_employee(
+        self,
+        tenant_id: UUID,
+        employee_id: UUID,
+        *,
+        occurred_from_utc: datetime | None = None,
+        occurred_to_utc: datetime | None = None,
+    ) -> list[AttendanceEvent]:
+        stmt = select(AttendanceEventModel).where(
+            AttendanceEventModel.tenant_id == tenant_id,
+            AttendanceEventModel.employee_id == employee_id,
+        )
+        if occurred_from_utc is not None:
+            stmt = stmt.where(AttendanceEventModel.occurred_at_utc >= occurred_from_utc)
+        if occurred_to_utc is not None:
+            stmt = stmt.where(AttendanceEventModel.occurred_at_utc <= occurred_to_utc)
+
+        stmt = stmt.order_by(
+            AttendanceEventModel.occurred_at_utc.asc(),
+            AttendanceEventModel.recorded_at_utc.asc(),
+            AttendanceEventModel.id.asc(),
+        )
+        result = await self._session.execute(stmt)
+        return [_to_attendance_event(row) for row in result.scalars().all()]
+
+    async def list_by_tenant(
+        self,
+        tenant_id: UUID,
+        *,
+        allowed_store_ids: frozenset[UUID] | None = None,
+        store_id: UUID | None = None,
+        employee_id: UUID | None = None,
+        occurred_from_utc: datetime | None = None,
+        occurred_to_utc: datetime | None = None,
+    ) -> list[AttendanceEvent]:
+        if allowed_store_ids is not None and len(allowed_store_ids) == 0:
+            return []
+
+        stmt = select(AttendanceEventModel).where(AttendanceEventModel.tenant_id == tenant_id)
+        if allowed_store_ids is not None:
+            stmt = stmt.where(AttendanceEventModel.store_id.in_(allowed_store_ids))
+        if store_id is not None:
+            stmt = stmt.where(AttendanceEventModel.store_id == store_id)
+        if employee_id is not None:
+            stmt = stmt.where(AttendanceEventModel.employee_id == employee_id)
+        if occurred_from_utc is not None:
+            stmt = stmt.where(AttendanceEventModel.occurred_at_utc >= occurred_from_utc)
+        if occurred_to_utc is not None:
+            stmt = stmt.where(AttendanceEventModel.occurred_at_utc <= occurred_to_utc)
+
+        stmt = stmt.order_by(
+            AttendanceEventModel.occurred_at_utc.asc(),
+            AttendanceEventModel.recorded_at_utc.asc(),
+            AttendanceEventModel.id.asc(),
+        )
+        result = await self._session.execute(stmt)
+        return [_to_attendance_event(row) for row in result.scalars().all()]

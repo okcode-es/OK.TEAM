@@ -1280,10 +1280,595 @@
           }
         }
       }
+    },
+    "/api/v1/attendance/clock": {
+      "post": {
+        "tags": [
+          "attendance"
+        ],
+        "summary": "Clock Attendance",
+        "operationId": "clockAttendance",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClockAttendanceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClockAttendanceResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/attendance/corrections": {
+      "post": {
+        "tags": [
+          "attendance"
+        ],
+        "summary": "Append Attendance Correction",
+        "operationId": "appendAttendanceCorrection",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppendCorrectionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttendanceEventResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/attendance/ledger": {
+      "get": {
+        "tags": [
+          "attendance"
+        ],
+        "summary": "Get Attendance Ledger",
+        "operationId": "getAttendanceLedger",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "store_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Store Id"
+            }
+          },
+          {
+            "name": "employee_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Employee Id"
+            }
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date From"
+            }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date To"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttendanceLedgerResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/attendance/export.csv": {
+      "get": {
+        "tags": [
+          "attendance"
+        ],
+        "summary": "Export Attendance Csv",
+        "operationId": "exportAttendanceCsv",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "store_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Store Id"
+            }
+          },
+          {
+            "name": "employee_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Employee Id"
+            }
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date From"
+            }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date To"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ITSS-compliant Spanish (es-ES) attendance CSV export",
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "text/csv": {}
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "AlertCode": {
+        "type": "string",
+        "enum": [
+          "DAILY_MAX_EXCEEDED",
+          "INTER_SHIFT_REST_VIOLATION",
+          "MISSING_CONTINUOUS_BREAK",
+          "WEEKLY_OVERTIME",
+          "PART_TIME_OVERTIME_PROHIBITED",
+          "ANNUAL_OVERTIME_WARNING",
+          "ANNUAL_OVERTIME_EXCEEDED"
+        ],
+        "title": "AlertCode"
+      },
+      "AlertSeverity": {
+        "type": "string",
+        "enum": [
+          "warning",
+          "violation"
+        ],
+        "title": "AlertSeverity"
+      },
+      "AppendCorrectionRequest": {
+        "properties": {
+          "employee_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Employee Id"
+          },
+          "corrected_event_type": {
+            "$ref": "#/components/schemas/CorrectedEventType"
+          },
+          "occurred_at_utc": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At Utc"
+          },
+          "correction_reason": {
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Correction Reason"
+          },
+          "store_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Store Id"
+          },
+          "supersedes_event_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes Event Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "employee_id",
+          "corrected_event_type",
+          "occurred_at_utc",
+          "correction_reason"
+        ],
+        "title": "AppendCorrectionRequest"
+      },
+      "AttendanceEventResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "tenant_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Tenant Id"
+          },
+          "store_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Store Id"
+          },
+          "employee_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Employee Id"
+          },
+          "event_type": {
+            "$ref": "#/components/schemas/AttendanceEventType"
+          },
+          "occurred_at_utc": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Occurred At Utc"
+          },
+          "store_timezone": {
+            "type": "string",
+            "title": "Store Timezone"
+          },
+          "source": {
+            "$ref": "#/components/schemas/AttendanceSource"
+          },
+          "recorded_by_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Recorded By User Id"
+          },
+          "recorded_at_utc": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Recorded At Utc"
+          },
+          "retention_until": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Retention Until"
+          },
+          "supersedes_event_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supersedes Event Id"
+          },
+          "corrected_event_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CorrectedEventType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "correction_reason": {
+            "type": "string",
+            "title": "Correction Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "store_id",
+          "employee_id",
+          "event_type",
+          "occurred_at_utc",
+          "store_timezone",
+          "source",
+          "recorded_by_user_id",
+          "recorded_at_utc",
+          "retention_until",
+          "supersedes_event_id",
+          "corrected_event_type",
+          "correction_reason"
+        ],
+        "title": "AttendanceEventResponse"
+      },
+      "AttendanceEventType": {
+        "type": "string",
+        "enum": [
+          "clock_in",
+          "break_start",
+          "break_end",
+          "clock_out",
+          "correction"
+        ],
+        "title": "AttendanceEventType"
+      },
+      "AttendanceLedgerResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EmployeeAttendanceLedgerResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "AttendanceLedgerResponse"
+      },
+      "AttendanceSource": {
+        "type": "string",
+        "enum": [
+          "web",
+          "kiosk",
+          "manager_correction"
+        ],
+        "title": "AttendanceSource"
+      },
       "AuthMeResponse": {
         "properties": {
           "user_id": {
@@ -1323,6 +1908,142 @@
         ],
         "title": "AuthMeResponse"
       },
+      "ClockAttendanceRequest": {
+        "properties": {
+          "event_type": {
+            "$ref": "#/components/schemas/AttendanceEventType"
+          },
+          "source": {
+            "$ref": "#/components/schemas/AttendanceSource",
+            "default": "web"
+          },
+          "store_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Store Id"
+          },
+          "employee_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 32
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Employee Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "event_type"
+        ],
+        "title": "ClockAttendanceRequest"
+      },
+      "ClockAttendanceResponse": {
+        "properties": {
+          "event": {
+            "$ref": "#/components/schemas/AttendanceEventResponse"
+          },
+          "employee_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Employee Id"
+          },
+          "employee_code": {
+            "type": "string",
+            "title": "Employee Code"
+          },
+          "employee_name": {
+            "type": "string",
+            "title": "Employee Name"
+          },
+          "store_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Store Id"
+          },
+          "store_name": {
+            "type": "string",
+            "title": "Store Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "event",
+          "employee_id",
+          "employee_code",
+          "employee_name",
+          "store_id",
+          "store_name"
+        ],
+        "title": "ClockAttendanceResponse"
+      },
+      "ComplianceAlertResponse": {
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/AlertCode"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/AlertSeverity"
+          },
+          "employee_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Employee Id"
+          },
+          "local_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Local Date"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "actual_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Value"
+          },
+          "limit_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit Value"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "severity",
+          "employee_id",
+          "local_date",
+          "message",
+          "actual_value",
+          "limit_value"
+        ],
+        "title": "ComplianceAlertResponse"
+      },
       "ContractType": {
         "type": "string",
         "enum": [
@@ -1332,6 +2053,181 @@
           "practicas"
         ],
         "title": "ContractType"
+      },
+      "CorrectedEventType": {
+        "type": "string",
+        "enum": [
+          "clock_in",
+          "break_start",
+          "break_end",
+          "clock_out",
+          "void"
+        ],
+        "title": "CorrectedEventType"
+      },
+      "DailyAttendanceSummaryResponse": {
+        "properties": {
+          "employee_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Employee Id"
+          },
+          "store_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Store Id"
+          },
+          "store_timezone": {
+            "type": "string",
+            "title": "Store Timezone"
+          },
+          "local_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Local Date"
+          },
+          "sessions": {
+            "items": {
+              "$ref": "#/components/schemas/WorkSessionResponse"
+            },
+            "type": "array",
+            "title": "Sessions"
+          },
+          "total_break_minutes": {
+            "type": "integer",
+            "title": "Total Break Minutes"
+          },
+          "total_net_minutes": {
+            "type": "integer",
+            "title": "Total Net Minutes"
+          },
+          "total_net_hours": {
+            "type": "string",
+            "title": "Total Net Hours"
+          },
+          "has_corrections": {
+            "type": "boolean",
+            "title": "Has Corrections"
+          },
+          "alerts": {
+            "items": {
+              "$ref": "#/components/schemas/ComplianceAlertResponse"
+            },
+            "type": "array",
+            "title": "Alerts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "employee_id",
+          "store_id",
+          "store_timezone",
+          "local_date",
+          "sessions",
+          "total_break_minutes",
+          "total_net_minutes",
+          "total_net_hours",
+          "has_corrections",
+          "alerts"
+        ],
+        "title": "DailyAttendanceSummaryResponse"
+      },
+      "EmployeeAttendanceLedgerResponse": {
+        "properties": {
+          "employee_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Employee Id"
+          },
+          "employee_code": {
+            "type": "string",
+            "title": "Employee Code"
+          },
+          "full_name": {
+            "type": "string",
+            "title": "Full Name"
+          },
+          "store_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Store Id"
+          },
+          "store_code": {
+            "type": "string",
+            "title": "Store Code"
+          },
+          "store_name": {
+            "type": "string",
+            "title": "Store Name"
+          },
+          "store_timezone": {
+            "type": "string",
+            "title": "Store Timezone"
+          },
+          "total_net_hours": {
+            "type": "string",
+            "title": "Total Net Hours"
+          },
+          "regular_hours": {
+            "type": "string",
+            "title": "Regular Hours"
+          },
+          "overtime_hours": {
+            "type": "string",
+            "title": "Overtime Hours"
+          },
+          "annual_overtime_hours": {
+            "type": "string",
+            "title": "Annual Overtime Hours"
+          },
+          "daily_summaries": {
+            "items": {
+              "$ref": "#/components/schemas/DailyAttendanceSummaryResponse"
+            },
+            "type": "array",
+            "title": "Daily Summaries"
+          },
+          "sessions": {
+            "items": {
+              "$ref": "#/components/schemas/WorkSessionResponse"
+            },
+            "type": "array",
+            "title": "Sessions"
+          },
+          "alerts": {
+            "items": {
+              "$ref": "#/components/schemas/ComplianceAlertResponse"
+            },
+            "type": "array",
+            "title": "Alerts"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/AttendanceEventResponse"
+            },
+            "type": "array",
+            "title": "Events"
+          }
+        },
+        "type": "object",
+        "required": [
+          "employee_id",
+          "employee_code",
+          "full_name",
+          "store_id",
+          "store_code",
+          "store_name",
+          "store_timezone",
+          "total_net_hours",
+          "regular_hours",
+          "overtime_hours",
+          "annual_overtime_hours",
+          "daily_summaries",
+          "sessions",
+          "alerts",
+          "events"
+        ],
+        "title": "EmployeeAttendanceLedgerResponse"
       },
       "EmployeeCreateRequest": {
         "properties": {
@@ -2585,6 +3481,95 @@
           "part_time"
         ],
         "title": "WorkScheduleType"
+      },
+      "WorkSessionResponse": {
+        "properties": {
+          "employee_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Employee Id"
+          },
+          "store_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Store Id"
+          },
+          "store_timezone": {
+            "type": "string",
+            "title": "Store Timezone"
+          },
+          "local_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Local Date"
+          },
+          "clock_in_utc": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Clock In Utc"
+          },
+          "clock_out_utc": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clock Out Utc"
+          },
+          "break_minutes": {
+            "type": "integer",
+            "title": "Break Minutes"
+          },
+          "net_minutes": {
+            "type": "integer",
+            "title": "Net Minutes"
+          },
+          "net_hours": {
+            "type": "string",
+            "title": "Net Hours"
+          },
+          "has_corrections": {
+            "type": "boolean",
+            "title": "Has Corrections"
+          },
+          "is_open": {
+            "type": "boolean",
+            "title": "Is Open"
+          },
+          "has_open_break": {
+            "type": "boolean",
+            "title": "Has Open Break"
+          },
+          "source_event_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Source Event Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "employee_id",
+          "store_id",
+          "store_timezone",
+          "local_date",
+          "clock_in_utc",
+          "clock_out_utc",
+          "break_minutes",
+          "net_minutes",
+          "net_hours",
+          "has_corrections",
+          "is_open",
+          "has_open_break",
+          "source_event_ids"
+        ],
+        "title": "WorkSessionResponse"
       }
     },
     "securitySchemes": {

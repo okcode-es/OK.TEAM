@@ -6,6 +6,8 @@ import { AuthProvider, useAuth } from '@/features/auth/AuthContext'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { OnboardingPage } from '@/features/auth/OnboardingPage'
 import { EmployeesPage } from '@/features/employees/EmployeesPage'
+import { AttendancePage } from '@/features/attendance/AttendancePage'
+import { KioskPage } from '@/features/attendance/KioskPage'
 import { MembersPage } from '@/features/members/MembersPage'
 import { OrganizationSettingsPage } from '@/features/organization/OrganizationSettingsPage'
 import { StoresPage } from '@/features/stores/StoresPage'
@@ -42,6 +44,8 @@ function WorkspaceRouter() {
   return (
     <AppShell activeSection={section} onNavigate={setSection}>
       {section === 'employees' && <EmployeesPage />}
+      {section === 'attendance' && <AttendancePage />}
+      {section === 'kiosk' && <KioskPage />}
       {section === 'stores' && <StoresPage />}
       {section === 'members' && <MembersPage />}
       {section === 'organization' && <OrganizationSettingsPage />}

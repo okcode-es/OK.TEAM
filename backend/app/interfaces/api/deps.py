@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from functools import lru_cache
 from typing import Annotated
 from uuid import UUID
@@ -13,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.employees import PiiCipher
 from app.domain.repositories import (
+    AttendanceRepository,
     EmployeeRepository,
     MembershipRepository,
     StoreRepository,
@@ -28,6 +30,7 @@ from app.infrastructure.config import get_settings
 from app.infrastructure.database import get_db_session
 from app.infrastructure.pii_crypto import AesGcmPiiCipher
 from app.infrastructure.repositories import (
+    SqlAlchemyAttendanceRepository,
     SqlAlchemyEmployeeRepository,
     SqlAlchemyMembershipRepository,
     SqlAlchemyStoreRepository,
@@ -73,6 +76,12 @@ def get_employee_repository(
     return SqlAlchemyEmployeeRepository(session)
 
 
+def get_attendance_repository(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> AttendanceRepository:
+    return SqlAlchemyAttendanceRepository(session)
+
+
 @lru_cache(maxsize=1)
 def get_pii_cipher() -> PiiCipher:
     settings = get_settings()
@@ -86,6 +95,10 @@ def get_commit_fn(
         await session.commit()
 
     return _commit
+
+
+def get_utc_now() -> datetime:
+    return datetime.now(UTC)
 
 
 def get_verified_identity(

@@ -260,3 +260,75 @@ class EmployeeModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AttendanceEventModel(Base):
+    """Strictly append-only attendance ledger (RDL 8/2019).
+
+    Database trigger ``trg_attendance_events_immutable`` forbids UPDATE and DELETE.
+    """
+
+    __tablename__ = "attendance_events"
+    __table_args__ = (
+        CheckConstraint(
+            "event_type IN ('clock_in', 'break_start', 'break_end', 'clock_out', 'correction')",
+            name="attendance_events_event_type_valid",
+        ),
+        CheckConstraint(
+            "source IN ('web', 'kiosk', 'manager_correction')",
+            name="attendance_events_source_valid",
+        ),
+        CheckConstraint(
+            "corrected_event_type IS NULL OR corrected_event_type IN "
+            "('clock_in', 'break_start', 'break_end', 'clock_out', 'void')",
+            name="attendance_events_corrected_type_valid",
+        ),
+        Index(
+            "ix_attendance_events_tenant_emp_time",
+            "tenant_id",
+            "employee_id",
+            "occurred_at_utc",
+        ),
+        Index(
+            "ix_attendance_events_tenant_store_time",
+            "tenant_id",
+            "store_id",
+            "occurred_at_utc",
+        ),
+        Index("ix_attendance_events_supersedes", "supersedes_event_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    store_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("stores.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    employee_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("employees.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    event_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    occurred_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    store_timezone: Mapped[str] = mapped_column(String(64), nullable=False)
+    source: Mapped[str] = mapped_column(String(32), nullable=False)
+    recorded_by_user_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
+    recorded_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    supersedes_event_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("attendance_events.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    corrected_event_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    correction_reason: Mapped[str] = mapped_column(
+        String(300),
+        nullable=False,
+        server_default=text("''"),
+    )
+    retention_until: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

@@ -10,6 +10,7 @@ from decimal import Decimal
 from typing import Protocol
 from uuid import UUID
 
+from app.domain.attendance import AttendanceEvent
 from app.domain.employees import (
     ContractType,
     Employee,
@@ -221,3 +222,31 @@ class EmployeeRepository(Protocol):
         anonymized_full_name: str,
         anonymized_at: datetime,
     ) -> Employee | None: ...
+
+
+class AttendanceRepository(Protocol):
+    """Strictly append-only & read-only repository for attendance_events (RDL 8/2019)."""
+
+    async def append(self, event: AttendanceEvent) -> AttendanceEvent: ...
+
+    async def get_by_id(self, tenant_id: UUID, event_id: UUID) -> AttendanceEvent | None: ...
+
+    async def list_by_employee(
+        self,
+        tenant_id: UUID,
+        employee_id: UUID,
+        *,
+        occurred_from_utc: datetime | None = None,
+        occurred_to_utc: datetime | None = None,
+    ) -> list[AttendanceEvent]: ...
+
+    async def list_by_tenant(
+        self,
+        tenant_id: UUID,
+        *,
+        allowed_store_ids: frozenset[UUID] | None = None,
+        store_id: UUID | None = None,
+        employee_id: UUID | None = None,
+        occurred_from_utc: datetime | None = None,
+        occurred_to_utc: datetime | None = None,
+    ) -> list[AttendanceEvent]: ...

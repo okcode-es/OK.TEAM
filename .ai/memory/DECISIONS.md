@@ -40,4 +40,10 @@
 - **Context**: Spanish employee identifiers (`NIE/DNI`, `IBAN`, `NAF`) must never be stored or logged in plaintext, yet require duplicate-NIE checks and selective access for HR/Gestoría while minimizing exposure to store managers and reconciling GDPR erasure with Spain's 4-year retention law.
 - **Decision**: Encrypt `NIE/DNI`, `IBAN`, and `NAF` with `AES-256-GCM` (random 96-bit nonce, AAD bound to `tenant_id:employee_id:field_name`) and domain-separated `HMAC-SHA256` blind index for `NIE/DNI`. List/detail endpoints return masks only; `/sensitive` (`Cache-Control: no-store`) blocks `store_manager` (`403`). Termination freezes records into immutable 4-year `legal_hold` (hidden from daily `store_manager` ops under Art. 32 LOPDGDD) until `retention_until` expires, after which irreversible anonymization is unlocked.
 
+## ADR-009: Strict Hydrogen Worker Separation & Phase-Boundary Context Compaction
+- **Status**: Accepted (Phase 3+)
+- **Context**: Running code implementation directly on the coordinator model (Neon) bloats reasoning context and wastes tokens; mixing backend and frontend edits blurs contract boundaries.
+- **Decision**: Coordinator (Neon) handles design, delegation, review, and `.ai/memory/` updates only — never edits business source code directly. Dedicated `Gemini 4 Hydrogen (Medium)` Swarm workers own Backend (`backend/*` + `contracts/openapi.json`) and Frontend (`frontend/*`) separately. Context compaction (`/compact`) is scheduled strictly at **Phase boundaries** (immediately after Red Team PASS + `git push` + `.ai/memory/` snapshot) to maximize token savings with zero mid-phase context loss.
+
+
 

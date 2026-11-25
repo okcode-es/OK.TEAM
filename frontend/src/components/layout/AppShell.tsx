@@ -1,11 +1,13 @@
 import { useState, type ReactNode } from 'react'
 import {
   Building2,
+  Clock,
   Globe,
   IdCard,
   LogOut,
   Menu,
   Store as StoreIcon,
+  Tablet,
   Users,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -30,7 +32,13 @@ import { useAuth } from '@/features/auth/AuthContext'
 import { SUPPORTED_LOCALES, type SupportedLocale } from '@/i18n'
 import { cn } from '@/lib/utils'
 
-export type NavSection = 'employees' | 'stores' | 'members' | 'organization'
+export type NavSection =
+  | 'employees'
+  | 'attendance'
+  | 'kiosk'
+  | 'stores'
+  | 'members'
+  | 'organization'
 
 interface AppShellProps {
   activeSection: NavSection
@@ -49,12 +57,21 @@ export function AppShell({
 
   const activeLocale = (i18n.language as SupportedLocale) || 'zh-CN'
 
+  const canOperateKiosk =
+    activeTenant?.role === 'owner' ||
+    activeTenant?.role === 'hr' ||
+    activeTenant?.role === 'store_manager'
+
   const navItems: Array<{
     id: NavSection
     label: string
     icon: typeof StoreIcon
   }> = [
     { id: 'employees', label: t('nav.employees'), icon: IdCard },
+    { id: 'attendance', label: t('nav.attendance'), icon: Clock },
+    ...(canOperateKiosk
+      ? [{ id: 'kiosk' as const, label: t('nav.kiosk'), icon: Tablet }]
+      : []),
     { id: 'stores', label: t('nav.stores'), icon: StoreIcon },
     { id: 'members', label: t('nav.members'), icon: Users },
     { id: 'organization', label: t('nav.organization'), icon: Building2 },
