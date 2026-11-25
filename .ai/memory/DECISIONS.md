@@ -45,5 +45,11 @@
 - **Context**: Running code implementation directly on the coordinator model (Neon) bloats reasoning context and wastes tokens; mixing backend and frontend edits blurs contract boundaries.
 - **Decision**: Coordinator (Neon) handles design, delegation, review, and `.ai/memory/` updates only — never edits business source code directly. Dedicated `Gemini 4 Hydrogen (Medium)` Swarm workers own Backend (`backend/*` + `contracts/openapi.json`) and Frontend (`frontend/*`) separately. Context compaction (`/compact`) is scheduled strictly at **Phase boundaries** (immediately after Red Team PASS + `git push` + `.ai/memory/` snapshot) to maximize token savings with zero mid-phase context loss.
 
+## ADR-010: Pluggable Private Document Storage Port (<= 60s Signed URLs) & Append-Only SHA-256 Receipt Ledger
+- **Status**: Accepted (Phase 4)
+- **Context**: `DATA_AND_SECURITY.md` Grounding 4 mandates private-only storage for Spanish labor documents (contracts, payslips, *bajas médicas*, monthly attendance reports), temporary signed URLs strictly `<= 60s`, zero direct frontend Storage access, and tamper-evident SHA-256 electronic receipts — while still allowing zero-dependency local/Docker development before connecting EU Supabase.
+- **Decision**: Define pure `DocumentStoragePort` in `domain/documents.py` with two adapters in `infrastructure/document_storage.py`: (1) `LocalDocumentStorageAdapter` (`STORAGE_BACKEND=local`, controlled Docker volume + domain-separated HMAC-SHA256 millisecond-expiring `<= 60.0s` tokens verified against live DB soft-delete state and served with `nosniff`, `CSP: default-src 'none'`, `Cache-Control: no-store`, and RFC 6266 UTF-8 `Content-Disposition`), and (2) `SupabaseDocumentStorageAdapter` (`STORAGE_BACKEND=supabase`, lightweight `httpx` REST client using backend-only `SUPABASE_SERVICE_ROLE_KEY` against a Private Bucket). Enforce PostgreSQL `BEFORE UPDATE OR DELETE` + `BEFORE TRUNCATE` triggers on `public.document_receipts` (and `BEFORE TRUNCATE` on `public.attendance_events`).
+
+
 
 

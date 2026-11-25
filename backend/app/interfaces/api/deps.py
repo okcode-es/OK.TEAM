@@ -12,11 +12,15 @@ from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domain.documents import DocumentStoragePort
 from app.domain.employees import PiiCipher
 from app.domain.repositories import (
     AttendanceRepository,
+    DocumentRepository,
     EmployeeRepository,
+    LeaveRepository,
     MembershipRepository,
+    ShiftRepository,
     StoreRepository,
     TenantRepository,
 )
@@ -28,11 +32,18 @@ from app.domain.security import (
 )
 from app.infrastructure.config import get_settings
 from app.infrastructure.database import get_db_session
+from app.infrastructure.document_storage import (
+    LocalDocumentStorageAdapter,
+    SupabaseDocumentStorageAdapter,
+)
 from app.infrastructure.pii_crypto import AesGcmPiiCipher
 from app.infrastructure.repositories import (
     SqlAlchemyAttendanceRepository,
+    SqlAlchemyDocumentRepository,
     SqlAlchemyEmployeeRepository,
+    SqlAlchemyLeaveRepository,
     SqlAlchemyMembershipRepository,
+    SqlAlchemyShiftRepository,
     SqlAlchemyStoreRepository,
     SqlAlchemyTenantRepository,
 )
@@ -80,6 +91,41 @@ def get_attendance_repository(
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> AttendanceRepository:
     return SqlAlchemyAttendanceRepository(session)
+
+
+def get_shift_repository(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> ShiftRepository:
+    return SqlAlchemyShiftRepository(session)
+
+
+def get_leave_repository(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> LeaveRepository:
+    return SqlAlchemyLeaveRepository(session)
+
+
+def get_document_repository(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> DocumentRepository:
+    return SqlAlchemyDocumentRepository(session)
+
+
+@lru_cache(maxsize=1)
+def get_document_storage() -> DocumentStoragePort:
+    settings = get_settings()
+    if settings.storage_backend.strip().lower() == "supabase":
+        return SupabaseDocumentStorageAdapter(
+            supabase_url=settings.supabase_url,
+            service_role_key=settings.supabase_service_role_key,
+            bucket=settings.supabase_storage_bucket,
+        )
+    return LocalDocumentStorageAdapter(
+        base_dir=settings.local_storage_dir,
+        signing_secret=settings.storage_signing_secret,
+        public_api_base_url=settings.public_api_base_url,
+        api_v1_prefix=settings.api_v1_prefix,
+    )
 
 
 @lru_cache(maxsize=1)

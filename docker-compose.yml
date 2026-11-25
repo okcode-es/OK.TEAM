@@ -27,7 +27,9 @@ services:
       - path: .env
         required: false
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT:-8001}:8000"
+    volumes:
+      - okteam_docs_data:/app/.local_storage
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health')"]
@@ -40,15 +42,17 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8001}
         VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-https://placeholder.supabase.co}
         VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:-placeholder}
+        VITE_DEV_AUTH_ENABLED: ${VITE_DEV_AUTH_ENABLED:-false}
     container_name: okteam-frontend
     ports:
-      - "5173:80"
+      - "${FRONTEND_PORT:-5173}:80"
     depends_on:
       - backend
     restart: unless-stopped
 
 volumes:
   okteam_pgdata:
+  okteam_docs_data:

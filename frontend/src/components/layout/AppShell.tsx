@@ -1,7 +1,10 @@
 import { useState, type ReactNode } from 'react'
 import {
   Building2,
+  CalendarClock,
+  CalendarDays,
   Clock,
+  FileText,
   Globe,
   IdCard,
   LogOut,
@@ -36,6 +39,9 @@ export type NavSection =
   | 'employees'
   | 'attendance'
   | 'kiosk'
+  | 'schedule'
+  | 'leaves'
+  | 'documents'
   | 'stores'
   | 'members'
   | 'organization'
@@ -72,6 +78,9 @@ export function AppShell({
     ...(canOperateKiosk
       ? [{ id: 'kiosk' as const, label: t('nav.kiosk'), icon: Tablet }]
       : []),
+    { id: 'schedule', label: t('nav.schedule'), icon: CalendarDays },
+    { id: 'leaves', label: t('nav.leaves'), icon: CalendarClock },
+    { id: 'documents', label: t('nav.documents'), icon: FileText },
     { id: 'stores', label: t('nav.stores'), icon: StoreIcon },
     { id: 'members', label: t('nav.members'), icon: Users },
     { id: 'organization', label: t('nav.organization'), icon: Building2 },

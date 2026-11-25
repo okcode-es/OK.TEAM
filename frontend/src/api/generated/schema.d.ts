@@ -301,6 +301,248 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/shifts/weekly": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Weekly Schedule */
+        get: operations["get_weekly_schedule"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/shifts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Shift */
+        post: operations["create_shift"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/shifts/{shift_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Cancel Shift */
+        delete: operations["cancel_shift"];
+        options?: never;
+        head?: never;
+        /** Update Shift */
+        patch: operations["update_shift"];
+        trace?: never;
+    };
+    "/api/v1/shifts/publish-week": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Publish Weekly Shifts */
+        post: operations["publish_weekly_shifts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/leaves": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Leave Requests */
+        get: operations["list_leave_requests"];
+        put?: never;
+        /** Create Leave Request */
+        post: operations["create_leave_request"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/leaves/balance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Vacation Balance */
+        get: operations["get_vacation_balance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/leaves/{leave_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Review Leave Request */
+        post: operations["review_leave_request"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/leaves/{leave_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Leave Request */
+        post: operations["cancel_leave_request"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Documents */
+        get: operations["list_documents"];
+        put?: never;
+        /** Upload Document */
+        post: operations["upload_document"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/documents/local-download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download Local Signed Document */
+        get: operations["download_local_signed_document"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/documents/{document_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Document */
+        get: operations["get_document"];
+        put?: never;
+        post?: never;
+        /** Delete Document */
+        delete: operations["delete_document"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/documents/{document_id}/signed-url": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Document Signed Url */
+        post: operations["create_document_signed_url"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/documents/{document_id}/receipts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sign Document Receipt */
+        post: operations["sign_document_receipt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/dev/token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Issue a local development HS256 JWT (development only) */
+        post: operations["issueDevToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -334,6 +576,28 @@ export interface components {
             store_id?: string | null;
             /** Supersedes Event Id */
             supersedes_event_id?: string | null;
+        };
+        /** ApprovedLeaveSummaryResponse */
+        ApprovedLeaveSummaryResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            leave_type: components["schemas"]["LeaveType"];
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+            /** Natural Days */
+            natural_days: number;
+            status: components["schemas"]["LeaveStatus"];
         };
         /** AttendanceEventResponse */
         AttendanceEventResponse: {
@@ -416,6 +680,25 @@ export interface components {
             /** Tenants */
             tenants: components["schemas"]["TenantMembershipSummaryResponse"][];
         };
+        /** Body_upload_document */
+        Body_upload_document: {
+            /** File */
+            file: string;
+            category: components["schemas"]["DocumentCategory"];
+            /** Title */
+            title: string;
+            /** Employee Id */
+            employee_id?: string | null;
+            /** Store Id */
+            store_id?: string | null;
+            /** Period Month */
+            period_month?: string | null;
+            /**
+             * Requires Signature
+             * @default false
+             */
+            requires_signature: boolean;
+        };
         /** ClockAttendanceRequest */
         ClockAttendanceRequest: {
             event_type: components["schemas"]["AttendanceEventType"];
@@ -467,6 +750,59 @@ export interface components {
             /** Limit Value */
             limit_value: string | null;
         };
+        /** ComplianceDocumentResponse */
+        ComplianceDocumentResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /** Store Id */
+            store_id: string | null;
+            /** Employee Id */
+            employee_id: string | null;
+            category: components["schemas"]["DocumentCategory"];
+            /** Title */
+            title: string;
+            /** Period Month */
+            period_month: string | null;
+            storage_backend: components["schemas"]["StorageBackend"];
+            /** Original Filename */
+            original_filename: string;
+            /** Mime Type */
+            mime_type: string;
+            /** Size Bytes */
+            size_bytes: number;
+            /** Sha256 Hex */
+            sha256_hex: string;
+            /** Requires Signature */
+            requires_signature: boolean;
+            /**
+             * Uploaded By User Id
+             * Format: uuid
+             */
+            uploaded_by_user_id: string;
+            /**
+             * Retention Until
+             * Format: date-time
+             */
+            retention_until: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /**
          * ContractType
          * @enum {string}
@@ -477,6 +813,67 @@ export interface components {
          * @enum {string}
          */
         CorrectedEventType: "clock_in" | "break_start" | "break_end" | "clock_out" | "void";
+        /** CreateLeaveRequestBody */
+        CreateLeaveRequestBody: {
+            /** Employee Id */
+            employee_id?: string | null;
+            leave_type: components["schemas"]["LeaveType"];
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /** Medical Document Id */
+            medical_document_id?: string | null;
+        };
+        /** CreateShiftRequest */
+        CreateShiftRequest: {
+            /**
+             * Employee Id
+             * Format: uuid
+             */
+            employee_id: string;
+            /**
+             * Start At Utc
+             * Format: date-time
+             */
+            start_at_utc: string;
+            /**
+             * End At Utc
+             * Format: date-time
+             */
+            end_at_utc: string;
+            /**
+             * Planned Break Minutes
+             * @default 0
+             */
+            planned_break_minutes: number;
+            /** @default draft */
+            status: components["schemas"]["ShiftStatus"];
+            /**
+             * Notes
+             * @default
+             */
+            notes: string;
+        };
+        /** CreateSignedUrlRequest */
+        CreateSignedUrlRequest: {
+            /**
+             * Ttl Seconds
+             * @default 60
+             */
+            ttl_seconds: number;
+        };
         /** DailyAttendanceSummaryResponse */
         DailyAttendanceSummaryResponse: {
             /**
@@ -508,6 +905,102 @@ export interface components {
             has_corrections: boolean;
             /** Alerts */
             alerts: components["schemas"]["ComplianceAlertResponse"][];
+        };
+        /** DevTokenRequest */
+        DevTokenRequest: {
+            /** Email */
+            email: string;
+            /** User Id */
+            user_id?: string | null;
+        };
+        /** DevTokenResponse */
+        DevTokenResponse: {
+            /** Access Token */
+            access_token: string;
+            /**
+             * Token Type
+             * @default bearer
+             */
+            token_type: string;
+            /**
+             * User Id
+             * Format: uuid
+             */
+            user_id: string;
+            /** Email */
+            email: string;
+        };
+        /**
+         * DocumentCategory
+         * @enum {string}
+         */
+        DocumentCategory: "contract" | "payslip" | "attendance_report" | "medical_leave" | "id_document" | "other";
+        /** DocumentDetailResponse */
+        DocumentDetailResponse: {
+            document: components["schemas"]["ComplianceDocumentResponse"];
+            /** Receipts */
+            receipts: components["schemas"]["DocumentReceiptResponse"][];
+        };
+        /** DocumentListItemResponse */
+        DocumentListItemResponse: {
+            document: components["schemas"]["ComplianceDocumentResponse"];
+            /** Receipt Count */
+            receipt_count: number;
+            /** Signed By Self */
+            signed_by_self: boolean;
+            /** Latest Signed At Utc */
+            latest_signed_at_utc: string | null;
+        };
+        /** DocumentListResponse */
+        DocumentListResponse: {
+            /** Items */
+            items: components["schemas"]["DocumentListItemResponse"][];
+        };
+        /** DocumentReceiptResponse */
+        DocumentReceiptResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /**
+             * Employee Id
+             * Format: uuid
+             */
+            employee_id: string;
+            /**
+             * Signed By User Id
+             * Format: uuid
+             */
+            signed_by_user_id: string;
+            /** Document Sha256 Hex */
+            document_sha256_hex: string;
+            /**
+             * Signed At Utc
+             * Format: date-time
+             */
+            signed_at_utc: string;
+            /** Ip Address */
+            ip_address: string;
+            /** User Agent */
+            user_agent: string;
+            /** Receipt Statement */
+            receipt_statement: string;
+            /**
+             * Retention Until
+             * Format: date-time
+             */
+            retention_until: string;
         };
         /** EmployeeAttendanceLedgerResponse */
         EmployeeAttendanceLedgerResponse: {
@@ -688,6 +1181,29 @@ export interface components {
              */
             updated_at: string;
         };
+        /** EmployeeScheduleRowResponse */
+        EmployeeScheduleRowResponse: {
+            /**
+             * Employee Id
+             * Format: uuid
+             */
+            employee_id: string;
+            /** Employee Code */
+            employee_code: string;
+            /** Full Name */
+            full_name: string;
+            work_schedule_type: components["schemas"]["WorkScheduleType"];
+            /** Contracted Weekly Hours */
+            contracted_weekly_hours: string;
+            /** Weekly Net Hours */
+            weekly_net_hours: string;
+            /** Shifts */
+            shifts: components["schemas"]["ShiftResponse"][];
+            /** Approved Leaves */
+            approved_leaves: components["schemas"]["ApprovedLeaveSummaryResponse"][];
+            /** Alerts */
+            alerts: components["schemas"]["ScheduleAlertResponse"][];
+        };
         /**
          * EmployeeSensitivePiiResponse
          * @description On-demand decrypted PII — strictly authorized roles only, never cached.
@@ -790,6 +1306,88 @@ export interface components {
              */
             timestamp_utc: string;
         };
+        /** LeaveListResponse */
+        LeaveListResponse: {
+            /** Items */
+            items: components["schemas"]["LeaveRequestResponse"][];
+        };
+        /** LeaveRequestResponse */
+        LeaveRequestResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /**
+             * Store Id
+             * Format: uuid
+             */
+            store_id: string;
+            /**
+             * Employee Id
+             * Format: uuid
+             */
+            employee_id: string;
+            leave_type: components["schemas"]["LeaveType"];
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+            /** Natural Days */
+            natural_days: number;
+            status: components["schemas"]["LeaveStatus"];
+            /** Reason */
+            reason: string;
+            /**
+             * Requested By User Id
+             * Format: uuid
+             */
+            requested_by_user_id: string;
+            /** Reviewed By User Id */
+            reviewed_by_user_id: string | null;
+            /** Reviewed At Utc */
+            reviewed_at_utc: string | null;
+            /** Review Note */
+            review_note: string;
+            /** Medical Document Id */
+            medical_document_id: string | null;
+            /**
+             * Retention Until
+             * Format: date-time
+             */
+            retention_until: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * LeaveStatus
+         * @enum {string}
+         */
+        LeaveStatus: "pending" | "approved" | "rejected" | "cancelled";
+        /**
+         * LeaveType
+         * @enum {string}
+         */
+        LeaveType: "vacation" | "sick_leave" | "paid_leave" | "unpaid_leave";
         /** MembershipCreateRequest */
         MembershipCreateRequest: {
             /**
@@ -865,6 +1463,156 @@ export interface components {
             /** Store Ids */
             store_ids?: string[];
         };
+        /** PublishWeekRequest */
+        PublishWeekRequest: {
+            /**
+             * Store Id
+             * Format: uuid
+             */
+            store_id: string;
+            /**
+             * Week Start
+             * Format: date
+             */
+            week_start: string;
+        };
+        /** PublishWeekResponse */
+        PublishWeekResponse: {
+            /** Published Count */
+            published_count: number;
+            /** Shifts */
+            shifts: components["schemas"]["ShiftResponse"][];
+        };
+        /** ReviewLeaveRequestBody */
+        ReviewLeaveRequestBody: {
+            /** Approve */
+            approve: boolean;
+            /**
+             * Review Note
+             * @default
+             */
+            review_note: string;
+        };
+        /**
+         * ScheduleAlertCode
+         * @enum {string}
+         */
+        ScheduleAlertCode: "DAILY_MAX_EXCEEDED" | "INTER_SHIFT_REST_VIOLATION" | "MISSING_CONTINUOUS_BREAK" | "WEEKLY_HOURS_EXCEEDED" | "PART_TIME_OVERTIME_PROHIBITED" | "WEEKLY_REST_VIOLATION";
+        /** ScheduleAlertResponse */
+        ScheduleAlertResponse: {
+            code: components["schemas"]["ScheduleAlertCode"];
+            severity: components["schemas"]["AlertSeverity"];
+            /**
+             * Employee Id
+             * Format: uuid
+             */
+            employee_id: string;
+            /**
+             * Local Date
+             * Format: date
+             */
+            local_date: string;
+            /** Message */
+            message: string;
+            /** Actual Value */
+            actual_value: string | null;
+            /** Limit Value */
+            limit_value: string | null;
+        };
+        /** ShiftMutationResponse */
+        ShiftMutationResponse: {
+            shift: components["schemas"]["ShiftResponse"];
+            /** Alerts */
+            alerts: components["schemas"]["ScheduleAlertResponse"][];
+        };
+        /** ShiftResponse */
+        ShiftResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /**
+             * Store Id
+             * Format: uuid
+             */
+            store_id: string;
+            /**
+             * Employee Id
+             * Format: uuid
+             */
+            employee_id: string;
+            /**
+             * Start At Utc
+             * Format: date-time
+             */
+            start_at_utc: string;
+            /**
+             * End At Utc
+             * Format: date-time
+             */
+            end_at_utc: string;
+            /** Planned Break Minutes */
+            planned_break_minutes: number;
+            /** Net Hours */
+            net_hours: string;
+            status: components["schemas"]["ShiftStatus"];
+            /** Notes */
+            notes: string;
+            /**
+             * Created By User Id
+             * Format: uuid
+             */
+            created_by_user_id: string;
+            /** Published By User Id */
+            published_by_user_id: string | null;
+            /** Published At Utc */
+            published_at_utc: string | null;
+            /**
+             * Retention Until
+             * Format: date-time
+             */
+            retention_until: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * ShiftStatus
+         * @enum {string}
+         */
+        ShiftStatus: "draft" | "published" | "cancelled";
+        /** SignedUrlResponse */
+        SignedUrlResponse: {
+            /** Url */
+            url: string;
+            /**
+             * Expires At Utc
+             * Format: date-time
+             */
+            expires_at_utc: string;
+            /** Ttl Seconds */
+            ttl_seconds: number;
+            /** Sha256 Hex */
+            sha256_hex: string;
+        };
+        /**
+         * StorageBackend
+         * @enum {string}
+         */
+        StorageBackend: "local" | "supabase";
         /** StoreCreateRequest */
         StoreCreateRequest: {
             /** Name */
@@ -1054,12 +1802,42 @@ export interface components {
              */
             default_locale: "zh-CN" | "es-ES";
         };
+        /** UpdateShiftRequest */
+        UpdateShiftRequest: {
+            /** Start At Utc */
+            start_at_utc?: string | null;
+            /** End At Utc */
+            end_at_utc?: string | null;
+            /** Planned Break Minutes */
+            planned_break_minutes?: number | null;
+            status?: components["schemas"]["ShiftStatus"] | null;
+            /** Notes */
+            notes?: string | null;
+        };
         /**
          * UserRole
          * @description Canonical Day-1 RBAC roles for okTeam.
          * @enum {string}
          */
         UserRole: "owner" | "hr" | "store_manager" | "accountant" | "employee";
+        /** VacationBalanceResponse */
+        VacationBalanceResponse: {
+            /**
+             * Employee Id
+             * Format: uuid
+             */
+            employee_id: string;
+            /** Year */
+            year: number;
+            /** Entitled Days */
+            entitled_days: number;
+            /** Approved Days */
+            approved_days: number;
+            /** Pending Days */
+            pending_days: number;
+            /** Remaining Days */
+            remaining_days: number;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -1072,6 +1850,32 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** WeeklyScheduleResponse */
+        WeeklyScheduleResponse: {
+            /**
+             * Store Id
+             * Format: uuid
+             */
+            store_id: string;
+            /** Store Code */
+            store_code: string;
+            /** Store Name */
+            store_name: string;
+            /** Store Timezone */
+            store_timezone: string;
+            /**
+             * Week Start
+             * Format: date
+             */
+            week_start: string;
+            /**
+             * Week End
+             * Format: date
+             */
+            week_end: string;
+            /** Rows */
+            rows: components["schemas"]["EmployeeScheduleRowResponse"][];
         };
         /**
          * WorkScheduleType
@@ -1942,6 +2746,625 @@ export interface operations {
                 content: {
                     "application/json": unknown;
                     "text/csv": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_weekly_schedule: {
+        parameters: {
+            query: {
+                week_start: string;
+                store_id?: string | null;
+            };
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WeeklyScheduleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_shift: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateShiftRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShiftMutationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_shift: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                shift_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShiftResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_shift: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                shift_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateShiftRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShiftMutationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    publish_weekly_shifts: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublishWeekRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublishWeekResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_leave_requests: {
+        parameters: {
+            query?: {
+                store_id?: string | null;
+                employee_id?: string | null;
+                status?: components["schemas"]["LeaveStatus"] | null;
+                year?: number | null;
+            };
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaveListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_leave_request: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateLeaveRequestBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaveRequestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_vacation_balance: {
+        parameters: {
+            query?: {
+                employee_id?: string | null;
+                year?: number | null;
+            };
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VacationBalanceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_leave_request: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                leave_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewLeaveRequestBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaveRequestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_leave_request: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                leave_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LeaveRequestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_documents: {
+        parameters: {
+            query?: {
+                category?: components["schemas"]["DocumentCategory"] | null;
+                employee_id?: string | null;
+                store_id?: string | null;
+                requires_signature?: boolean | null;
+            };
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_document: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_document"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ComplianceDocumentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_local_signed_document: {
+        parameters: {
+            query: {
+                token: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Short-lived (<= 60s) HMAC-signed private document download */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                    "application/octet-stream": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_document: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_document: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_document_signed_url: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CreateSignedUrlRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignedUrlResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sign_document_receipt: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentReceiptResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    issueDevToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DevTokenRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DevTokenResponse"];
                 };
             };
             /** @description Validation Error */

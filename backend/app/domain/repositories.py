@@ -5,19 +5,23 @@ Pure Python standard library only (enforced by scripts/check_domain_purity.py).
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Protocol
 from uuid import UUID
 
 from app.domain.attendance import AttendanceEvent
+from app.domain.documents import ComplianceDocument, DocumentCategory, DocumentReceipt
 from app.domain.employees import (
     ContractType,
     Employee,
     EmploymentStatus,
     WorkScheduleType,
 )
+from app.domain.leaves import LeaveRequest, LeaveStatus
 from app.domain.organization import Membership, Store, Tenant, TenantMembershipSummary
+from app.domain.scheduling import Shift
 from app.domain.security import MembershipStatus, UserRole
 
 
@@ -250,3 +254,108 @@ class AttendanceRepository(Protocol):
         occurred_from_utc: datetime | None = None,
         occurred_to_utc: datetime | None = None,
     ) -> list[AttendanceEvent]: ...
+
+
+class ShiftRepository(Protocol):
+    async def get_by_id(self, tenant_id: UUID, shift_id: UUID) -> Shift | None: ...
+
+    async def list_by_store_window(
+        self,
+        tenant_id: UUID,
+        store_id: UUID,
+        *,
+        window_start_utc: datetime,
+        window_end_utc: datetime,
+    ) -> list[Shift]: ...
+
+    async def list_by_employee_window(
+        self,
+        tenant_id: UUID,
+        employee_id: UUID,
+        *,
+        window_start_utc: datetime,
+        window_end_utc: datetime,
+    ) -> list[Shift]: ...
+
+    async def create(self, shift: Shift) -> Shift: ...
+
+    async def update(self, shift: Shift) -> Shift | None: ...
+
+
+class LeaveRepository(Protocol):
+    async def get_by_id(self, tenant_id: UUID, leave_id: UUID) -> LeaveRequest | None: ...
+
+    async def list_by_employee(
+        self,
+        tenant_id: UUID,
+        employee_id: UUID,
+    ) -> list[LeaveRequest]: ...
+
+    async def list_by_tenant(
+        self,
+        tenant_id: UUID,
+        *,
+        allowed_store_ids: frozenset[UUID] | None = None,
+        store_id: UUID | None = None,
+        employee_id: UUID | None = None,
+        status: LeaveStatus | None = None,
+        year: int | None = None,
+    ) -> list[LeaveRequest]: ...
+
+    async def create(self, leave: LeaveRequest) -> LeaveRequest: ...
+
+    async def update(self, leave: LeaveRequest) -> LeaveRequest | None: ...
+
+
+class DocumentRepository(Protocol):
+    async def get_by_id(
+        self,
+        tenant_id: UUID,
+        document_id: UUID,
+    ) -> ComplianceDocument | None: ...
+
+    async def list_by_tenant(
+        self,
+        tenant_id: UUID,
+        *,
+        allowed_store_ids: frozenset[UUID] | None = None,
+        only_employee_id: UUID | None = None,
+        include_tenant_wide_for_employee: bool = False,
+        employee_store_id: UUID | None = None,
+        category: DocumentCategory | None = None,
+        employee_id: UUID | None = None,
+        store_id: UUID | None = None,
+        requires_signature: bool | None = None,
+        exclude_categories: frozenset[DocumentCategory] | None = None,
+    ) -> list[ComplianceDocument]: ...
+
+    async def create(self, document: ComplianceDocument) -> ComplianceDocument: ...
+
+    async def soft_delete(
+        self,
+        tenant_id: UUID,
+        document_id: UUID,
+        *,
+        deleted_at: datetime,
+    ) -> bool: ...
+
+    async def list_receipts_for_document(
+        self,
+        tenant_id: UUID,
+        document_id: UUID,
+    ) -> list[DocumentReceipt]: ...
+
+    async def list_receipts_for_documents(
+        self,
+        tenant_id: UUID,
+        document_ids: Sequence[UUID],
+    ) -> list[DocumentReceipt]: ...
+
+    async def get_receipt(
+        self,
+        tenant_id: UUID,
+        document_id: UUID,
+        employee_id: UUID,
+    ) -> DocumentReceipt | None: ...
+
+    async def append_receipt(self, receipt: DocumentReceipt) -> DocumentReceipt: ...

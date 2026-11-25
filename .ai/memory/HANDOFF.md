@@ -1,34 +1,14 @@
-# Cross-Agent Handoff — Phase 3 Sign-Off
+# Handoff Snapshot — End of Phase 4
 
-## Task ID & Title
-- **Task**: `Phase 3 / Append-Only Daily Time Tracking (RDL 8/2019), Spanish Labor Alerts & 3s Kiosk`
-- **Owner**: `backend-p3` + `frontend-p3` (`Gemini 4 Hydrogen (Medium)`), coordinated by `brain` (Neon)
-- **Target**: `user` (Phase 3 Acceptance & Push -> `/compact` -> Phase 4 Entry)
-
-## Scope & Changed Files
-- `backend/alembic/versions/0003_phase3_attendance.py` — `attendance_events` + `trg_attendance_events_immutable` (`BEFORE UPDATE OR DELETE`)
-- `backend/app/domain/attendance.py` & `backend/app/domain/repositories.py` — Stdlib Spanish labor engine (6 rules, PEP-495 DST `fold`, ledger folding)
-- `backend/app/application/attendance.py` — Server-stamped clock, store/tenant/Art. 32 LOPDGDD scoped ledger & corrections, CWE-1236 sanitized `es-ES` ITSS CSV
-- `backend/app/infrastructure/{models,repositories}.py` — Strictly append/read-only `SqlAlchemyAttendanceRepository`
-- `backend/app/interfaces/api/{attendance,deps}.py` + `backend/app/main.py`
-- `backend/tests/test_phase3_attendance.py` — Full domain + RBAC/cross-store/CSV/DST regression suite (`33 passed`)
-- `frontend/src/features/attendance/{AttendancePage,KioskPage}.tsx` + `AppShell.tsx` + `App.tsx` + `client.ts` + `types.ts` + `zh-CN`/`es-ES`
-
-## Contract & Migration Impact
-- **OpenAPI Synced (`contracts/openapi.json` & `schema.d.ts`)**: `Yes`
-- **Alembic Migration Added**: `Yes (0003_phase3_attendance, upgrade -> downgrade 0002 -> upgrade + live trigger verified on Postgres 16)`
-
-## Zero-Token Gate Evidence
-- Backend (`domain-purity` / `ruff` / `mypy` / `33 pytest`): `PASS`
-- Frontend (`tsc -p tsconfig.app.json --noEmit` / `eslint` / `vite build`): `PASS`
-- Visual Audit (`chrome-devtools` `es-ES` `1440px` & `390px`): `PASS (0 overflow)`
-
-## High-Risk Trigger Check (Red Team Gatekeeper)
-- [x] DB Schema / Alembic migration + immutability trigger (`0003_phase3_attendance`)
-- [x] RBAC / `tenant_id` / Store scope isolation (web & kiosk clock, correction superseding, Art. 32 LOPDGDD freeze)
-- [x] Spain labor law core calculations (6 statutory rules + PEP-495 DST)
-- [x] Compliance ITSS CSV export (UTF-8 BOM + CWE-1236 formula neutralization)
-- [x] Phase completion sign-off (**PASS** Round 2/2 — P0: None, P1: None)
-
-## Notes / Follow-ups
-- Per ADR-009: after pushing Phase 3, trigger `/compact` before starting Phase 4 (Shift Scheduling Calendar + 60s Signed Private Files & SHA-256 Receipt Ledger).
+- **Date**: 2026-11-25
+- **Completed**: Phase 1 (Org/Stores/RBAC) + Phase 2 (Employees/AES-256-GCM PII/Legal Hold) + Phase 3 (Append-Only Attendance/Spanish Labor Engine/3s Kiosk) + Phase 4 (Shift Scheduling Calendar Template 3, Art. 38 ET Leave Management, Private Documents <=60s Signed URLs & Immutable SHA-256 Receipt Ledger, Full-Stack Docker Delivery).
+- **Live Local Stack (Running in Docker)**:
+  - Frontend: `http://localhost:5173` (`okteam-frontend`, Nginx serving production Vite build with Dev Auth enabled via local gitignored `.env`)
+  - Backend: `http://localhost:8001` (`okteam-backend`, FastAPI + Swagger `/api/v1/docs`, local storage mounted to `okteam_docs_data`)
+  - Database: `localhost:5433` (`okteam-local-db`, PostgreSQL 16 with migrations `0001`–`0004` applied)
+- **Red Team Gatekeeper**: Phase 4 Round 2/2 **PASS** (`P0: None`, `P1: None`).
+- **Non-blocking P2 Backlog for Future Polish**:
+  1. Normalize 100% non-ASCII filename fallback in `api/documents.py` from `".pdf"` to `"document.pdf"` (RFC 6266 `filename*=UTF-8''...` already serves full Chinese/Spanish names cleanly).
+  2. Optionally allow `store_manager` to view/sign their *own* personal `payslip`/`contract` when `doc.employee_id == self_emp.id` while keeping other employees' restricted categories blocked.
+  3. Phase 1–3 carry-over P2s: Spanish DNI/NIE Mod-23 & IBAN Mod-97 checksums, `settings_override` propagation in `auth.py`/`deps.py`, partial unique index `(tenant_id, user_id)` on `employees`.
+- **Next Suggested Milestone (Phase 5)**: Payroll & Gestoría Export Pack (monthly closed attendance + overtime + approved leaves summary for *Asesoría* in `es-ES` CSV/Excel + automated monthly employee attendance report generation & batch signature workflow) and/or Production EU Supabase & CI/CD pipeline deployment.

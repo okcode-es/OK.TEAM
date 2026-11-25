@@ -8,8 +8,11 @@ import { OnboardingPage } from '@/features/auth/OnboardingPage'
 import { EmployeesPage } from '@/features/employees/EmployeesPage'
 import { AttendancePage } from '@/features/attendance/AttendancePage'
 import { KioskPage } from '@/features/attendance/KioskPage'
+import { DocumentsPage } from '@/features/documents/DocumentsPage'
+import { LeavesPage } from '@/features/leaves/LeavesPage'
 import { MembersPage } from '@/features/members/MembersPage'
 import { OrganizationSettingsPage } from '@/features/organization/OrganizationSettingsPage'
+import { SchedulePage } from '@/features/schedule/SchedulePage'
 import { StoresPage } from '@/features/stores/StoresPage'
 
 function WorkspaceRouter() {
@@ -46,6 +49,9 @@ function WorkspaceRouter() {
       {section === 'employees' && <EmployeesPage />}
       {section === 'attendance' && <AttendancePage />}
       {section === 'kiosk' && <KioskPage />}
+      {section === 'schedule' && <SchedulePage />}
+      {section === 'leaves' && <LeavesPage />}
+      {section === 'documents' && <DocumentsPage />}
       {section === 'stores' && <StoresPage />}
       {section === 'members' && <MembersPage />}
       {section === 'organization' && <OrganizationSettingsPage />}

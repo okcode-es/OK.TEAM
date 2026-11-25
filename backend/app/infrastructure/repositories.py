@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import and_, delete, func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -16,19 +18,37 @@ from app.domain.attendance import (
     AttendanceSource,
     CorrectedEventType,
 )
+from app.domain.documents import (
+    ComplianceDocument,
+    DocumentCategory,
+    DocumentReceipt,
+    StorageBackend,
+)
 from app.domain.employees import (
     ContractType,
     Employee,
     EmploymentStatus,
     WorkScheduleType,
 )
-from app.domain.organization import Membership, Store, Tenant, TenantMembershipSummary
+from app.domain.leaves import LeaveRequest, LeaveStatus, LeaveType
+from app.domain.organization import (
+    ConflictError,
+    Membership,
+    Store,
+    Tenant,
+    TenantMembershipSummary,
+)
+from app.domain.scheduling import Shift, ShiftStatus
 from app.domain.security import MembershipStatus, UserRole
 from app.infrastructure.models import (
     AttendanceEventModel,
+    ComplianceDocumentModel,
+    DocumentReceiptModel,
     EmployeeModel,
+    LeaveRequestModel,
     MembershipModel,
     MembershipStoreModel,
+    ShiftModel,
     StoreModel,
     TenantModel,
 )
@@ -940,3 +960,509 @@ class SqlAlchemyAttendanceRepository:
         )
         result = await self._session.execute(stmt)
         return [_to_attendance_event(row) for row in result.scalars().all()]
+
+
+def _to_shift(model: ShiftModel) -> Shift:
+    return Shift(
+        id=model.id,
+        tenant_id=model.tenant_id,
+        store_id=model.store_id,
+        employee_id=model.employee_id,
+        start_at_utc=model.start_at_utc,
+        end_at_utc=model.end_at_utc,
+        planned_break_minutes=model.planned_break_minutes,
+        status=ShiftStatus(model.status),
+        notes=model.notes,
+        created_by_user_id=model.created_by_user_id,
+        published_by_user_id=model.published_by_user_id,
+        published_at_utc=model.published_at_utc,
+        retention_until=model.retention_until,
+        created_at=model.created_at,
+        updated_at=model.updated_at,
+        deleted_at=model.deleted_at,
+    )
+
+
+class SqlAlchemyShiftRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get_by_id(self, tenant_id: UUID, shift_id: UUID) -> Shift | None:
+        stmt = select(ShiftModel).where(
+            ShiftModel.tenant_id == tenant_id,
+            ShiftModel.id == shift_id,
+            ShiftModel.deleted_at.is_(None),
+        )
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+        return _to_shift(model) if model is not None else None
+
+    async def list_by_store_window(
+        self,
+        tenant_id: UUID,
+        store_id: UUID,
+        *,
+        window_start_utc: datetime,
+        window_end_utc: datetime,
+    ) -> list[Shift]:
+        stmt = (
+            select(ShiftModel)
+            .where(
+                ShiftModel.tenant_id == tenant_id,
+                ShiftModel.store_id == store_id,
+                ShiftModel.deleted_at.is_(None),
+                ShiftModel.start_at_utc < window_end_utc,
+                ShiftModel.end_at_utc > window_start_utc,
+            )
+            .order_by(ShiftModel.start_at_utc.asc(), ShiftModel.id.asc())
+        )
+        result = await self._session.execute(stmt)
+        return [_to_shift(row) for row in result.scalars().all()]
+
+    async def list_by_employee_window(
+        self,
+        tenant_id: UUID,
+        employee_id: UUID,
+        *,
+        window_start_utc: datetime,
+        window_end_utc: datetime,
+    ) -> list[Shift]:
+        stmt = (
+            select(ShiftModel)
+            .where(
+                ShiftModel.tenant_id == tenant_id,
+                ShiftModel.employee_id == employee_id,
+                ShiftModel.deleted_at.is_(None),
+                ShiftModel.start_at_utc < window_end_utc,
+                ShiftModel.end_at_utc > window_start_utc,
+            )
+            .order_by(ShiftModel.start_at_utc.asc(), ShiftModel.id.asc())
+        )
+        result = await self._session.execute(stmt)
+        return [_to_shift(row) for row in result.scalars().all()]
+
+    async def create(self, shift: Shift) -> Shift:
+        model = ShiftModel(
+            id=shift.id,
+            tenant_id=shift.tenant_id,
+            store_id=shift.store_id,
+            employee_id=shift.employee_id,
+            start_at_utc=shift.start_at_utc,
+            end_at_utc=shift.end_at_utc,
+            planned_break_minutes=shift.planned_break_minutes,
+            status=shift.status.value,
+            notes=shift.notes,
+            created_by_user_id=shift.created_by_user_id,
+            published_by_user_id=shift.published_by_user_id,
+            published_at_utc=shift.published_at_utc,
+            retention_until=shift.retention_until,
+            created_at=shift.created_at,
+            updated_at=shift.updated_at,
+            deleted_at=shift.deleted_at,
+        )
+        self._session.add(model)
+        await self._session.flush()
+        return _to_shift(model)
+
+    async def update(self, shift: Shift) -> Shift | None:
+        stmt = select(ShiftModel).where(
+            ShiftModel.tenant_id == shift.tenant_id,
+            ShiftModel.id == shift.id,
+            ShiftModel.deleted_at.is_(None),
+        )
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+        if model is None:
+            return None
+
+        model.start_at_utc = shift.start_at_utc
+        model.end_at_utc = shift.end_at_utc
+        model.planned_break_minutes = shift.planned_break_minutes
+        model.status = shift.status.value
+        model.notes = shift.notes
+        model.published_by_user_id = shift.published_by_user_id
+        model.published_at_utc = shift.published_at_utc
+        model.retention_until = shift.retention_until
+        model.updated_at = shift.updated_at
+        model.deleted_at = shift.deleted_at
+        await self._session.flush()
+        return _to_shift(model)
+
+
+def _to_leave_request(model: LeaveRequestModel) -> LeaveRequest:
+    return LeaveRequest(
+        id=model.id,
+        tenant_id=model.tenant_id,
+        store_id=model.store_id,
+        employee_id=model.employee_id,
+        leave_type=LeaveType(model.leave_type),
+        start_date=model.start_date,
+        end_date=model.end_date,
+        natural_days=model.natural_days,
+        status=LeaveStatus(model.status),
+        reason=model.reason,
+        requested_by_user_id=model.requested_by_user_id,
+        reviewed_by_user_id=model.reviewed_by_user_id,
+        reviewed_at_utc=model.reviewed_at_utc,
+        review_note=model.review_note,
+        medical_document_id=model.medical_document_id,
+        retention_until=model.retention_until,
+        created_at=model.created_at,
+        updated_at=model.updated_at,
+        deleted_at=model.deleted_at,
+    )
+
+
+class SqlAlchemyLeaveRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get_by_id(self, tenant_id: UUID, leave_id: UUID) -> LeaveRequest | None:
+        stmt = select(LeaveRequestModel).where(
+            LeaveRequestModel.tenant_id == tenant_id,
+            LeaveRequestModel.id == leave_id,
+            LeaveRequestModel.deleted_at.is_(None),
+        )
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+        return _to_leave_request(model) if model is not None else None
+
+    async def list_by_employee(
+        self,
+        tenant_id: UUID,
+        employee_id: UUID,
+    ) -> list[LeaveRequest]:
+        stmt = (
+            select(LeaveRequestModel)
+            .where(
+                LeaveRequestModel.tenant_id == tenant_id,
+                LeaveRequestModel.employee_id == employee_id,
+                LeaveRequestModel.deleted_at.is_(None),
+            )
+            .order_by(LeaveRequestModel.start_date.desc(), LeaveRequestModel.id.asc())
+        )
+        result = await self._session.execute(stmt)
+        return [_to_leave_request(row) for row in result.scalars().all()]
+
+    async def list_by_tenant(
+        self,
+        tenant_id: UUID,
+        *,
+        allowed_store_ids: frozenset[UUID] | None = None,
+        store_id: UUID | None = None,
+        employee_id: UUID | None = None,
+        status: LeaveStatus | None = None,
+        year: int | None = None,
+    ) -> list[LeaveRequest]:
+        if allowed_store_ids is not None and len(allowed_store_ids) == 0:
+            return []
+
+        stmt = select(LeaveRequestModel).where(
+            LeaveRequestModel.tenant_id == tenant_id,
+            LeaveRequestModel.deleted_at.is_(None),
+        )
+        if allowed_store_ids is not None:
+            stmt = stmt.where(LeaveRequestModel.store_id.in_(allowed_store_ids))
+        if store_id is not None:
+            stmt = stmt.where(LeaveRequestModel.store_id == store_id)
+        if employee_id is not None:
+            stmt = stmt.where(LeaveRequestModel.employee_id == employee_id)
+        if status is not None:
+            stmt = stmt.where(LeaveRequestModel.status == status.value)
+        if year is not None:
+            year_start = date(year, 1, 1)
+            year_end = date(year, 12, 31)
+            stmt = stmt.where(
+                LeaveRequestModel.start_date <= year_end,
+                LeaveRequestModel.end_date >= year_start,
+            )
+
+        stmt = stmt.order_by(LeaveRequestModel.start_date.desc(), LeaveRequestModel.id.asc())
+        result = await self._session.execute(stmt)
+        return [_to_leave_request(row) for row in result.scalars().all()]
+
+    async def create(self, leave: LeaveRequest) -> LeaveRequest:
+        model = LeaveRequestModel(
+            id=leave.id,
+            tenant_id=leave.tenant_id,
+            store_id=leave.store_id,
+            employee_id=leave.employee_id,
+            leave_type=leave.leave_type.value,
+            start_date=leave.start_date,
+            end_date=leave.end_date,
+            natural_days=leave.natural_days,
+            status=leave.status.value,
+            reason=leave.reason,
+            requested_by_user_id=leave.requested_by_user_id,
+            reviewed_by_user_id=leave.reviewed_by_user_id,
+            reviewed_at_utc=leave.reviewed_at_utc,
+            review_note=leave.review_note,
+            medical_document_id=leave.medical_document_id,
+            retention_until=leave.retention_until,
+            created_at=leave.created_at,
+            updated_at=leave.updated_at,
+            deleted_at=leave.deleted_at,
+        )
+        self._session.add(model)
+        await self._session.flush()
+        return _to_leave_request(model)
+
+    async def update(self, leave: LeaveRequest) -> LeaveRequest | None:
+        stmt = select(LeaveRequestModel).where(
+            LeaveRequestModel.tenant_id == leave.tenant_id,
+            LeaveRequestModel.id == leave.id,
+            LeaveRequestModel.deleted_at.is_(None),
+        )
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+        if model is None:
+            return None
+
+        model.status = leave.status.value
+        model.reviewed_by_user_id = leave.reviewed_by_user_id
+        model.reviewed_at_utc = leave.reviewed_at_utc
+        model.review_note = leave.review_note
+        model.updated_at = leave.updated_at
+        await self._session.flush()
+        return _to_leave_request(model)
+
+
+def _to_document(model: ComplianceDocumentModel) -> ComplianceDocument:
+    return ComplianceDocument(
+        id=model.id,
+        tenant_id=model.tenant_id,
+        store_id=model.store_id,
+        employee_id=model.employee_id,
+        category=DocumentCategory(model.category),
+        title=model.title,
+        period_month=model.period_month,
+        storage_backend=StorageBackend(model.storage_backend),
+        storage_key=model.storage_key,
+        original_filename=model.original_filename,
+        mime_type=model.mime_type,
+        size_bytes=model.size_bytes,
+        sha256_hex=model.sha256_hex,
+        requires_signature=model.requires_signature,
+        uploaded_by_user_id=model.uploaded_by_user_id,
+        retention_until=model.retention_until,
+        created_at=model.created_at,
+        updated_at=model.updated_at,
+        deleted_at=model.deleted_at,
+    )
+
+
+def _to_document_receipt(model: DocumentReceiptModel) -> DocumentReceipt:
+    return DocumentReceipt(
+        id=model.id,
+        tenant_id=model.tenant_id,
+        document_id=model.document_id,
+        employee_id=model.employee_id,
+        signed_by_user_id=model.signed_by_user_id,
+        document_sha256_hex=model.document_sha256_hex,
+        signed_at_utc=model.signed_at_utc,
+        ip_address=model.ip_address,
+        user_agent=model.user_agent,
+        receipt_statement=model.receipt_statement,
+        retention_until=model.retention_until,
+    )
+
+
+class SqlAlchemyDocumentRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get_by_id(
+        self,
+        tenant_id: UUID,
+        document_id: UUID,
+    ) -> ComplianceDocument | None:
+        stmt = select(ComplianceDocumentModel).where(
+            ComplianceDocumentModel.tenant_id == tenant_id,
+            ComplianceDocumentModel.id == document_id,
+            ComplianceDocumentModel.deleted_at.is_(None),
+        )
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+        return _to_document(model) if model is not None else None
+
+    async def list_by_tenant(
+        self,
+        tenant_id: UUID,
+        *,
+        allowed_store_ids: frozenset[UUID] | None = None,
+        only_employee_id: UUID | None = None,
+        include_tenant_wide_for_employee: bool = False,
+        employee_store_id: UUID | None = None,
+        category: DocumentCategory | None = None,
+        employee_id: UUID | None = None,
+        store_id: UUID | None = None,
+        requires_signature: bool | None = None,
+        exclude_categories: frozenset[DocumentCategory] | None = None,
+    ) -> list[ComplianceDocument]:
+        if allowed_store_ids is not None and len(allowed_store_ids) == 0:
+            return []
+
+        stmt = select(ComplianceDocumentModel).where(
+            ComplianceDocumentModel.tenant_id == tenant_id,
+            ComplianceDocumentModel.deleted_at.is_(None),
+        )
+        if allowed_store_ids is not None:
+            stmt = stmt.where(ComplianceDocumentModel.store_id.in_(allowed_store_ids))
+        if only_employee_id is not None:
+            if include_tenant_wide_for_employee:
+                store_cond = (
+                    ComplianceDocumentModel.store_id.is_(None)
+                    if employee_store_id is None
+                    else or_(
+                        ComplianceDocumentModel.store_id.is_(None),
+                        ComplianceDocumentModel.store_id == employee_store_id,
+                    )
+                )
+                stmt = stmt.where(
+                    or_(
+                        ComplianceDocumentModel.employee_id == only_employee_id,
+                        and_(
+                            ComplianceDocumentModel.employee_id.is_(None),
+                            ComplianceDocumentModel.category == DocumentCategory.OTHER.value,
+                            store_cond,
+                        ),
+                    )
+                )
+            else:
+                stmt = stmt.where(ComplianceDocumentModel.employee_id == only_employee_id)
+        if category is not None:
+            stmt = stmt.where(ComplianceDocumentModel.category == category.value)
+        if exclude_categories:
+            stmt = stmt.where(
+                ComplianceDocumentModel.category.notin_([c.value for c in exclude_categories])
+            )
+        if employee_id is not None:
+            stmt = stmt.where(ComplianceDocumentModel.employee_id == employee_id)
+        if store_id is not None:
+            stmt = stmt.where(ComplianceDocumentModel.store_id == store_id)
+        if requires_signature is not None:
+            stmt = stmt.where(ComplianceDocumentModel.requires_signature == requires_signature)
+
+        stmt = stmt.order_by(
+            ComplianceDocumentModel.created_at.desc(),
+            ComplianceDocumentModel.id.asc(),
+        )
+        result = await self._session.execute(stmt)
+        return [_to_document(row) for row in result.scalars().all()]
+
+    async def create(self, document: ComplianceDocument) -> ComplianceDocument:
+        model = ComplianceDocumentModel(
+            id=document.id,
+            tenant_id=document.tenant_id,
+            store_id=document.store_id,
+            employee_id=document.employee_id,
+            category=document.category.value,
+            title=document.title,
+            period_month=document.period_month,
+            storage_backend=document.storage_backend.value,
+            storage_key=document.storage_key,
+            original_filename=document.original_filename,
+            mime_type=document.mime_type,
+            size_bytes=document.size_bytes,
+            sha256_hex=document.sha256_hex,
+            requires_signature=document.requires_signature,
+            uploaded_by_user_id=document.uploaded_by_user_id,
+            retention_until=document.retention_until,
+            created_at=document.created_at,
+            updated_at=document.updated_at,
+            deleted_at=document.deleted_at,
+        )
+        self._session.add(model)
+        await self._session.flush()
+        return _to_document(model)
+
+    async def soft_delete(
+        self,
+        tenant_id: UUID,
+        document_id: UUID,
+        *,
+        deleted_at: datetime,
+    ) -> bool:
+        stmt = select(ComplianceDocumentModel).where(
+            ComplianceDocumentModel.tenant_id == tenant_id,
+            ComplianceDocumentModel.id == document_id,
+            ComplianceDocumentModel.deleted_at.is_(None),
+        )
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+        if model is None:
+            return False
+        model.deleted_at = deleted_at
+        model.updated_at = deleted_at
+        await self._session.flush()
+        return True
+
+    async def list_receipts_for_document(
+        self,
+        tenant_id: UUID,
+        document_id: UUID,
+    ) -> list[DocumentReceipt]:
+        stmt = (
+            select(DocumentReceiptModel)
+            .where(
+                DocumentReceiptModel.tenant_id == tenant_id,
+                DocumentReceiptModel.document_id == document_id,
+            )
+            .order_by(DocumentReceiptModel.signed_at_utc.asc())
+        )
+        result = await self._session.execute(stmt)
+        return [_to_document_receipt(row) for row in result.scalars().all()]
+
+    async def list_receipts_for_documents(
+        self,
+        tenant_id: UUID,
+        document_ids: Sequence[UUID],
+    ) -> list[DocumentReceipt]:
+        if not document_ids:
+            return []
+        stmt = (
+            select(DocumentReceiptModel)
+            .where(
+                DocumentReceiptModel.tenant_id == tenant_id,
+                DocumentReceiptModel.document_id.in_(list(document_ids)),
+            )
+            .order_by(DocumentReceiptModel.signed_at_utc.asc())
+        )
+        result = await self._session.execute(stmt)
+        return [_to_document_receipt(row) for row in result.scalars().all()]
+
+    async def get_receipt(
+        self,
+        tenant_id: UUID,
+        document_id: UUID,
+        employee_id: UUID,
+    ) -> DocumentReceipt | None:
+        stmt = select(DocumentReceiptModel).where(
+            DocumentReceiptModel.tenant_id == tenant_id,
+            DocumentReceiptModel.document_id == document_id,
+            DocumentReceiptModel.employee_id == employee_id,
+        )
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+        return _to_document_receipt(model) if model is not None else None
+
+    async def append_receipt(self, receipt: DocumentReceipt) -> DocumentReceipt:
+        model = DocumentReceiptModel(
+            id=receipt.id,
+            tenant_id=receipt.tenant_id,
+            document_id=receipt.document_id,
+            employee_id=receipt.employee_id,
+            signed_by_user_id=receipt.signed_by_user_id,
+            document_sha256_hex=receipt.document_sha256_hex,
+            signed_at_utc=receipt.signed_at_utc,
+            ip_address=receipt.ip_address,
+            user_agent=receipt.user_agent,
+            receipt_statement=receipt.receipt_statement,
+            retention_until=receipt.retention_until,
+        )
+        self._session.add(model)
+        try:
+            await self._session.flush()
+        except IntegrityError as exc:
+            raise ConflictError("Electronic receipt already signed for this document") from exc
+        return _to_document_receipt(model)

@@ -13,6 +13,7 @@ from app.domain.organization import (
     ValidationDomainError,
 )
 from app.domain.security import ForbiddenScopeError, TokenVerificationError
+from app.infrastructure.document_storage import SignedTokenError, StorageBackendError
 from app.infrastructure.pii_crypto import PiiEncryptionError
 
 
@@ -107,4 +108,24 @@ def register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={"detail": "PII encryption service error"},
+        )
+
+    @app.exception_handler(SignedTokenError)
+    async def _handle_signed_token_error(
+        _request: Request,
+        exc: SignedTokenError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_403_FORBIDDEN,
+            content={"detail": str(exc)},
+        )
+
+    @app.exception_handler(StorageBackendError)
+    async def _handle_storage_backend_error(
+        _request: Request,
+        _exc: StorageBackendError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"detail": "Document storage service error"},
         )

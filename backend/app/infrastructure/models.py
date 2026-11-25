@@ -17,6 +17,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    UniqueConstraint,
     func,
     text,
 )
@@ -331,4 +332,200 @@ class AttendanceEventModel(Base):
         nullable=False,
         server_default=text("''"),
     )
+    retention_until: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ShiftModel(Base):
+    __tablename__ = "shifts"
+    __table_args__ = (
+        CheckConstraint("end_at_utc > start_at_utc", name="shifts_end_after_start"),
+        CheckConstraint(
+            "planned_break_minutes >= 0", name="shifts_planned_break_non_negative"
+        ),
+        CheckConstraint(
+            "status IN ('draft', 'published', 'cancelled')",
+            name="shifts_status_valid",
+        ),
+        Index("ix_shifts_tenant_store_start", "tenant_id", "store_id", "start_at_utc"),
+        Index("ix_shifts_tenant_emp_start", "tenant_id", "employee_id", "start_at_utc"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False
+    )
+    store_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("stores.id", ondelete="RESTRICT"), nullable=False
+    )
+    employee_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("employees.id", ondelete="RESTRICT"), nullable=False
+    )
+    start_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    end_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    planned_break_minutes: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    status: Mapped[str] = mapped_column(
+        String(24), nullable=False, server_default=text("'draft'")
+    )
+    notes: Mapped[str] = mapped_column(String(500), nullable=False, server_default=text("''"))
+    created_by_user_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
+    published_by_user_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), nullable=True
+    )
+    published_at_utc: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    retention_until: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class LeaveRequestModel(Base):
+    __tablename__ = "leave_requests"
+    __table_args__ = (
+        CheckConstraint("end_date >= start_date", name="leave_requests_end_gte_start"),
+        CheckConstraint("natural_days > 0", name="leave_requests_natural_days_positive"),
+        CheckConstraint(
+            "leave_type IN ('vacation', 'sick_leave', 'paid_leave', 'unpaid_leave')",
+            name="leave_requests_type_valid",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'approved', 'rejected', 'cancelled')",
+            name="leave_requests_status_valid",
+        ),
+        Index(
+            "ix_leave_requests_tenant_emp_dates",
+            "tenant_id",
+            "employee_id",
+            "start_date",
+            "end_date",
+        ),
+        Index("ix_leave_requests_tenant_store_status", "tenant_id", "store_id", "status"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False
+    )
+    store_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("stores.id", ondelete="RESTRICT"), nullable=False
+    )
+    employee_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("employees.id", ondelete="RESTRICT"), nullable=False
+    )
+    leave_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date] = mapped_column(Date, nullable=False)
+    natural_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(24), nullable=False, server_default=text("'pending'")
+    )
+    reason: Mapped[str] = mapped_column(String(500), nullable=False, server_default=text("''"))
+    requested_by_user_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
+    reviewed_by_user_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), nullable=True
+    )
+    reviewed_at_utc: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    review_note: Mapped[str] = mapped_column(
+        String(500), nullable=False, server_default=text("''")
+    )
+    medical_document_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), nullable=True
+    )
+    retention_until: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ComplianceDocumentModel(Base):
+    __tablename__ = "compliance_documents"
+    __table_args__ = (
+        CheckConstraint("size_bytes > 0", name="compliance_documents_size_positive"),
+        CheckConstraint(
+            "category IN ('contract', 'payslip', 'attendance_report', "
+            "'medical_leave', 'id_document', 'other')",
+            name="compliance_documents_category_valid",
+        ),
+        CheckConstraint(
+            "storage_backend IN ('local', 'supabase')",
+            name="compliance_documents_storage_backend_valid",
+        ),
+        UniqueConstraint("storage_key", name="uq_compliance_documents_storage_key"),
+        Index("ix_compliance_documents_tenant_emp_cat", "tenant_id", "employee_id", "category"),
+        Index(
+            "ix_compliance_documents_tenant_store_created",
+            "tenant_id",
+            "store_id",
+            "created_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False
+    )
+    store_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("stores.id", ondelete="RESTRICT"), nullable=True
+    )
+    employee_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("employees.id", ondelete="RESTRICT"), nullable=True
+    )
+    category: Mapped[str] = mapped_column(String(32), nullable=False)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    period_month: Mapped[str | None] = mapped_column(String(7), nullable=True)
+    storage_backend: Mapped[str] = mapped_column(String(24), nullable=False)
+    storage_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    sha256_hex: Mapped[str] = mapped_column(String(64), nullable=False)
+    requires_signature: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    uploaded_by_user_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
+    retention_until: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class DocumentReceiptModel(Base):
+    """Strictly append-only electronic document receipt ledger.
+
+    Database triggers forbid UPDATE, DELETE, and TRUNCATE.
+    """
+
+    __tablename__ = "document_receipts"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "document_id",
+            "employee_id",
+            name="uq_document_receipts_tenant_doc_emp",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False
+    )
+    document_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("compliance_documents.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    employee_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("employees.id", ondelete="RESTRICT"), nullable=False
+    )
+    signed_by_user_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
+    document_sha256_hex: Mapped[str] = mapped_column(String(64), nullable=False)
+    signed_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ip_address: Mapped[str] = mapped_column(String(64), nullable=False)
+    user_agent: Mapped[str] = mapped_column(String(512), nullable=False)
+    receipt_statement: Mapped[str] = mapped_column(String(500), nullable=False)
     retention_until: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

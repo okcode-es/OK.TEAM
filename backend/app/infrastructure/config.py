@@ -32,6 +32,15 @@ class Settings(BaseSettings):
     # 32-byte base64url AES-256-GCM key for NIE/IBAN/NAF encryption
     pii_encryption_key: str = ""
 
+    # Phase 4: Private compliance document storage & <= 60s signed URLs
+    storage_backend: str = "local"
+    local_storage_dir: str = ".local_storage"
+    storage_signing_secret: str = ""
+    supabase_service_role_key: str = ""
+    supabase_storage_bucket: str = "okteam-private-docs"
+    public_api_base_url: str = "http://localhost:8001"
+    trust_proxy_headers: bool = False
+
     @property
     def is_dev_auth_active(self) -> bool:
         return (

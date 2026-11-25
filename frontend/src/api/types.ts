@@ -54,3 +54,50 @@ export type DailyAttendanceSummaryResponse =
 export type EmployeeAttendanceLedgerResponse =
   components['schemas']['EmployeeAttendanceLedgerResponse']
 export type WorkSessionResponse = components['schemas']['WorkSessionResponse']
+
+// Phase 4: Scheduling
+export type ShiftStatus = components['schemas']['ShiftStatus']
+export type ShiftResponse = components['schemas']['ShiftResponse']
+export type ShiftMutationResponse =
+  components['schemas']['ShiftMutationResponse']
+export type CreateShiftRequest = components['schemas']['CreateShiftRequest']
+export type UpdateShiftRequest = components['schemas']['UpdateShiftRequest']
+export type PublishWeekRequest = components['schemas']['PublishWeekRequest']
+export type PublishWeekResponse = components['schemas']['PublishWeekResponse']
+export type ScheduleAlertCode = components['schemas']['ScheduleAlertCode']
+export type ScheduleAlertResponse =
+  components['schemas']['ScheduleAlertResponse']
+export type EmployeeScheduleRowResponse =
+  components['schemas']['EmployeeScheduleRowResponse']
+export type WeeklyScheduleResponse =
+  components['schemas']['WeeklyScheduleResponse']
+export type ApprovedLeaveSummaryResponse =
+  components['schemas']['ApprovedLeaveSummaryResponse']
+
+// Phase 4: Leaves
+export type LeaveType = components['schemas']['LeaveType']
+export type LeaveStatus = components['schemas']['LeaveStatus']
+export type LeaveRequestResponse = components['schemas']['LeaveRequestResponse']
+export type LeaveListResponse = components['schemas']['LeaveListResponse']
+export type CreateLeaveRequestBody =
+  components['schemas']['CreateLeaveRequestBody']
+export type ReviewLeaveRequestBody =
+  components['schemas']['ReviewLeaveRequestBody']
+export type VacationBalanceResponse =
+  components['schemas']['VacationBalanceResponse']
+
+// Phase 4: Compliance Documents & SHA-256 Receipts
+export type DocumentCategory = components['schemas']['DocumentCategory']
+export type StorageBackend = components['schemas']['StorageBackend']
+export type ComplianceDocumentResponse =
+  components['schemas']['ComplianceDocumentResponse']
+export type DocumentReceiptResponse =
+  components['schemas']['DocumentReceiptResponse']
+export type DocumentListItemResponse =
+  components['schemas']['DocumentListItemResponse']
+export type DocumentListResponse = components['schemas']['DocumentListResponse']
+export type DocumentDetailResponse =
+  components['schemas']['DocumentDetailResponse']
+export type CreateSignedUrlRequest =
+  components['schemas']['CreateSignedUrlRequest']
+export type SignedUrlResponse = components['schemas']['SignedUrlResponse']
