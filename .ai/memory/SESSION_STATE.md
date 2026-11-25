@@ -1,21 +1,21 @@
 # okTeam Session State (Hard Limit <= 50 Lines)
 
-- **Current Phase**: Phase 4 — Shift Scheduling, Art. 38 Leaves, 60s Signed Private Docs & Docker Delivery (Complete, Red Team PASS)
+- **Current Phase**: Phase 5 — Monthly Payroll Closing, Gestoría Pack, RDL 8/2019 PDF Receipts & P2 Cleanup (Complete, Red Team PASS)
 - **Last Updated**: 2026-11-25
-- **Active Branch**: main (Phase 4 synced with origin/main)
+- **Active Branch**: main (Phase 5 ready / synced with origin/main)
 
-## Phase 4 Delivered (100% Hydrogen Workers — Neon Coordinator Zero Code Edits)
-- **DB & Immutability (`backend-p4`)**: `0004_phase4_sched_leaves_docs` (`shifts`, `leave_requests`, `compliance_documents`, `document_receipts` in `public` schema; PostgreSQL triggers blocking `UPDATE`/`DELETE`/`TRUNCATE` on `document_receipts` and `TRUNCATE` on `attendance_events`).
-- **Domain & Compliance (`backend-p4`)**: Pure stdlib `domain/{scheduling,leaves,documents}.py` (Art. 12.4.c part-time OT hard block, minor <=8h block, 12h UTC inter-shift rest across week boundaries, Art. 37.1 36h weekly rest, Art. 38 >=30 natural-day cross-year balance, magic-bytes + 10 MiB bounded upload, <=60.0s HMAC local adapter & EU Supabase Storage REST adapter, RFC 6266 UTF-8 filenames, `store_manager` blocked from `contract`/`payslip`/`id_document` & `legal_hold`).
-- **Frontend & Docker (`frontend-p4`)**: `SchedulePage` (Template 3 sticky-left weekly grid), `LeavesPage` (Template 1 + 4-card Art. 38 KPI strip), `DocumentsPage` (Template 1 + on-demand 60s signed download + immutable SHA-256 receipt signing), `docker-compose.yml` + `.dockerignore` + `README.md`.
+## Phase 5 Delivered (100% Hydrogen Workers — Neon Coordinator Zero Code Edits)
+- **DB & Immutability (`backend-p5`)**: `0005_phase5_payroll_closing` (`monthly_closings`, append-only `monthly_closing_items` with PostgreSQL `BEFORE UPDATE OR DELETE` + `BEFORE TRUNCATE` triggers, plus P2 partial unique index `uq_employees_tenant_user_active`).
+- **Domain, PDF & Locks (`backend-p5`)**: Pure stdlib `domain/payroll.py`, zero-dependency `es-ES` A4 `%PDF-1.4` writer (`infrastructure/pdf_generator.py`), cross-module 409 closed-month locks (including overnight cross-month & cross-store session-diff protection), Owner/HR audited Reopen with optimistic concurrency, `es-ES` UTF-8 BOM + CWE-1236 Gestoría CSV (masked NIE/DNI), plus all 5 Phase 1–4 P2 fixes (DNI/NIE Mod-23, IBAN Mod-97 + `^ES[0-9]{22}$`, `"document.pdf"` fallback, `store_manager` own-doc access, `settings_override` propagation).
+- **Frontend (`frontend-p5`)**: `PayrollPage.tsx` (Template 1 — store/month toolbar, 4-card `tabular-nums` KPI strip, blocker/reopen banners, TanStack Table + right-side `Sheet` with 60s signed PDF download, Reopen `AlertDialog` with IME guard, full `zh-CN` / `es-ES` i18n).
 
 ## Verified Gates (All Passed)
-- Backend (`uv` + Py 3.12): `domain-purity` PASS (9 files) | `ruff` PASS | `mypy` PASS (44 files) | `pytest` PASS (41/41)
-- Migration & Triggers: `alembic 0003 -> 0004 -> 0003 -> 0004` + live SQL `UPDATE`/`DELETE`/`TRUNCATE` trigger blocks PASS
+- Backend (`uv` + Py 3.12): `domain-purity` PASS (10 files) | `ruff` PASS | `mypy` PASS (48 files) | `pytest` PASS (49/49)
+- Migration & Triggers: `alembic 0004 -> 0005 -> 0004 -> 0005` + live SQL `UPDATE`/`DELETE`/`TRUNCATE` trigger blocks PASS
 - Contracts & Frontend: `sync-contracts.ps1` PASS | `tsc --noEmit` PASS | `eslint` PASS (0 errors/warnings) | `vite build` PASS
-- Full-Stack Docker: `docker compose --profile local-db up -d --build` RUNNING (`db:5433`, `backend:8001`, `frontend:5173`, `okteam_docs_data` volume)
-- Visual Audit: `chrome-devtools` `es-ES` `1440px` & `390px` across Schedule, Leaves & Documents (0 overflow)
-- Red Team Gatekeeper: **PASS** (Round 2/2 — P0: None, P1: None; 3 non-blocking P2 noted)
+- Full-Stack Docker: `docker compose --profile local-db up -d --build` RUNNING (`db:5433`, `backend:8001`, `frontend:5173`)
+- Visual Audit: `chrome-devtools` `es-ES` `1440px` & `390px` on `/payroll` (0 overflow)
+- Red Team Gatekeeper: **PASS** (Round 2/2 — P0: None, P1: None)
 
 ## Next Action
-- Commit & push Phase 4 upon user confirmation, then recommend `/compact` at Phase 4 boundary per ADR-009.
+- Recommend `/compact` at Phase 5 boundary per ADR-009, then align with user on Phase 6 (GitHub Actions CI/CD + EU Supabase Production Integration).

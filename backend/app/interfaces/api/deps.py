@@ -8,18 +8,20 @@ from functools import lru_cache
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.documents import DocumentStoragePort
 from app.domain.employees import PiiCipher
+from app.domain.payroll import AttendancePdfRendererPort
 from app.domain.repositories import (
     AttendanceRepository,
     DocumentRepository,
     EmployeeRepository,
     LeaveRepository,
     MembershipRepository,
+    PayrollClosingRepository,
     ShiftRepository,
     StoreRepository,
     TenantRepository,
@@ -30,12 +32,13 @@ from app.domain.security import (
     TokenVerificationError,
     VerifiedIdentity,
 )
-from app.infrastructure.config import get_settings
+from app.infrastructure.config import Settings, get_settings
 from app.infrastructure.database import get_db_session
 from app.infrastructure.document_storage import (
     LocalDocumentStorageAdapter,
     SupabaseDocumentStorageAdapter,
 )
+from app.infrastructure.pdf_generator import PurePythonAttendancePdfRenderer
 from app.infrastructure.pii_crypto import AesGcmPiiCipher
 from app.infrastructure.repositories import (
     SqlAlchemyAttendanceRepository,
@@ -43,6 +46,7 @@ from app.infrastructure.repositories import (
     SqlAlchemyEmployeeRepository,
     SqlAlchemyLeaveRepository,
     SqlAlchemyMembershipRepository,
+    SqlAlchemyPayrollClosingRepository,
     SqlAlchemyShiftRepository,
     SqlAlchemyStoreRepository,
     SqlAlchemyTenantRepository,
@@ -53,13 +57,33 @@ bearer_scheme = HTTPBearer(auto_error=False)
 CommitFn = Callable[[], Awaitable[None]]
 
 
-@lru_cache(maxsize=1)
-def get_jwt_verifier() -> SupabaseJWTVerifier:
-    settings = get_settings()
+def get_app_settings(request: Request) -> Settings:
+    app_settings = getattr(request.app.state, "settings", None)
+    if isinstance(app_settings, Settings):
+        return app_settings
+    return get_settings()
+
+
+@lru_cache(maxsize=4)
+def _build_jwt_verifier(
+    supabase_url: str,
+    audience: str,
+    jwt_secret: str,
+) -> SupabaseJWTVerifier:
     return SupabaseJWTVerifier(
-        supabase_url=settings.supabase_url,
-        audience=settings.supabase_jwt_audience,
-        jwt_secret=settings.supabase_jwt_secret,
+        supabase_url=supabase_url,
+        audience=audience,
+        jwt_secret=jwt_secret,
+    )
+
+
+def get_jwt_verifier(
+    settings: Annotated[Settings, Depends(get_app_settings)],
+) -> SupabaseJWTVerifier:
+    return _build_jwt_verifier(
+        settings.supabase_url,
+        settings.supabase_jwt_audience,
+        settings.supabase_jwt_secret,
     )
 
 
@@ -111,27 +135,65 @@ def get_document_repository(
     return SqlAlchemyDocumentRepository(session)
 
 
-@lru_cache(maxsize=1)
-def get_document_storage() -> DocumentStoragePort:
-    settings = get_settings()
-    if settings.storage_backend.strip().lower() == "supabase":
+def get_payroll_closing_repository(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> PayrollClosingRepository:
+    return SqlAlchemyPayrollClosingRepository(session)
+
+
+def get_pdf_renderer() -> AttendancePdfRendererPort:
+    return PurePythonAttendancePdfRenderer()
+
+
+@lru_cache(maxsize=4)
+def _build_document_storage(
+    storage_backend: str,
+    supabase_url: str,
+    supabase_service_role_key: str,
+    supabase_storage_bucket: str,
+    local_storage_dir: str,
+    storage_signing_secret: str,
+    public_api_base_url: str,
+    api_v1_prefix: str,
+) -> DocumentStoragePort:
+    if storage_backend.strip().lower() == "supabase":
         return SupabaseDocumentStorageAdapter(
-            supabase_url=settings.supabase_url,
-            service_role_key=settings.supabase_service_role_key,
-            bucket=settings.supabase_storage_bucket,
+            supabase_url=supabase_url,
+            service_role_key=supabase_service_role_key,
+            bucket=supabase_storage_bucket,
         )
     return LocalDocumentStorageAdapter(
-        base_dir=settings.local_storage_dir,
-        signing_secret=settings.storage_signing_secret,
-        public_api_base_url=settings.public_api_base_url,
-        api_v1_prefix=settings.api_v1_prefix,
+        base_dir=local_storage_dir,
+        signing_secret=storage_signing_secret,
+        public_api_base_url=public_api_base_url,
+        api_v1_prefix=api_v1_prefix,
     )
 
 
-@lru_cache(maxsize=1)
-def get_pii_cipher() -> PiiCipher:
-    settings = get_settings()
-    return AesGcmPiiCipher(settings.pii_encryption_key)
+def get_document_storage(
+    settings: Annotated[Settings, Depends(get_app_settings)],
+) -> DocumentStoragePort:
+    return _build_document_storage(
+        settings.storage_backend,
+        settings.supabase_url,
+        settings.supabase_service_role_key,
+        settings.supabase_storage_bucket,
+        settings.local_storage_dir,
+        settings.storage_signing_secret,
+        settings.public_api_base_url,
+        settings.api_v1_prefix,
+    )
+
+
+@lru_cache(maxsize=4)
+def _build_pii_cipher(pii_encryption_key: str) -> PiiCipher:
+    return AesGcmPiiCipher(pii_encryption_key)
+
+
+def get_pii_cipher(
+    settings: Annotated[Settings, Depends(get_app_settings)],
+) -> PiiCipher:
+    return _build_pii_cipher(settings.pii_encryption_key)
 
 
 def get_commit_fn(

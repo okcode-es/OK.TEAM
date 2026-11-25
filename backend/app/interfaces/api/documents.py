@@ -30,10 +30,11 @@ from app.domain.documents import (
 from app.domain.organization import EntityNotFoundError
 from app.domain.repositories import DocumentRepository, EmployeeRepository, StoreRepository
 from app.domain.security import AuthenticatedPrincipal
-from app.infrastructure.config import get_settings
+from app.infrastructure.config import Settings
 from app.infrastructure.document_storage import LocalDocumentStorageAdapter, SignedTokenError
 from app.interfaces.api.deps import (
     CommitFn,
+    get_app_settings,
     get_commit_fn,
     get_current_principal,
     get_document_repository,
@@ -145,8 +146,7 @@ def _to_receipt_response(r: DocumentReceipt) -> DocumentReceiptResponse:
     )
 
 
-def _extract_client_ip(request: Request) -> str:
-    settings = get_settings()
+def _extract_client_ip(request: Request, settings: Settings) -> str:
     if settings.trust_proxy_headers:
         forwarded = request.headers.get("x-forwarded-for", "")
         if forwarded:
@@ -268,7 +268,14 @@ async def download_local_signed_document(
     if doc is None or doc.storage_key != storage_key:
         raise EntityNotFoundError("Document not found or deleted")
 
-    ascii_fallback = filename.encode("ascii", "ignore").decode("ascii").strip() or "document"
+    raw_ascii = filename.encode("ascii", "ignore").decode("ascii").strip()
+    raw_ascii = raw_ascii.replace('"', "").replace("\r", "").replace("\n", "")
+    if not raw_ascii:
+        ascii_fallback = "document"
+    elif raw_ascii.startswith("."):
+        ascii_fallback = f"document{raw_ascii}" if len(raw_ascii) > 1 else "document"
+    else:
+        ascii_fallback = raw_ascii
     encoded_fn = quote(filename, safe="")
     content_disp = f'attachment; filename="{ascii_fallback}"; filename*=UTF-8\'\'{encoded_fn}'
     return Response(
@@ -346,11 +353,12 @@ async def sign_document_receipt(
     employee_repo: Annotated[EmployeeRepository, Depends(get_employee_repository)],
     commit: Annotated[CommitFn, Depends(get_commit_fn)],
     now_utc: Annotated[datetime, Depends(get_utc_now)],
+    settings: Annotated[Settings, Depends(get_app_settings)],
 ) -> DocumentReceiptResponse:
     receipt = await SignDocumentReceiptUseCase(doc_repo, employee_repo).execute(
         principal,
         document_id=document_id,
-        ip_address=_extract_client_ip(request),
+        ip_address=_extract_client_ip(request, settings),
         user_agent=request.headers.get("user-agent", "unknown"),
         now_utc=now_utc,
     )

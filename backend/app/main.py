@@ -13,6 +13,7 @@ from app.interfaces.api.errors import register_exception_handlers
 from app.interfaces.api.health import router as health_router
 from app.interfaces.api.leaves import router as leaves_router
 from app.interfaces.api.memberships import router as memberships_router
+from app.interfaces.api.payroll import router as payroll_router
 from app.interfaces.api.shifts import router as shifts_router
 from app.interfaces.api.stores import router as stores_router
 from app.interfaces.api.tenants import router as tenants_router
@@ -27,6 +28,7 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
         docs_url=f"{settings.api_v1_prefix}/docs",
         redoc_url=f"{settings.api_v1_prefix}/redoc",
     )
+    application.state.settings = settings
 
     application.add_middleware(
         CORSMiddleware,
@@ -48,6 +50,7 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
     application.include_router(shifts_router, prefix=settings.api_v1_prefix)
     application.include_router(leaves_router, prefix=settings.api_v1_prefix)
     application.include_router(documents_router, prefix=settings.api_v1_prefix)
+    application.include_router(payroll_router, prefix=settings.api_v1_prefix)
 
     if settings.is_dev_auth_active:
         application.include_router(

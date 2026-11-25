@@ -25,6 +25,7 @@
     "schedule": "排班日历",
     "leaves": "年假与请假",
     "documents": "合规文档",
+    "payroll": "月度关账",
     "stores": "门店管理",
     "members": "成员与权限",
     "organization": "企业设置",
@@ -564,6 +565,114 @@
       "receiptHash": "存证 SHA-256",
       "receiptStatement": "声明快照",
       "close": "关闭"
+    }
+  },
+  "payroll": {
+    "title": "月度关账与薪资核算包",
+    "subtitle": "按门店锁定自然月考勤与请假账本，自动生成符合西班牙 RDL 8/2019 的员工考勤月报 PDF 并导出律师楼核算包 CSV。",
+    "selectStore": "选择门店",
+    "noStores": "暂无可用门店",
+    "periodMonth": "核算月份",
+    "recentClosings": "最近关账记录",
+    "actions": {
+      "closeMonth": "月度关账并生成月报",
+      "closing": "正在关账…",
+      "exportCsv": "导出律师楼核算包 CSV",
+      "exporting": "正在导出…",
+      "reopenMonth": "重新开启本月",
+      "reopening": "正在重开…"
+    },
+    "statuses": {
+      "open": "未关账（实时预览）",
+      "closed": "已关账 v{{revision}}",
+      "reopened": "已重开 v{{revision}}"
+    },
+    "kpi": {
+      "statusLabel": "关账状态与版本",
+      "statusOpenHint": "当前月份考勤与请假仍可编辑",
+      "statusClosedHint": "已锁定，关账时间 {{time}}",
+      "statusReopenedHint": "已重开修改，需重新关账生成新版本",
+      "employeesLabel": "纳入核算员工",
+      "employeesHint": "含本月在职或有考勤/请假记录员工",
+      "hoursLabel": "净工时 / 加班工时",
+      "hoursSub": "其中加班 {{overtime}} 小时",
+      "signaturesLabel": "员工考勤签收进度",
+      "signaturesSub": "已完成 SHA-256 电子签收（{{percent}}%）",
+      "blockersLabel": "关账阻断项",
+      "blockersClear": "无阻断项，满足关账条件",
+      "blockersPending": "存在 {{count}} 项待处理事项"
+    },
+    "banners": {
+      "blockersTitle": "关账前必须先处理以下阻断项",
+      "goToAttendance": "前往考勤台账",
+      "goToLeaves": "前往年假与请假",
+      "reopenAuditTitle": "本月曾被重新开启（审计记录）",
+      "reopenAuditMeta": "重开时间：{{time}} · 原因：{{reason}}",
+      "alertsTitle": "本月共检测到 {{warnings}} 项劳动法预警、{{violations}} 项违规记录，关账后仍可查阅历史明细。"
+    },
+    "columns": {
+      "employee": "员工",
+      "contract": "合同与工时",
+      "workedDays": "出勤天数",
+      "hours": "净工时 / 常规 / 加班",
+      "leaves": "休假天数 (年假 / 病假 IT / 其他)",
+      "alerts": "合规预警",
+      "receipt": "RDL 8/2019 签收状态"
+    },
+    "receiptStatuses": {
+      "signed": "已签收",
+      "pending": "待签收",
+      "preview": "关账后生成"
+    },
+    "alerts": {
+      "clean": "正常",
+      "warnings": "{{count}} 预警",
+      "violations": "{{count}} 违规"
+    },
+    "empty": "所选门店与月份暂无可纳入核算的员工记录。",
+    "weeklyHoursUnit": "{{hours}} 小时/周",
+    "hoursBreakdown": "常规 {{regular}}h · 加班 {{overtime}}h",
+    "leavesSummary": "年 {{vacation}} · 病 {{sick}} · 他 {{other}}",
+    "detailDrawer": {
+      "title": "员工月度核算明细",
+      "description": "包含工时拆分、西班牙休假统计、RDL 8/2019 电子签收存证与 60 秒安全 PDF 下载。",
+      "nieDniMasked": "脱敏证件号 (NIE/DNI)",
+      "notProvided": "未登记",
+      "contractInfo": "合同与班制",
+      "hoursSection": "工时明细",
+      "workedDays": "出勤天数",
+      "netHours": "净工时合计",
+      "regularHours": "常规工时",
+      "overtimeHours": "本月加班工时",
+      "annualOvertime": "年度累计加班",
+      "breakMinutes": "累计休息时长",
+      "minutesUnit": "{{minutes}} 分钟",
+      "leavesSection": "休假与缺勤 (天)",
+      "vacationDays": "年假 (Vacaciones)",
+      "sickLeaveDays": "医疗病假 (Baja IT)",
+      "paidLeaveDays": "带薪事假",
+      "unpaidLeaveDays": "无薪假",
+      "alertsSection": "劳动法合规检查",
+      "warningCount": "预警次数",
+      "violationCount": "违规次数",
+      "receiptSection": "RDL 8/2019 考勤月报与 SHA-256 签收",
+      "signedAt": "签收时间",
+      "sha256": "文档 SHA-256 摘要",
+      "downloadPdf": "下载 RDL 8/2019 考勤月报 PDF（60秒链接）",
+      "generatingUrl": "正在生成临时链接…",
+      "signedUrlActive": "安全下载链接已打开，将于 {{seconds}} 秒后失效。",
+      "signedUrlExpired": "临时链接已过期，请重新点击下载。",
+      "noPdfYet": "本月尚未关账或未生成考勤月报 PDF。",
+      "close": "关闭"
+    },
+    "reopenDialog": {
+      "title": "重新开启月度关账",
+      "description": "重开后将解除该门店本月的考勤与请假写入锁定；历史不可变快照与已签署的 SHA-256 回执将完整保留，下次关账将生成新修订版本。",
+      "reasonLabel": "重开原因（必填，记入审计日志）",
+      "reasonPlaceholder": "例如：补录员工 11 月 18 日遗漏的病假单与下班打卡修正",
+      "reasonRequired": "请填写重新开启月度关账的原因。",
+      "cancel": "取消",
+      "confirm": "确认重开本月"
     }
   },
   "common": {

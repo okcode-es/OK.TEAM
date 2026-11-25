@@ -20,10 +20,13 @@ STATUTORY_MIN_VACATION_DAYS = 30
 STATUTORY_RETENTION_YEARS = 4
 
 _EMPLOYEE_CODE_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9_-]{0,31}$")
-_DNI_PATTERN = re.compile(r"^\d{8}[A-Z]$")
-_NIE_PATTERN = re.compile(r"^[XYZ]\d{7}[A-Z]$")
-_IBAN_PATTERN = re.compile(r"^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$")
-_NAF_PATTERN = re.compile(r"^\d{12}$")
+_DNI_PATTERN = re.compile(r"^[0-9]{8}[A-Z]$")
+_NIE_PATTERN = re.compile(r"^[XYZ][0-9]{7}[A-Z]$")
+_DNI_CHECKSUM_LETTERS = "TRWAGMYFPDXBNJZSQVHLCKE"
+_NIE_PREFIX_MAP = {"X": "0", "Y": "1", "Z": "2"}
+_IBAN_PATTERN = re.compile(r"^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$")
+_ES_IBAN_PATTERN = re.compile(r"^ES[0-9]{22}$")
+_NAF_PATTERN = re.compile(r"^[0-9]{12}$")
 
 
 class ContractType(StrEnum):
@@ -89,19 +92,34 @@ def normalize_employee_code(raw: str) -> str:
 
 def normalize_nie_dni(raw: str) -> str:
     cleaned = re.sub(r"[\s-]+", "", raw.strip().upper())
-    if not (_DNI_PATTERN.match(cleaned) or _NIE_PATTERN.match(cleaned)):
-        raise ValidationDomainError(
-            "Invalid NIE/DNI format: expected 8 digits + letter (DNI) or X/Y/Z + 7 digits + letter"
-        )
-    return cleaned
+    if _DNI_PATTERN.match(cleaned):
+        number = int(cleaned[:8])
+        expected = _DNI_CHECKSUM_LETTERS[number % 23]
+        if cleaned[8] != expected:
+            raise ValidationDomainError("Invalid Spanish DNI checksum letter")
+        return cleaned
+    if _NIE_PATTERN.match(cleaned):
+        mapped = _NIE_PREFIX_MAP[cleaned[0]] + cleaned[1:8]
+        number = int(mapped)
+        expected = _DNI_CHECKSUM_LETTERS[number % 23]
+        if cleaned[8] != expected:
+            raise ValidationDomainError("Invalid Spanish NIE checksum letter")
+        return cleaned
+    raise ValidationDomainError(
+        "Invalid NIE/DNI format: expected 8 digits + letter (DNI) or X/Y/Z + 7 digits + letter"
+    )
 
 
 def normalize_iban(raw: str) -> str:
     cleaned = re.sub(r"[\s-]+", "", raw.strip().upper())
     if not _IBAN_PATTERN.match(cleaned):
         raise ValidationDomainError("Invalid IBAN format")
-    if cleaned.startswith("ES") and len(cleaned) != 24:
+    if cleaned.startswith("ES") and not _ES_IBAN_PATTERN.match(cleaned):
         raise ValidationDomainError("Spanish IBAN must be exactly 24 characters (ES + 22 digits)")
+    rearranged = cleaned[4:] + cleaned[:4]
+    numeric = "".join(str(ord(ch) - 55) if ch.isalpha() else ch for ch in rearranged)
+    if int(numeric) % 97 != 1:
+        raise ValidationDomainError("Invalid IBAN checksum (ISO 7064 Mod-97)")
     return cleaned
 
 

@@ -38,6 +38,11 @@ from app.domain.organization import (
     Tenant,
     TenantMembershipSummary,
 )
+from app.domain.payroll import (
+    MonthlyClosing,
+    MonthlyClosingItem,
+    MonthlyClosingStatus,
+)
 from app.domain.scheduling import Shift, ShiftStatus
 from app.domain.security import MembershipStatus, UserRole
 from app.infrastructure.models import (
@@ -48,6 +53,8 @@ from app.infrastructure.models import (
     LeaveRequestModel,
     MembershipModel,
     MembershipStoreModel,
+    MonthlyClosingItemModel,
+    MonthlyClosingModel,
     ShiftModel,
     StoreModel,
     TenantModel,
@@ -704,7 +711,12 @@ class SqlAlchemyEmployeeRepository:
             deleted_at=employee.deleted_at,
         )
         self._session.add(model)
-        await self._session.flush()
+        try:
+            await self._session.flush()
+        except IntegrityError as exc:
+            raise ConflictError(
+                "Employee conflict: duplicate employee_code, NIE/DNI, or user_id"
+            ) from exc
         return _to_employee(model)
 
     async def update(
@@ -770,7 +782,12 @@ class SqlAlchemyEmployeeRepository:
         model.naf_enc = naf_enc
         model.naf_masked = naf_masked
         model.updated_at = updated_at
-        await self._session.flush()
+        try:
+            await self._session.flush()
+        except IntegrityError as exc:
+            raise ConflictError(
+                "Employee conflict: duplicate employee_code, NIE/DNI, or user_id"
+            ) from exc
         return _to_employee(model)
 
     async def terminate_and_hold(
@@ -1466,3 +1483,306 @@ class SqlAlchemyDocumentRepository:
         except IntegrityError as exc:
             raise ConflictError("Electronic receipt already signed for this document") from exc
         return _to_document_receipt(model)
+
+
+def _to_monthly_closing(model: MonthlyClosingModel) -> MonthlyClosing:
+    return MonthlyClosing(
+        id=model.id,
+        tenant_id=model.tenant_id,
+        store_id=model.store_id,
+        period_month=model.period_month,
+        status=MonthlyClosingStatus(model.status),
+        revision_number=model.revision_number,
+        closed_by_user_id=model.closed_by_user_id,
+        closed_at_utc=model.closed_at_utc,
+        reopened_by_user_id=model.reopened_by_user_id,
+        reopened_at_utc=model.reopened_at_utc,
+        reopen_reason=model.reopen_reason,
+        notes=model.notes,
+        retention_until=model.retention_until,
+        created_at=model.created_at,
+        updated_at=model.updated_at,
+        deleted_at=model.deleted_at,
+    )
+
+
+def _to_monthly_closing_item(model: MonthlyClosingItemModel) -> MonthlyClosingItem:
+    return MonthlyClosingItem(
+        id=model.id,
+        tenant_id=model.tenant_id,
+        closing_id=model.closing_id,
+        store_id=model.store_id,
+        period_month=model.period_month,
+        revision_number=model.revision_number,
+        employee_id=model.employee_id,
+        employee_code=model.employee_code,
+        employee_full_name=model.employee_full_name,
+        nie_dni_masked=model.nie_dni_masked,
+        contract_type=ContractType(model.contract_type),
+        work_schedule_type=WorkScheduleType(model.work_schedule_type),
+        contracted_weekly_hours=Decimal(str(model.contracted_weekly_hours)),
+        worked_days=model.worked_days,
+        total_net_hours=Decimal(str(model.total_net_hours)),
+        regular_hours=Decimal(str(model.regular_hours)),
+        overtime_hours=Decimal(str(model.overtime_hours)),
+        annual_overtime_hours=Decimal(str(model.annual_overtime_hours)),
+        total_break_minutes=model.total_break_minutes,
+        vacation_days=model.vacation_days,
+        sick_leave_days=model.sick_leave_days,
+        paid_leave_days=model.paid_leave_days,
+        unpaid_leave_days=model.unpaid_leave_days,
+        warning_alerts_count=model.warning_alerts_count,
+        violation_alerts_count=model.violation_alerts_count,
+        attendance_report_document_id=model.attendance_report_document_id,
+        retention_until=model.retention_until,
+        created_at=model.created_at,
+    )
+
+
+class SqlAlchemyPayrollClosingRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def is_store_month_closed(
+        self,
+        tenant_id: UUID,
+        store_id: UUID,
+        period_month: str,
+    ) -> bool:
+        stmt = select(MonthlyClosingModel.id).where(
+            MonthlyClosingModel.tenant_id == tenant_id,
+            MonthlyClosingModel.store_id == store_id,
+            MonthlyClosingModel.period_month == period_month,
+            MonthlyClosingModel.status == MonthlyClosingStatus.CLOSED.value,
+            MonthlyClosingModel.deleted_at.is_(None),
+        )
+        result = await self._session.execute(stmt)
+        return result.scalar_one_or_none() is not None
+
+    async def list_closed_months_for_store(
+        self,
+        tenant_id: UUID,
+        store_id: UUID,
+        period_months: Sequence[str],
+    ) -> set[str]:
+        if not period_months:
+            return set()
+        stmt = select(MonthlyClosingModel.period_month).where(
+            MonthlyClosingModel.tenant_id == tenant_id,
+            MonthlyClosingModel.store_id == store_id,
+            MonthlyClosingModel.period_month.in_(list(period_months)),
+            MonthlyClosingModel.status == MonthlyClosingStatus.CLOSED.value,
+            MonthlyClosingModel.deleted_at.is_(None),
+        )
+        result = await self._session.execute(stmt)
+        return set(result.scalars().all())
+
+    async def get_by_id(
+        self,
+        tenant_id: UUID,
+        closing_id: UUID,
+    ) -> MonthlyClosing | None:
+        stmt = select(MonthlyClosingModel).where(
+            MonthlyClosingModel.tenant_id == tenant_id,
+            MonthlyClosingModel.id == closing_id,
+            MonthlyClosingModel.deleted_at.is_(None),
+        )
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+        return _to_monthly_closing(model) if model is not None else None
+
+    async def get_by_store_month(
+        self,
+        tenant_id: UUID,
+        store_id: UUID,
+        period_month: str,
+    ) -> MonthlyClosing | None:
+        stmt = select(MonthlyClosingModel).where(
+            MonthlyClosingModel.tenant_id == tenant_id,
+            MonthlyClosingModel.store_id == store_id,
+            MonthlyClosingModel.period_month == period_month,
+            MonthlyClosingModel.deleted_at.is_(None),
+        )
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+        return _to_monthly_closing(model) if model is not None else None
+
+    async def list_by_tenant(
+        self,
+        tenant_id: UUID,
+        *,
+        allowed_store_ids: frozenset[UUID] | None = None,
+        store_id: UUID | None = None,
+        period_month: str | None = None,
+    ) -> list[MonthlyClosing]:
+        if allowed_store_ids is not None and len(allowed_store_ids) == 0:
+            return []
+        stmt = select(MonthlyClosingModel).where(
+            MonthlyClosingModel.tenant_id == tenant_id,
+            MonthlyClosingModel.deleted_at.is_(None),
+        )
+        if allowed_store_ids is not None:
+            stmt = stmt.where(MonthlyClosingModel.store_id.in_(allowed_store_ids))
+        if store_id is not None:
+            stmt = stmt.where(MonthlyClosingModel.store_id == store_id)
+        if period_month is not None:
+            stmt = stmt.where(MonthlyClosingModel.period_month == period_month)
+        stmt = stmt.order_by(
+            MonthlyClosingModel.period_month.desc(),
+            MonthlyClosingModel.closed_at_utc.desc(),
+        )
+        result = await self._session.execute(stmt)
+        return [_to_monthly_closing(row) for row in result.scalars().all()]
+
+    async def create_closing(self, closing: MonthlyClosing) -> MonthlyClosing:
+        model = MonthlyClosingModel(
+            id=closing.id,
+            tenant_id=closing.tenant_id,
+            store_id=closing.store_id,
+            period_month=closing.period_month,
+            status=closing.status.value,
+            revision_number=closing.revision_number,
+            closed_by_user_id=closing.closed_by_user_id,
+            closed_at_utc=closing.closed_at_utc,
+            reopened_by_user_id=closing.reopened_by_user_id,
+            reopened_at_utc=closing.reopened_at_utc,
+            reopen_reason=closing.reopen_reason,
+            notes=closing.notes,
+            retention_until=closing.retention_until,
+            created_at=closing.created_at,
+            updated_at=closing.updated_at,
+            deleted_at=closing.deleted_at,
+        )
+        self._session.add(model)
+        try:
+            await self._session.flush()
+        except IntegrityError as exc:
+            raise ConflictError(
+                f"Monthly closing already exists for store {closing.store_id} "
+                f"in {closing.period_month}"
+            ) from exc
+        return _to_monthly_closing(model)
+
+    async def update_closing(
+        self,
+        closing: MonthlyClosing,
+        *,
+        expected_status: MonthlyClosingStatus | None = None,
+        expected_revision: int | None = None,
+    ) -> MonthlyClosing | None:
+        stmt = select(MonthlyClosingModel).where(
+            MonthlyClosingModel.tenant_id == closing.tenant_id,
+            MonthlyClosingModel.id == closing.id,
+            MonthlyClosingModel.deleted_at.is_(None),
+        )
+        if expected_status is not None:
+            stmt = stmt.where(MonthlyClosingModel.status == expected_status.value)
+        if expected_revision is not None:
+            stmt = stmt.where(MonthlyClosingModel.revision_number == expected_revision)
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+        if model is None:
+            if expected_status is not None or expected_revision is not None:
+                raise ConflictError(
+                    "Monthly closing state or revision changed concurrently; please refresh"
+                )
+            return None
+        model.status = closing.status.value
+        model.revision_number = closing.revision_number
+        model.closed_by_user_id = closing.closed_by_user_id
+        model.closed_at_utc = closing.closed_at_utc
+        model.reopened_by_user_id = closing.reopened_by_user_id
+        model.reopened_at_utc = closing.reopened_at_utc
+        model.reopen_reason = closing.reopen_reason
+        model.notes = closing.notes
+        model.retention_until = closing.retention_until
+        model.updated_at = closing.updated_at
+        await self._session.flush()
+        return _to_monthly_closing(model)
+
+    async def append_items(
+        self,
+        items: Sequence[MonthlyClosingItem],
+    ) -> list[MonthlyClosingItem]:
+        models: list[MonthlyClosingItemModel] = []
+        for item in items:
+            model = MonthlyClosingItemModel(
+                id=item.id,
+                tenant_id=item.tenant_id,
+                closing_id=item.closing_id,
+                store_id=item.store_id,
+                period_month=item.period_month,
+                revision_number=item.revision_number,
+                employee_id=item.employee_id,
+                employee_code=item.employee_code,
+                employee_full_name=item.employee_full_name,
+                nie_dni_masked=item.nie_dni_masked,
+                contract_type=item.contract_type.value,
+                work_schedule_type=item.work_schedule_type.value,
+                contracted_weekly_hours=item.contracted_weekly_hours,
+                worked_days=item.worked_days,
+                total_net_hours=item.total_net_hours,
+                regular_hours=item.regular_hours,
+                overtime_hours=item.overtime_hours,
+                annual_overtime_hours=item.annual_overtime_hours,
+                total_break_minutes=item.total_break_minutes,
+                vacation_days=item.vacation_days,
+                sick_leave_days=item.sick_leave_days,
+                paid_leave_days=item.paid_leave_days,
+                unpaid_leave_days=item.unpaid_leave_days,
+                warning_alerts_count=item.warning_alerts_count,
+                violation_alerts_count=item.violation_alerts_count,
+                attendance_report_document_id=item.attendance_report_document_id,
+                retention_until=item.retention_until,
+                created_at=item.created_at,
+            )
+            self._session.add(model)
+            models.append(model)
+        try:
+            await self._session.flush()
+        except IntegrityError as exc:
+            raise ConflictError(
+                "Duplicate monthly closing item for this closing revision and employee"
+            ) from exc
+        return [_to_monthly_closing_item(m) for m in models]
+
+    async def list_items(
+        self,
+        tenant_id: UUID,
+        closing_id: UUID,
+        *,
+        revision_number: int | None = None,
+    ) -> list[MonthlyClosingItem]:
+        stmt = select(MonthlyClosingItemModel).where(
+            MonthlyClosingItemModel.tenant_id == tenant_id,
+            MonthlyClosingItemModel.closing_id == closing_id,
+        )
+        if revision_number is not None:
+            stmt = stmt.where(MonthlyClosingItemModel.revision_number == revision_number)
+        stmt = stmt.order_by(
+            MonthlyClosingItemModel.revision_number.desc(),
+            MonthlyClosingItemModel.employee_code.asc(),
+        )
+        result = await self._session.execute(stmt)
+        return [_to_monthly_closing_item(row) for row in result.scalars().all()]
+
+    async def list_items_for_closings(
+        self,
+        tenant_id: UUID,
+        closing_ids: Sequence[UUID],
+    ) -> list[MonthlyClosingItem]:
+        if not closing_ids:
+            return []
+        stmt = (
+            select(MonthlyClosingItemModel)
+            .where(
+                MonthlyClosingItemModel.tenant_id == tenant_id,
+                MonthlyClosingItemModel.closing_id.in_(list(closing_ids)),
+            )
+            .order_by(
+                MonthlyClosingItemModel.revision_number.desc(),
+                MonthlyClosingItemModel.employee_code.asc(),
+            )
+        )
+        result = await self._session.execute(stmt)
+        return [_to_monthly_closing_item(row) for row in result.scalars().all()]

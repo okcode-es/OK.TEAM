@@ -2916,6 +2916,436 @@
         }
       }
     },
+    "/api/v1/payroll/closings": {
+      "get": {
+        "tags": [
+          "payroll"
+        ],
+        "summary": "List Monthly Closings",
+        "operationId": "list_monthly_closings",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "store_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Store Id"
+            }
+          },
+          {
+            "name": "period_month",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Period Month"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonthlyClosingListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "payroll"
+        ],
+        "summary": "Close Monthly Payroll",
+        "operationId": "close_monthly_payroll",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloseMonthlyPayrollRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonthlyClosingDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/payroll/preview": {
+      "get": {
+        "tags": [
+          "payroll"
+        ],
+        "summary": "Preview Monthly Closing",
+        "operationId": "preview_monthly_closing",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "store_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Store Id"
+            }
+          },
+          {
+            "name": "period_month",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])$",
+              "title": "Period Month"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonthlyReadinessPreviewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/payroll/closings/{closing_id}": {
+      "get": {
+        "tags": [
+          "payroll"
+        ],
+        "summary": "Get Monthly Closing",
+        "operationId": "get_monthly_closing",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "closing_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Closing Id"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonthlyClosingDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/payroll/closings/{closing_id}/reopen": {
+      "post": {
+        "tags": [
+          "payroll"
+        ],
+        "summary": "Reopen Monthly Closing",
+        "operationId": "reopen_monthly_closing",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "closing_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Closing Id"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReopenMonthlyClosingRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonthlyClosingDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/payroll/closings/{closing_id}/gestoria-export": {
+      "get": {
+        "tags": [
+          "payroll"
+        ],
+        "summary": "Export Gestoria Payroll Csv",
+        "operationId": "export_gestoria_payroll_csv",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "closing_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Closing Id"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Gestoria monthly payroll pack CSV (es-ES UTF-8 BOM)",
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "text/csv": {}
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/dev/token": {
       "post": {
         "tags": [
@@ -3389,6 +3819,121 @@
           "store_name"
         ],
         "title": "ClockAttendanceResponse"
+      },
+      "CloseMonthlyPayrollRequest": {
+        "properties": {
+          "store_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Store Id"
+          },
+          "period_month": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])$",
+            "title": "Period Month"
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Notes",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "store_id",
+          "period_month"
+        ],
+        "title": "CloseMonthlyPayrollRequest"
+      },
+      "ClosingBlockerCode": {
+        "type": "string",
+        "enum": [
+          "OPEN_SHIFT",
+          "PENDING_LEAVE",
+          "ALREADY_CLOSED"
+        ],
+        "title": "ClosingBlockerCode"
+      },
+      "ClosingBlockerResponse": {
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/ClosingBlockerCode"
+          },
+          "employee_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Employee Id"
+          },
+          "employee_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Employee Code"
+          },
+          "employee_full_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Employee Full Name"
+          },
+          "reference_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Id"
+          },
+          "local_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Local Date"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "employee_id",
+          "employee_code",
+          "employee_full_name",
+          "reference_id",
+          "local_date",
+          "message"
+        ],
+        "title": "ClosingBlockerResponse"
       },
       "ComplianceAlertResponse": {
         "properties": {
@@ -5108,6 +5653,566 @@
         ],
         "title": "MembershipUpdateRequest"
       },
+      "MonthlyClosingDetailResponse": {
+        "properties": {
+          "closing": {
+            "$ref": "#/components/schemas/MonthlyClosingResponse"
+          },
+          "store_code": {
+            "type": "string",
+            "title": "Store Code"
+          },
+          "store_name": {
+            "type": "string",
+            "title": "Store Name"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MonthlyClosingItemResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "closing",
+          "store_code",
+          "store_name",
+          "items"
+        ],
+        "title": "MonthlyClosingDetailResponse"
+      },
+      "MonthlyClosingItemResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "closing_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Closing Id"
+          },
+          "revision_number": {
+            "type": "integer",
+            "title": "Revision Number"
+          },
+          "employee_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Employee Id"
+          },
+          "employee_code": {
+            "type": "string",
+            "title": "Employee Code"
+          },
+          "employee_full_name": {
+            "type": "string",
+            "title": "Employee Full Name"
+          },
+          "nie_dni_masked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nie Dni Masked"
+          },
+          "contract_type": {
+            "$ref": "#/components/schemas/ContractType"
+          },
+          "work_schedule_type": {
+            "$ref": "#/components/schemas/WorkScheduleType"
+          },
+          "contracted_weekly_hours": {
+            "type": "string",
+            "title": "Contracted Weekly Hours"
+          },
+          "worked_days": {
+            "type": "integer",
+            "title": "Worked Days"
+          },
+          "total_net_hours": {
+            "type": "string",
+            "title": "Total Net Hours"
+          },
+          "regular_hours": {
+            "type": "string",
+            "title": "Regular Hours"
+          },
+          "overtime_hours": {
+            "type": "string",
+            "title": "Overtime Hours"
+          },
+          "annual_overtime_hours": {
+            "type": "string",
+            "title": "Annual Overtime Hours"
+          },
+          "total_break_minutes": {
+            "type": "integer",
+            "title": "Total Break Minutes"
+          },
+          "vacation_days": {
+            "type": "integer",
+            "title": "Vacation Days"
+          },
+          "sick_leave_days": {
+            "type": "integer",
+            "title": "Sick Leave Days"
+          },
+          "paid_leave_days": {
+            "type": "integer",
+            "title": "Paid Leave Days"
+          },
+          "unpaid_leave_days": {
+            "type": "integer",
+            "title": "Unpaid Leave Days"
+          },
+          "warning_alerts_count": {
+            "type": "integer",
+            "title": "Warning Alerts Count"
+          },
+          "violation_alerts_count": {
+            "type": "integer",
+            "title": "Violation Alerts Count"
+          },
+          "attendance_report_document_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attendance Report Document Id"
+          },
+          "is_signed": {
+            "type": "boolean",
+            "title": "Is Signed"
+          },
+          "signed_at_utc": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signed At Utc"
+          },
+          "document_sha256_hex": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Sha256 Hex"
+          },
+          "retention_until": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Retention Until"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "closing_id",
+          "revision_number",
+          "employee_id",
+          "employee_code",
+          "employee_full_name",
+          "nie_dni_masked",
+          "contract_type",
+          "work_schedule_type",
+          "contracted_weekly_hours",
+          "worked_days",
+          "total_net_hours",
+          "regular_hours",
+          "overtime_hours",
+          "annual_overtime_hours",
+          "total_break_minutes",
+          "vacation_days",
+          "sick_leave_days",
+          "paid_leave_days",
+          "unpaid_leave_days",
+          "warning_alerts_count",
+          "violation_alerts_count",
+          "attendance_report_document_id",
+          "is_signed",
+          "signed_at_utc",
+          "document_sha256_hex",
+          "retention_until",
+          "created_at"
+        ],
+        "title": "MonthlyClosingItemResponse"
+      },
+      "MonthlyClosingListItemResponse": {
+        "properties": {
+          "closing": {
+            "$ref": "#/components/schemas/MonthlyClosingResponse"
+          },
+          "store_code": {
+            "type": "string",
+            "title": "Store Code"
+          },
+          "store_name": {
+            "type": "string",
+            "title": "Store Name"
+          },
+          "employee_count": {
+            "type": "integer",
+            "title": "Employee Count"
+          },
+          "total_net_hours": {
+            "type": "string",
+            "title": "Total Net Hours"
+          },
+          "total_overtime_hours": {
+            "type": "string",
+            "title": "Total Overtime Hours"
+          },
+          "signed_count": {
+            "type": "integer",
+            "title": "Signed Count"
+          },
+          "total_reports": {
+            "type": "integer",
+            "title": "Total Reports"
+          }
+        },
+        "type": "object",
+        "required": [
+          "closing",
+          "store_code",
+          "store_name",
+          "employee_count",
+          "total_net_hours",
+          "total_overtime_hours",
+          "signed_count",
+          "total_reports"
+        ],
+        "title": "MonthlyClosingListItemResponse"
+      },
+      "MonthlyClosingListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MonthlyClosingListItemResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "MonthlyClosingListResponse"
+      },
+      "MonthlyClosingResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "tenant_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Tenant Id"
+          },
+          "store_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Store Id"
+          },
+          "period_month": {
+            "type": "string",
+            "title": "Period Month"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MonthlyClosingStatus"
+          },
+          "revision_number": {
+            "type": "integer",
+            "title": "Revision Number"
+          },
+          "closed_by_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Closed By User Id"
+          },
+          "closed_at_utc": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Closed At Utc"
+          },
+          "reopened_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reopened By User Id"
+          },
+          "reopened_at_utc": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reopened At Utc"
+          },
+          "reopen_reason": {
+            "type": "string",
+            "title": "Reopen Reason"
+          },
+          "notes": {
+            "type": "string",
+            "title": "Notes"
+          },
+          "retention_until": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Retention Until"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "store_id",
+          "period_month",
+          "status",
+          "revision_number",
+          "closed_by_user_id",
+          "closed_at_utc",
+          "reopened_by_user_id",
+          "reopened_at_utc",
+          "reopen_reason",
+          "notes",
+          "retention_until",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "MonthlyClosingResponse"
+      },
+      "MonthlyClosingStatus": {
+        "type": "string",
+        "enum": [
+          "closed",
+          "reopened"
+        ],
+        "title": "MonthlyClosingStatus"
+      },
+      "MonthlyEmployeePreviewResponse": {
+        "properties": {
+          "employee_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Employee Id"
+          },
+          "employee_code": {
+            "type": "string",
+            "title": "Employee Code"
+          },
+          "employee_full_name": {
+            "type": "string",
+            "title": "Employee Full Name"
+          },
+          "nie_dni_masked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nie Dni Masked"
+          },
+          "contract_type": {
+            "$ref": "#/components/schemas/ContractType"
+          },
+          "work_schedule_type": {
+            "$ref": "#/components/schemas/WorkScheduleType"
+          },
+          "contracted_weekly_hours": {
+            "type": "string",
+            "title": "Contracted Weekly Hours"
+          },
+          "worked_days": {
+            "type": "integer",
+            "title": "Worked Days"
+          },
+          "total_net_hours": {
+            "type": "string",
+            "title": "Total Net Hours"
+          },
+          "regular_hours": {
+            "type": "string",
+            "title": "Regular Hours"
+          },
+          "overtime_hours": {
+            "type": "string",
+            "title": "Overtime Hours"
+          },
+          "annual_overtime_hours": {
+            "type": "string",
+            "title": "Annual Overtime Hours"
+          },
+          "total_break_minutes": {
+            "type": "integer",
+            "title": "Total Break Minutes"
+          },
+          "vacation_days": {
+            "type": "integer",
+            "title": "Vacation Days"
+          },
+          "sick_leave_days": {
+            "type": "integer",
+            "title": "Sick Leave Days"
+          },
+          "paid_leave_days": {
+            "type": "integer",
+            "title": "Paid Leave Days"
+          },
+          "unpaid_leave_days": {
+            "type": "integer",
+            "title": "Unpaid Leave Days"
+          },
+          "warning_alerts_count": {
+            "type": "integer",
+            "title": "Warning Alerts Count"
+          },
+          "violation_alerts_count": {
+            "type": "integer",
+            "title": "Violation Alerts Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "employee_id",
+          "employee_code",
+          "employee_full_name",
+          "nie_dni_masked",
+          "contract_type",
+          "work_schedule_type",
+          "contracted_weekly_hours",
+          "worked_days",
+          "total_net_hours",
+          "regular_hours",
+          "overtime_hours",
+          "annual_overtime_hours",
+          "total_break_minutes",
+          "vacation_days",
+          "sick_leave_days",
+          "paid_leave_days",
+          "unpaid_leave_days",
+          "warning_alerts_count",
+          "violation_alerts_count"
+        ],
+        "title": "MonthlyEmployeePreviewResponse"
+      },
+      "MonthlyReadinessPreviewResponse": {
+        "properties": {
+          "store_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Store Id"
+          },
+          "period_month": {
+            "type": "string",
+            "title": "Period Month"
+          },
+          "month_start": {
+            "type": "string",
+            "format": "date",
+            "title": "Month Start"
+          },
+          "month_end": {
+            "type": "string",
+            "format": "date",
+            "title": "Month End"
+          },
+          "existing_closing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MonthlyClosingResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "can_close": {
+            "type": "boolean",
+            "title": "Can Close"
+          },
+          "blockers": {
+            "items": {
+              "$ref": "#/components/schemas/ClosingBlockerResponse"
+            },
+            "type": "array",
+            "title": "Blockers"
+          },
+          "employees": {
+            "items": {
+              "$ref": "#/components/schemas/MonthlyEmployeePreviewResponse"
+            },
+            "type": "array",
+            "title": "Employees"
+          }
+        },
+        "type": "object",
+        "required": [
+          "store_id",
+          "period_month",
+          "month_start",
+          "month_end",
+          "existing_closing",
+          "can_close",
+          "blockers",
+          "employees"
+        ],
+        "title": "MonthlyReadinessPreviewResponse"
+      },
       "PublishWeekRequest": {
         "properties": {
           "store_id": {
@@ -5148,6 +6253,21 @@
           "shifts"
         ],
         "title": "PublishWeekResponse"
+      },
+      "ReopenMonthlyClosingRequest": {
+        "properties": {
+          "reopen_reason": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Reopen Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reopen_reason"
+        ],
+        "title": "ReopenMonthlyClosingRequest"
       },
       "ReviewLeaveRequestBody": {
         "properties": {

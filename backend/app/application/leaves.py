@@ -22,14 +22,17 @@ from app.domain.leaves import (
     validate_vacation_balance_for_request,
 )
 from app.domain.organization import (
+    ConflictError,
     EntityNotFoundError,
     ValidationDomainError,
     validate_non_empty_text,
 )
+from app.domain.payroll import spanned_period_months
 from app.domain.repositories import (
     DocumentRepository,
     EmployeeRepository,
     LeaveRepository,
+    PayrollClosingRepository,
     ShiftRepository,
     StoreRepository,
 )
@@ -185,10 +188,12 @@ class CreateLeaveRequestUseCase:
         leave_repo: LeaveRepository,
         employee_repo: EmployeeRepository,
         document_repo: DocumentRepository,
+        payroll_repo: PayrollClosingRepository | None = None,
     ) -> None:
         self._leave_repo = leave_repo
         self._employee_repo = employee_repo
         self._document_repo = document_repo
+        self._payroll_repo = payroll_repo
 
     async def execute(
         self,
@@ -249,6 +254,17 @@ class CreateLeaveRequestUseCase:
                 raise ForbiddenScopeError("Store manager lacks access to medical document")
 
         natural_days = calculate_natural_days(cmd.start_date, cmd.end_date)
+        if self._payroll_repo is not None:
+            closed_months = await self._payroll_repo.list_closed_months_for_store(
+                principal.tenant_id,
+                emp.primary_store_id,
+                spanned_period_months(cmd.start_date, cmd.end_date),
+            )
+            if closed_months:
+                raise ConflictError(
+                    f"Cannot create leave request: payroll month(s) {sorted(closed_months)} "
+                    "are closed for this store"
+                )
         existing = await self._leave_repo.list_by_employee(principal.tenant_id, emp.id)
         check_leave_overlap(
             start_date=cmd.start_date,
@@ -299,11 +315,13 @@ class ReviewLeaveRequestUseCase:
         employee_repo: EmployeeRepository,
         shift_repo: ShiftRepository,
         store_repo: StoreRepository,
+        payroll_repo: PayrollClosingRepository | None = None,
     ) -> None:
         self._leave_repo = leave_repo
         self._employee_repo = employee_repo
         self._shift_repo = shift_repo
         self._store_repo = store_repo
+        self._payroll_repo = payroll_repo
 
     async def execute(
         self,
@@ -335,6 +353,19 @@ class ReviewLeaveRequestUseCase:
             raise ForbiddenScopeError("Store managers cannot access legal_hold employees")
 
         target_status = LeaveStatus.APPROVED if cmd.approve else LeaveStatus.REJECTED
+
+        if self._payroll_repo is not None:
+            closed_months = await self._payroll_repo.list_closed_months_for_store(
+                principal.tenant_id,
+                leave.store_id,
+                spanned_period_months(leave.start_date, leave.end_date),
+            )
+            if closed_months:
+                raise ConflictError(
+                    f"Cannot review leave request: payroll month(s) {sorted(closed_months)} "
+                    "are closed for this store"
+                )
+
         validate_leave_transition(leave.status, target_status)
 
         if target_status == LeaveStatus.APPROVED:
@@ -407,9 +438,11 @@ class CancelLeaveRequestUseCase:
         self,
         leave_repo: LeaveRepository,
         employee_repo: EmployeeRepository,
+        payroll_repo: PayrollClosingRepository | None = None,
     ) -> None:
         self._leave_repo = leave_repo
         self._employee_repo = employee_repo
+        self._payroll_repo = payroll_repo
 
     async def execute(
         self,
@@ -446,6 +479,18 @@ class CancelLeaveRequestUseCase:
             raise FrozenRecordError(
                 f"Cannot cancel leave for frozen/anonymized employee {emp.employee_code}"
             )
+
+        if self._payroll_repo is not None:
+            closed_months = await self._payroll_repo.list_closed_months_for_store(
+                principal.tenant_id,
+                leave.store_id,
+                spanned_period_months(leave.start_date, leave.end_date),
+            )
+            if closed_months:
+                raise ConflictError(
+                    f"Cannot cancel leave request: payroll month(s) {sorted(closed_months)} "
+                    "are closed for this store"
+                )
 
         validate_leave_transition(leave.status, LeaveStatus.CANCELLED)
 

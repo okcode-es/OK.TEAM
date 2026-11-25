@@ -25,6 +25,7 @@
     "schedule": "Turnos",
     "leaves": "Vacaciones y bajas",
     "documents": "Documentos",
+    "payroll": "Cierre Mensual",
     "stores": "Centros de trabajo",
     "members": "Miembros y permisos",
     "organization": "Empresa",
@@ -564,6 +565,114 @@
       "receiptHash": "SHA-256 verificado",
       "receiptStatement": "Declaración",
       "close": "Cerrar"
+    }
+  },
+  "payroll": {
+    "title": "Cierre Mensual y Pack Gestoría",
+    "subtitle": "Bloquee el registro horario y las ausencias por centro, genere los informes PDF RDL 8/2019 y exporte el CSV para la gestoría.",
+    "selectStore": "Seleccionar centro",
+    "noStores": "Sin centros disponibles",
+    "periodMonth": "Mes de cierre",
+    "recentClosings": "Cierres recientes",
+    "actions": {
+      "closeMonth": "Cerrar mes y generar informes",
+      "closing": "Cerrando mes…",
+      "exportCsv": "Exportar CSV Gestoría",
+      "exporting": "Exportando…",
+      "reopenMonth": "Reabrir mes",
+      "reopening": "Reabriendo…"
+    },
+    "statuses": {
+      "open": "Abierto (vista previa)",
+      "closed": "Cerrado v{{revision}}",
+      "reopened": "Reabierto v{{revision}}"
+    },
+    "kpi": {
+      "statusLabel": "Estado y revisión",
+      "statusOpenHint": "Jornadas y ausencias siguen editables",
+      "statusClosedHint": "Bloqueado el {{time}}",
+      "statusReopenedHint": "Reabierto para correcciones; requiere nuevo cierre",
+      "employeesLabel": "Empleados incluidos",
+      "employeesHint": "Activos o con registros en el mes",
+      "hoursLabel": "Horas netas / Extra",
+      "hoursSub": "Horas extra: {{overtime}} h",
+      "signaturesLabel": "Firmas Registro de Jornada",
+      "signaturesSub": "Acuses SHA-256 firmados ({{percent}} %)",
+      "blockersLabel": "Bloqueos de cierre",
+      "blockersClear": "Sin bloqueos, listo para cerrar",
+      "blockersPending": "{{count}} incidencias pendientes"
+    },
+    "banners": {
+      "blockersTitle": "Resuelva los siguientes bloqueos antes de cerrar el mes",
+      "goToAttendance": "Ir a Registro de jornada",
+      "goToLeaves": "Ir a Vacaciones y bajas",
+      "reopenAuditTitle": "Mes reabierto (registro de auditoría)",
+      "reopenAuditMeta": "Reabierto el {{time}} · Motivo: {{reason}}",
+      "alertsTitle": "Se detectaron {{warnings}} advertencias y {{violations}} infracciones laborales en el mes."
+    },
+    "columns": {
+      "employee": "Empleado",
+      "contract": "Contrato y jornada",
+      "workedDays": "Días trab.",
+      "hours": "Netas / Ord. / Extra",
+      "leaves": "Ausencias (Vac. / IT / Otras)",
+      "alerts": "Alertas",
+      "receipt": "Firma RDL 8/2019"
+    },
+    "receiptStatuses": {
+      "signed": "Firmado",
+      "pending": "Pendiente",
+      "preview": "Al cerrar"
+    },
+    "alerts": {
+      "clean": "Correcto",
+      "warnings": "{{count}} adv.",
+      "violations": "{{count}} infr."
+    },
+    "empty": "No hay empleados computables para el centro y mes seleccionados.",
+    "weeklyHoursUnit": "{{hours}} h/sem",
+    "hoursBreakdown": "Ord. {{regular}} h · Extra {{overtime}} h",
+    "leavesSummary": "Vac {{vacation}} · IT {{sick}} · Otras {{other}}",
+    "detailDrawer": {
+      "title": "Detalle mensual del empleado",
+      "description": "Desglose de horas, ausencias, estado de acuse SHA-256 (RDL 8/2019) y descarga PDF segura de 60 s.",
+      "nieDniMasked": "NIE / DNI (enmascarado)",
+      "notProvided": "No registrado",
+      "contractInfo": "Contrato y jornada",
+      "hoursSection": "Desglose de horas",
+      "workedDays": "Días trabajados",
+      "netHours": "Horas netas totales",
+      "regularHours": "Horas ordinarias",
+      "overtimeHours": "Horas extra del mes",
+      "annualOvertime": "Horas extra anuales",
+      "breakMinutes": "Pausas acumuladas",
+      "minutesUnit": "{{minutes}} min",
+      "leavesSection": "Vacaciones y ausencias (días)",
+      "vacationDays": "Vacaciones",
+      "sickLeaveDays": "Baja médica (IT)",
+      "paidLeaveDays": "Permisos retribuidos",
+      "unpaidLeaveDays": "Permisos no retribuidos",
+      "alertsSection": "Cumplimiento laboral",
+      "warningCount": "Advertencias",
+      "violationCount": "Infracciones",
+      "receiptSection": "Informe RDL 8/2019 y acuse SHA-256",
+      "signedAt": "Firmado el",
+      "sha256": "Huella SHA-256",
+      "downloadPdf": "Descargar PDF RDL 8/2019 (enlace 60 s)",
+      "generatingUrl": "Generando enlace…",
+      "signedUrlActive": "Enlace seguro abierto; caduca en {{seconds}} s.",
+      "signedUrlExpired": "El enlace temporal ha caducado; genere uno nuevo.",
+      "noPdfYet": "Aún no se ha generado el PDF mensual para este empleado.",
+      "close": "Cerrar"
+    },
+    "reopenDialog": {
+      "title": "Reabrir cierre mensual",
+      "description": "Al reabrir se desbloquean los fichajes y ausencias del centro en este mes. Los snapshots anteriores y los acuses SHA-256 firmados se conservan intactos y el próximo cierre creará una nueva revisión.",
+      "reasonLabel": "Motivo de reapertura (obligatorio para auditoría)",
+      "reasonPlaceholder": "Ej.: Corrección de fichaje de salida y baja médica del 18/11",
+      "reasonRequired": "Debe indicar el motivo de la reapertura.",
+      "cancel": "Cancelar",
+      "confirm": "Confirmar reapertura"
     }
   },
   "common": {

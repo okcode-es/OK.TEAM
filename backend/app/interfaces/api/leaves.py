@@ -23,6 +23,7 @@ from app.domain.repositories import (
     DocumentRepository,
     EmployeeRepository,
     LeaveRepository,
+    PayrollClosingRepository,
     ShiftRepository,
     StoreRepository,
 )
@@ -34,6 +35,7 @@ from app.interfaces.api.deps import (
     get_document_repository,
     get_employee_repository,
     get_leave_repository,
+    get_payroll_closing_repository,
     get_shift_repository,
     get_store_repository,
     get_utc_now,
@@ -182,11 +184,12 @@ async def create_leave_request(
     leave_repo: Annotated[LeaveRepository, Depends(get_leave_repository)],
     employee_repo: Annotated[EmployeeRepository, Depends(get_employee_repository)],
     document_repo: Annotated[DocumentRepository, Depends(get_document_repository)],
+    payroll_repo: Annotated[PayrollClosingRepository, Depends(get_payroll_closing_repository)],
     commit: Annotated[CommitFn, Depends(get_commit_fn)],
     now_utc: Annotated[datetime, Depends(get_utc_now)],
 ) -> LeaveRequestResponse:
     created = await CreateLeaveRequestUseCase(
-        leave_repo, employee_repo, document_repo
+        leave_repo, employee_repo, document_repo, payroll_repo=payroll_repo
     ).execute(
         principal,
         CreateLeaveCommand(
@@ -217,11 +220,12 @@ async def review_leave_request(
     employee_repo: Annotated[EmployeeRepository, Depends(get_employee_repository)],
     shift_repo: Annotated[ShiftRepository, Depends(get_shift_repository)],
     store_repo: Annotated[StoreRepository, Depends(get_store_repository)],
+    payroll_repo: Annotated[PayrollClosingRepository, Depends(get_payroll_closing_repository)],
     commit: Annotated[CommitFn, Depends(get_commit_fn)],
     now_utc: Annotated[datetime, Depends(get_utc_now)],
 ) -> LeaveRequestResponse:
     reviewed = await ReviewLeaveRequestUseCase(
-        leave_repo, employee_repo, shift_repo, store_repo
+        leave_repo, employee_repo, shift_repo, store_repo, payroll_repo=payroll_repo
     ).execute(
         principal,
         ReviewLeaveCommand(
@@ -246,10 +250,13 @@ async def cancel_leave_request(
     principal: Annotated[AuthenticatedPrincipal, Depends(get_current_principal)],
     leave_repo: Annotated[LeaveRepository, Depends(get_leave_repository)],
     employee_repo: Annotated[EmployeeRepository, Depends(get_employee_repository)],
+    payroll_repo: Annotated[PayrollClosingRepository, Depends(get_payroll_closing_repository)],
     commit: Annotated[CommitFn, Depends(get_commit_fn)],
     now_utc: Annotated[datetime, Depends(get_utc_now)],
 ) -> LeaveRequestResponse:
-    cancelled = await CancelLeaveRequestUseCase(leave_repo, employee_repo).execute(
+    cancelled = await CancelLeaveRequestUseCase(
+        leave_repo, employee_repo, payroll_repo=payroll_repo
+    ).execute(
         principal, leave_id=leave_id, now_utc=now_utc
     )
     await commit()

@@ -9,8 +9,12 @@ from pydantic import BaseModel
 from app.application.onboarding import GetMyProfileUseCase
 from app.domain.repositories import MembershipRepository
 from app.domain.security import MembershipStatus, UserRole, VerifiedIdentity
-from app.infrastructure.config import get_settings
-from app.interfaces.api.deps import get_membership_repository, get_verified_identity
+from app.infrastructure.config import Settings
+from app.interfaces.api.deps import (
+    get_app_settings,
+    get_membership_repository,
+    get_verified_identity,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -42,10 +46,10 @@ class AuthMeResponse(BaseModel):
 async def get_auth_me(
     identity: Annotated[VerifiedIdentity, Depends(get_verified_identity)],
     membership_repo: Annotated[MembershipRepository, Depends(get_membership_repository)],
+    settings: Annotated[Settings, Depends(get_app_settings)],
 ) -> AuthMeResponse:
     use_case = GetMyProfileUseCase(membership_repo)
     summaries = await use_case.execute(identity)
-    settings = get_settings()
     return AuthMeResponse(
         user_id=identity.user_id,
         email=identity.email,

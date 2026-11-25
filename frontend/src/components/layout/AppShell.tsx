@@ -4,6 +4,7 @@ import {
   CalendarClock,
   CalendarDays,
   Clock,
+  FileSpreadsheet,
   FileText,
   Globe,
   IdCard,
@@ -42,6 +43,7 @@ export type NavSection =
   | 'schedule'
   | 'leaves'
   | 'documents'
+  | 'payroll'
   | 'stores'
   | 'members'
   | 'organization'
@@ -68,6 +70,8 @@ export function AppShell({
     activeTenant?.role === 'hr' ||
     activeTenant?.role === 'store_manager'
 
+  const canViewPayroll = activeTenant?.role !== 'employee'
+
   const navItems: Array<{
     id: NavSection
     label: string
@@ -81,6 +85,9 @@ export function AppShell({
     { id: 'schedule', label: t('nav.schedule'), icon: CalendarDays },
     { id: 'leaves', label: t('nav.leaves'), icon: CalendarClock },
     { id: 'documents', label: t('nav.documents'), icon: FileText },
+    ...(canViewPayroll
+      ? [{ id: 'payroll' as const, label: t('nav.payroll'), icon: FileSpreadsheet }]
+      : []),
     { id: 'stores', label: t('nav.stores'), icon: StoreIcon },
     { id: 'members', label: t('nav.members'), icon: Users },
     { id: 'organization', label: t('nav.organization'), icon: Building2 },

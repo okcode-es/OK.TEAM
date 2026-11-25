@@ -12,6 +12,7 @@ import { DocumentsPage } from '@/features/documents/DocumentsPage'
 import { LeavesPage } from '@/features/leaves/LeavesPage'
 import { MembersPage } from '@/features/members/MembersPage'
 import { OrganizationSettingsPage } from '@/features/organization/OrganizationSettingsPage'
+import { PayrollPage } from '@/features/payroll/PayrollPage'
 import { SchedulePage } from '@/features/schedule/SchedulePage'
 import { StoresPage } from '@/features/stores/StoresPage'
 
@@ -23,6 +24,12 @@ function WorkspaceRouter() {
   useEffect(() => {
     document.documentElement.lang = i18n.language || 'zh-CN'
   }, [i18n.language])
+
+  useEffect(() => {
+    if (activeTenant?.role === 'employee' && section === 'payroll') {
+      setSection('employees')
+    }
+  }, [activeTenant?.role, section])
 
   if (isLoading) {
     return (
@@ -52,6 +59,9 @@ function WorkspaceRouter() {
       {section === 'schedule' && <SchedulePage />}
       {section === 'leaves' && <LeavesPage />}
       {section === 'documents' && <DocumentsPage />}
+      {section === 'payroll' && activeTenant.role !== 'employee' && (
+        <PayrollPage onNavigate={setSection} />
+      )}
       {section === 'stores' && <StoresPage />}
       {section === 'members' && <MembersPage />}
       {section === 'organization' && <OrganizationSettingsPage />}

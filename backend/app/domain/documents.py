@@ -27,7 +27,7 @@ ALLOWED_MIME_TYPES: frozenset[str] = frozenset(
     }
 )
 
-_PERIOD_MONTH_PATTERN = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+_PERIOD_MONTH_PATTERN = re.compile(r"^[0-9]{4}-(0[1-9]|1[0-2])$")
 _UNSAFE_FILENAME_CHARS = re.compile(r'[\x00-\x1f\x7f"\\/;]+')
 
 

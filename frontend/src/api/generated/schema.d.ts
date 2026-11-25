@@ -526,6 +526,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/payroll/closings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Monthly Closings */
+        get: operations["list_monthly_closings"];
+        put?: never;
+        /** Close Monthly Payroll */
+        post: operations["close_monthly_payroll"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payroll/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Preview Monthly Closing */
+        get: operations["preview_monthly_closing"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payroll/closings/{closing_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Monthly Closing */
+        get: operations["get_monthly_closing"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payroll/closings/{closing_id}/reopen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reopen Monthly Closing */
+        post: operations["reopen_monthly_closing"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/payroll/closings/{closing_id}/gestoria-export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Gestoria Payroll Csv */
+        get: operations["export_gestoria_payroll_csv"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dev/token": {
         parameters: {
             query?: never;
@@ -728,6 +814,42 @@ export interface components {
             store_id: string;
             /** Store Name */
             store_name: string;
+        };
+        /** CloseMonthlyPayrollRequest */
+        CloseMonthlyPayrollRequest: {
+            /**
+             * Store Id
+             * Format: uuid
+             */
+            store_id: string;
+            /** Period Month */
+            period_month: string;
+            /**
+             * Notes
+             * @default
+             */
+            notes: string;
+        };
+        /**
+         * ClosingBlockerCode
+         * @enum {string}
+         */
+        ClosingBlockerCode: "OPEN_SHIFT" | "PENDING_LEAVE" | "ALREADY_CLOSED";
+        /** ClosingBlockerResponse */
+        ClosingBlockerResponse: {
+            code: components["schemas"]["ClosingBlockerCode"];
+            /** Employee Id */
+            employee_id: string | null;
+            /** Employee Code */
+            employee_code: string | null;
+            /** Employee Full Name */
+            employee_full_name: string | null;
+            /** Reference Id */
+            reference_id: string | null;
+            /** Local Date */
+            local_date: string | null;
+            /** Message */
+            message: string;
         };
         /** ComplianceAlertResponse */
         ComplianceAlertResponse: {
@@ -1463,6 +1585,241 @@ export interface components {
             /** Store Ids */
             store_ids?: string[];
         };
+        /** MonthlyClosingDetailResponse */
+        MonthlyClosingDetailResponse: {
+            closing: components["schemas"]["MonthlyClosingResponse"];
+            /** Store Code */
+            store_code: string;
+            /** Store Name */
+            store_name: string;
+            /** Items */
+            items: components["schemas"]["MonthlyClosingItemResponse"][];
+        };
+        /** MonthlyClosingItemResponse */
+        MonthlyClosingItemResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Closing Id
+             * Format: uuid
+             */
+            closing_id: string;
+            /** Revision Number */
+            revision_number: number;
+            /**
+             * Employee Id
+             * Format: uuid
+             */
+            employee_id: string;
+            /** Employee Code */
+            employee_code: string;
+            /** Employee Full Name */
+            employee_full_name: string;
+            /** Nie Dni Masked */
+            nie_dni_masked: string | null;
+            contract_type: components["schemas"]["ContractType"];
+            work_schedule_type: components["schemas"]["WorkScheduleType"];
+            /** Contracted Weekly Hours */
+            contracted_weekly_hours: string;
+            /** Worked Days */
+            worked_days: number;
+            /** Total Net Hours */
+            total_net_hours: string;
+            /** Regular Hours */
+            regular_hours: string;
+            /** Overtime Hours */
+            overtime_hours: string;
+            /** Annual Overtime Hours */
+            annual_overtime_hours: string;
+            /** Total Break Minutes */
+            total_break_minutes: number;
+            /** Vacation Days */
+            vacation_days: number;
+            /** Sick Leave Days */
+            sick_leave_days: number;
+            /** Paid Leave Days */
+            paid_leave_days: number;
+            /** Unpaid Leave Days */
+            unpaid_leave_days: number;
+            /** Warning Alerts Count */
+            warning_alerts_count: number;
+            /** Violation Alerts Count */
+            violation_alerts_count: number;
+            /** Attendance Report Document Id */
+            attendance_report_document_id: string | null;
+            /** Is Signed */
+            is_signed: boolean;
+            /** Signed At Utc */
+            signed_at_utc: string | null;
+            /** Document Sha256 Hex */
+            document_sha256_hex: string | null;
+            /**
+             * Retention Until
+             * Format: date-time
+             */
+            retention_until: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** MonthlyClosingListItemResponse */
+        MonthlyClosingListItemResponse: {
+            closing: components["schemas"]["MonthlyClosingResponse"];
+            /** Store Code */
+            store_code: string;
+            /** Store Name */
+            store_name: string;
+            /** Employee Count */
+            employee_count: number;
+            /** Total Net Hours */
+            total_net_hours: string;
+            /** Total Overtime Hours */
+            total_overtime_hours: string;
+            /** Signed Count */
+            signed_count: number;
+            /** Total Reports */
+            total_reports: number;
+        };
+        /** MonthlyClosingListResponse */
+        MonthlyClosingListResponse: {
+            /** Items */
+            items: components["schemas"]["MonthlyClosingListItemResponse"][];
+        };
+        /** MonthlyClosingResponse */
+        MonthlyClosingResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Tenant Id
+             * Format: uuid
+             */
+            tenant_id: string;
+            /**
+             * Store Id
+             * Format: uuid
+             */
+            store_id: string;
+            /** Period Month */
+            period_month: string;
+            status: components["schemas"]["MonthlyClosingStatus"];
+            /** Revision Number */
+            revision_number: number;
+            /**
+             * Closed By User Id
+             * Format: uuid
+             */
+            closed_by_user_id: string;
+            /**
+             * Closed At Utc
+             * Format: date-time
+             */
+            closed_at_utc: string;
+            /** Reopened By User Id */
+            reopened_by_user_id: string | null;
+            /** Reopened At Utc */
+            reopened_at_utc: string | null;
+            /** Reopen Reason */
+            reopen_reason: string;
+            /** Notes */
+            notes: string;
+            /**
+             * Retention Until
+             * Format: date-time
+             */
+            retention_until: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * MonthlyClosingStatus
+         * @enum {string}
+         */
+        MonthlyClosingStatus: "closed" | "reopened";
+        /** MonthlyEmployeePreviewResponse */
+        MonthlyEmployeePreviewResponse: {
+            /**
+             * Employee Id
+             * Format: uuid
+             */
+            employee_id: string;
+            /** Employee Code */
+            employee_code: string;
+            /** Employee Full Name */
+            employee_full_name: string;
+            /** Nie Dni Masked */
+            nie_dni_masked: string | null;
+            contract_type: components["schemas"]["ContractType"];
+            work_schedule_type: components["schemas"]["WorkScheduleType"];
+            /** Contracted Weekly Hours */
+            contracted_weekly_hours: string;
+            /** Worked Days */
+            worked_days: number;
+            /** Total Net Hours */
+            total_net_hours: string;
+            /** Regular Hours */
+            regular_hours: string;
+            /** Overtime Hours */
+            overtime_hours: string;
+            /** Annual Overtime Hours */
+            annual_overtime_hours: string;
+            /** Total Break Minutes */
+            total_break_minutes: number;
+            /** Vacation Days */
+            vacation_days: number;
+            /** Sick Leave Days */
+            sick_leave_days: number;
+            /** Paid Leave Days */
+            paid_leave_days: number;
+            /** Unpaid Leave Days */
+            unpaid_leave_days: number;
+            /** Warning Alerts Count */
+            warning_alerts_count: number;
+            /** Violation Alerts Count */
+            violation_alerts_count: number;
+        };
+        /** MonthlyReadinessPreviewResponse */
+        MonthlyReadinessPreviewResponse: {
+            /**
+             * Store Id
+             * Format: uuid
+             */
+            store_id: string;
+            /** Period Month */
+            period_month: string;
+            /**
+             * Month Start
+             * Format: date
+             */
+            month_start: string;
+            /**
+             * Month End
+             * Format: date
+             */
+            month_end: string;
+            existing_closing: components["schemas"]["MonthlyClosingResponse"] | null;
+            /** Can Close */
+            can_close: boolean;
+            /** Blockers */
+            blockers: components["schemas"]["ClosingBlockerResponse"][];
+            /** Employees */
+            employees: components["schemas"]["MonthlyEmployeePreviewResponse"][];
+        };
         /** PublishWeekRequest */
         PublishWeekRequest: {
             /**
@@ -1482,6 +1839,11 @@ export interface components {
             published_count: number;
             /** Shifts */
             shifts: components["schemas"]["ShiftResponse"][];
+        };
+        /** ReopenMonthlyClosingRequest */
+        ReopenMonthlyClosingRequest: {
+            /** Reopen Reason */
+            reopen_reason: string;
         };
         /** ReviewLeaveRequestBody */
         ReviewLeaveRequestBody: {
@@ -3332,6 +3694,213 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DocumentReceiptResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_monthly_closings: {
+        parameters: {
+            query?: {
+                store_id?: string | null;
+                period_month?: string | null;
+            };
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonthlyClosingListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    close_monthly_payroll: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CloseMonthlyPayrollRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonthlyClosingDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_monthly_closing: {
+        parameters: {
+            query: {
+                store_id: string;
+                period_month: string;
+            };
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonthlyReadinessPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_monthly_closing: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                closing_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonthlyClosingDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reopen_monthly_closing: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                closing_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReopenMonthlyClosingRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonthlyClosingDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_gestoria_payroll_csv: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                closing_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Gestoria monthly payroll pack CSV (es-ES UTF-8 BOM) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                    "text/csv": unknown;
                 };
             };
             /** @description Validation Error */

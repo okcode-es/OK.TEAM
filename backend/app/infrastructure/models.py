@@ -206,6 +206,13 @@ class EmployeeModel(Base):
             unique=True,
             postgresql_where=text("nie_dni_blind_index IS NOT NULL AND deleted_at IS NULL"),
         ),
+        Index(
+            "uq_employees_tenant_user_active",
+            "tenant_id",
+            "user_id",
+            unique=True,
+            postgresql_where=text("user_id IS NOT NULL AND deleted_at IS NULL"),
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
@@ -529,3 +536,132 @@ class DocumentReceiptModel(Base):
     user_agent: Mapped[str] = mapped_column(String(512), nullable=False)
     receipt_statement: Mapped[str] = mapped_column(String(500), nullable=False)
     retention_until: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class MonthlyClosingModel(Base):
+    __tablename__ = "monthly_closings"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('closed', 'reopened')",
+            name="monthly_closings_status_valid",
+        ),
+        CheckConstraint("revision_number >= 1", name="monthly_closings_revision_positive"),
+        Index(
+            "uq_monthly_closings_tenant_store_month_active",
+            "tenant_id",
+            "store_id",
+            "period_month",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
+        Index("ix_monthly_closings_tenant_month", "tenant_id", "period_month"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False
+    )
+    store_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("stores.id", ondelete="RESTRICT"), nullable=False
+    )
+    period_month: Mapped[str] = mapped_column(String(7), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    revision_number: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("1")
+    )
+    closed_by_user_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
+    closed_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reopened_by_user_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), nullable=True
+    )
+    reopened_at_utc: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    reopen_reason: Mapped[str] = mapped_column(
+        String(500), nullable=False, server_default=text("''")
+    )
+    notes: Mapped[str] = mapped_column(String(500), nullable=False, server_default=text("''"))
+    retention_until: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class MonthlyClosingItemModel(Base):
+    """Strictly append-only monthly payroll closing snapshot (RDL 8/2019).
+
+    Database triggers forbid UPDATE, DELETE, and TRUNCATE.
+    """
+
+    __tablename__ = "monthly_closing_items"
+    __table_args__ = (
+        CheckConstraint("revision_number >= 1", name="monthly_closing_items_rev_pos"),
+        CheckConstraint("worked_days >= 0", name="monthly_closing_items_worked_days_nn"),
+        CheckConstraint("total_net_hours >= 0", name="monthly_closing_items_net_hours_nn"),
+        CheckConstraint("regular_hours >= 0", name="monthly_closing_items_reg_hours_nn"),
+        CheckConstraint("overtime_hours >= 0", name="monthly_closing_items_ot_hours_nn"),
+        CheckConstraint("annual_overtime_hours >= 0", name="monthly_closing_items_ann_ot_nn"),
+        CheckConstraint("total_break_minutes >= 0", name="monthly_closing_items_break_min_nn"),
+        CheckConstraint("vacation_days >= 0", name="monthly_closing_items_vac_days_nn"),
+        CheckConstraint("sick_leave_days >= 0", name="monthly_closing_items_sick_days_nn"),
+        CheckConstraint("paid_leave_days >= 0", name="monthly_closing_items_paid_days_nn"),
+        CheckConstraint("unpaid_leave_days >= 0", name="monthly_closing_items_unpaid_days_nn"),
+        CheckConstraint("warning_alerts_count >= 0", name="monthly_closing_items_warn_cnt_nn"),
+        CheckConstraint("violation_alerts_count >= 0", name="monthly_closing_items_viol_cnt_nn"),
+        UniqueConstraint(
+            "tenant_id",
+            "closing_id",
+            "revision_number",
+            "employee_id",
+            name="uq_monthly_closing_items_rev_emp",
+        ),
+        Index(
+            "ix_monthly_closing_items_closing_rev",
+            "tenant_id",
+            "closing_id",
+            "revision_number",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False
+    )
+    closing_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("monthly_closings.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    store_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("stores.id", ondelete="RESTRICT"), nullable=False
+    )
+    period_month: Mapped[str] = mapped_column(String(7), nullable=False)
+    revision_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    employee_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("employees.id", ondelete="RESTRICT"), nullable=False
+    )
+    employee_code: Mapped[str] = mapped_column(String(32), nullable=False)
+    employee_full_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    nie_dni_masked: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    contract_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    work_schedule_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    contracted_weekly_hours: Mapped[Decimal] = mapped_column(Numeric(4, 2), nullable=False)
+    worked_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    total_net_hours: Mapped[Decimal] = mapped_column(Numeric(6, 2), nullable=False)
+    regular_hours: Mapped[Decimal] = mapped_column(Numeric(6, 2), nullable=False)
+    overtime_hours: Mapped[Decimal] = mapped_column(Numeric(6, 2), nullable=False)
+    annual_overtime_hours: Mapped[Decimal] = mapped_column(Numeric(6, 2), nullable=False)
+    total_break_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    vacation_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    sick_leave_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    paid_leave_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    unpaid_leave_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    warning_alerts_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    violation_alerts_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    attendance_report_document_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("compliance_documents.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    retention_until: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

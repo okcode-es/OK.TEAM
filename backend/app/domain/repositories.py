@@ -21,6 +21,7 @@ from app.domain.employees import (
 )
 from app.domain.leaves import LeaveRequest, LeaveStatus
 from app.domain.organization import Membership, Store, Tenant, TenantMembershipSummary
+from app.domain.payroll import MonthlyClosing, MonthlyClosingItem, MonthlyClosingStatus
 from app.domain.scheduling import Shift
 from app.domain.security import MembershipStatus, UserRole
 
@@ -359,3 +360,70 @@ class DocumentRepository(Protocol):
     ) -> DocumentReceipt | None: ...
 
     async def append_receipt(self, receipt: DocumentReceipt) -> DocumentReceipt: ...
+
+
+class PayrollClosingRepository(Protocol):
+    async def is_store_month_closed(
+        self,
+        tenant_id: UUID,
+        store_id: UUID,
+        period_month: str,
+    ) -> bool: ...
+
+    async def list_closed_months_for_store(
+        self,
+        tenant_id: UUID,
+        store_id: UUID,
+        period_months: Sequence[str],
+    ) -> set[str]: ...
+
+    async def get_by_id(
+        self,
+        tenant_id: UUID,
+        closing_id: UUID,
+    ) -> MonthlyClosing | None: ...
+
+    async def get_by_store_month(
+        self,
+        tenant_id: UUID,
+        store_id: UUID,
+        period_month: str,
+    ) -> MonthlyClosing | None: ...
+
+    async def list_by_tenant(
+        self,
+        tenant_id: UUID,
+        *,
+        allowed_store_ids: frozenset[UUID] | None = None,
+        store_id: UUID | None = None,
+        period_month: str | None = None,
+    ) -> list[MonthlyClosing]: ...
+
+    async def create_closing(self, closing: MonthlyClosing) -> MonthlyClosing: ...
+
+    async def update_closing(
+        self,
+        closing: MonthlyClosing,
+        *,
+        expected_status: MonthlyClosingStatus | None = None,
+        expected_revision: int | None = None,
+    ) -> MonthlyClosing | None: ...
+
+    async def append_items(
+        self,
+        items: Sequence[MonthlyClosingItem],
+    ) -> list[MonthlyClosingItem]: ...
+
+    async def list_items(
+        self,
+        tenant_id: UUID,
+        closing_id: UUID,
+        *,
+        revision_number: int | None = None,
+    ) -> list[MonthlyClosingItem]: ...
+
+    async def list_items_for_closings(
+        self,
+        tenant_id: UUID,
+        closing_ids: Sequence[UUID],
+    ) -> list[MonthlyClosingItem]: ...

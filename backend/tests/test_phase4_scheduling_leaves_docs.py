@@ -56,6 +56,7 @@ from app.interfaces.api.deps import (
     get_jwt_verifier,
     get_leave_repository,
     get_membership_repository,
+    get_payroll_closing_repository,
     get_shift_repository,
     get_store_repository,
     get_tenant_repository,
@@ -535,6 +536,17 @@ def _setup_phase4_app(
     async def _noop_commit() -> None:
         return None
 
+    class _OpenPayrollRepo:
+        async def is_store_month_closed(
+            self, _tenant_id: UUID, _store_id: UUID, _period_month: str
+        ) -> bool:
+            return False
+
+        async def list_closed_months_for_store(
+            self, _tenant_id: UUID, _store_id: UUID, _period_months: object
+        ) -> set[str]:
+            return set()
+
     app.dependency_overrides[get_jwt_verifier] = lambda: verifier
     app.dependency_overrides[get_tenant_repository] = lambda: org_repo
     app.dependency_overrides[get_store_repository] = lambda: store_repo
@@ -544,6 +556,7 @@ def _setup_phase4_app(
     app.dependency_overrides[get_leave_repository] = lambda: leave_repo
     app.dependency_overrides[get_document_repository] = lambda: doc_repo
     app.dependency_overrides[get_document_storage] = lambda: storage
+    app.dependency_overrides[get_payroll_closing_repository] = lambda: _OpenPayrollRepo()
     app.dependency_overrides[get_commit_fn] = lambda: _noop_commit
     app.dependency_overrides[get_utc_now] = lambda: now_ref[0]
 

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import csv
 import io
-from collections import defaultdict
-from collections.abc import Callable
+from collections import Counter, defaultdict
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from uuid import UUID, uuid4
@@ -17,6 +17,7 @@ from app.domain.attendance import (
     AttendanceLedgerReport,
     AttendanceSource,
     CorrectedEventType,
+    WorkSession,
     compute_attendance_retention_until,
     evaluate_attendance_ledger,
     fold_attendance_events,
@@ -29,6 +30,7 @@ from app.domain.employees import (
     normalize_employee_code,
 )
 from app.domain.organization import (
+    ConflictError,
     EntityNotFoundError,
     Store,
     ValidationDomainError,
@@ -37,6 +39,7 @@ from app.domain.organization import (
 from app.domain.repositories import (
     AttendanceRepository,
     EmployeeRepository,
+    PayrollClosingRepository,
     StoreRepository,
     TenantRepository,
 )
@@ -107,6 +110,68 @@ def _ensure_utc(dt: datetime) -> datetime:
     return dt.astimezone(UTC)
 
 
+def _session_sig(
+    s: WorkSession,
+) -> tuple[UUID, date, datetime, datetime | None, int, int, bool, bool]:
+    return (
+        s.store_id,
+        s.local_date,
+        s.clock_in_utc,
+        s.clock_out_utc,
+        s.break_minutes,
+        s.net_minutes,
+        s.is_open,
+        s.has_open_break,
+    )
+
+
+async def _check_store_months_open(
+    payroll_repo: PayrollClosingRepository | None,
+    *,
+    tenant_id: UUID,
+    checks: set[tuple[UUID, str]],
+) -> None:
+    if payroll_repo is None:
+        return
+    for check_store_id, check_month in sorted(checks, key=lambda x: (str(x[0]), x[1])):
+        if await payroll_repo.is_store_month_closed(tenant_id, check_store_id, check_month):
+            raise ConflictError(
+                f"Cannot modify attendance: payroll month {check_month} is closed "
+                f"for store {check_store_id}"
+            )
+
+
+async def _enforce_closed_month_session_diff(
+    payroll_repo: PayrollClosingRepository | None,
+    *,
+    tenant_id: UUID,
+    primary_store_id: UUID,
+    before_sessions: Sequence[WorkSession],
+    after_sessions: Sequence[WorkSession],
+    already_checked: set[tuple[UUID, str]],
+) -> None:
+    if payroll_repo is None:
+        return
+
+    before_counts = Counter(_session_sig(s) for s in before_sessions)
+    after_counts = Counter(_session_sig(s) for s in after_sessions)
+
+    checks: set[tuple[UUID, str]] = set()
+    all_sigs = set(before_counts.keys()) | set(after_counts.keys())
+    for sig in all_sigs:
+        if before_counts[sig] != after_counts[sig]:
+            sess_store_id, sess_date = sig[0], sig[1]
+            sess_month = sess_date.strftime("%Y-%m")
+            checks.add((sess_store_id, sess_month))
+            checks.add((primary_store_id, sess_month))
+
+    await _check_store_months_open(
+        payroll_repo,
+        tenant_id=tenant_id,
+        checks=checks - already_checked,
+    )
+
+
 class ClockAttendanceUseCase:
     def __init__(
         self,
@@ -115,11 +180,13 @@ class ClockAttendanceUseCase:
         store_repo: StoreRepository,
         *,
         utc_now: Callable[[], datetime] | None = None,
+        payroll_repo: PayrollClosingRepository | None = None,
     ) -> None:
         self._attendance_repo = attendance_repo
         self._employee_repo = employee_repo
         self._store_repo = store_repo
         self._utc_now = utc_now or (lambda: datetime.now(UTC))
+        self._payroll_repo = payroll_repo
 
     async def execute(
         self,
@@ -200,6 +267,17 @@ class ClockAttendanceUseCase:
         now_utc = _ensure_utc(self._utc_now())
         occurred_at = now_utc
 
+        local_month = occurred_at.astimezone(resolve_timezone(store.timezone)).strftime("%Y-%m")
+        direct_checks = {
+            (store.id, local_month),
+            (employee.primary_store_id, local_month),
+        }
+        await _check_store_months_open(
+            self._payroll_repo,
+            tenant_id=principal.tenant_id,
+            checks=direct_checks,
+        )
+
         existing_events = await self._attendance_repo.list_by_employee(
             principal.tenant_id,
             employee.id,
@@ -217,7 +295,16 @@ class ClockAttendanceUseCase:
             recorded_at_utc=now_utc,
             retention_until=compute_attendance_retention_until(occurred_at),
         )
-        fold_attendance_events(employee.id, [*existing_events, candidate])
+        before_sessions = fold_attendance_events(employee.id, existing_events)
+        after_sessions = fold_attendance_events(employee.id, [*existing_events, candidate])
+        await _enforce_closed_month_session_diff(
+            self._payroll_repo,
+            tenant_id=principal.tenant_id,
+            primary_store_id=employee.primary_store_id,
+            before_sessions=before_sessions,
+            after_sessions=after_sessions,
+            already_checked=direct_checks,
+        )
 
         created = await self._attendance_repo.append(candidate)
         return ClockAttendanceResult(event=created, employee=employee, store=store)
@@ -229,10 +316,13 @@ class AppendCorrectionUseCase:
         attendance_repo: AttendanceRepository,
         employee_repo: EmployeeRepository,
         store_repo: StoreRepository,
+        *,
+        payroll_repo: PayrollClosingRepository | None = None,
     ) -> None:
         self._attendance_repo = attendance_repo
         self._employee_repo = employee_repo
         self._store_repo = store_repo
+        self._payroll_repo = payroll_repo
 
     async def execute(
         self,
@@ -278,6 +368,7 @@ class AppendCorrectionUseCase:
         if store is None:
             raise EntityNotFoundError("Store not found")
 
+        extra_store_months: list[tuple[UUID, str]] = []
         if command.supersedes_event_id is not None:
             superseded = await self._attendance_repo.get_by_id(
                 principal.tenant_id,
@@ -289,6 +380,23 @@ class AppendCorrectionUseCase:
                 )
             if principal.role == UserRole.STORE_MANAGER:
                 principal.require_store_access(principal.tenant_id, superseded.store_id)
+            superseded_month = superseded.occurred_at_utc.astimezone(
+                resolve_timezone(superseded.store_timezone)
+            ).strftime("%Y-%m")
+            extra_store_months.append((superseded.store_id, superseded_month))
+            extra_store_months.append((employee.primary_store_id, superseded_month))
+
+        occurred_month = occurred_at.astimezone(resolve_timezone(store.timezone)).strftime("%Y-%m")
+        direct_checks = {
+            (store.id, occurred_month),
+            (employee.primary_store_id, occurred_month),
+            *extra_store_months,
+        }
+        await _check_store_months_open(
+            self._payroll_repo,
+            tenant_id=principal.tenant_id,
+            checks=direct_checks,
+        )
 
         existing_events = await self._attendance_repo.list_by_employee(
             principal.tenant_id,
@@ -311,7 +419,16 @@ class AppendCorrectionUseCase:
             corrected_event_type=command.corrected_event_type,
             correction_reason=reason,
         )
-        fold_attendance_events(employee.id, [*existing_events, candidate])
+        before_sessions = fold_attendance_events(employee.id, existing_events)
+        after_sessions = fold_attendance_events(employee.id, [*existing_events, candidate])
+        await _enforce_closed_month_session_diff(
+            self._payroll_repo,
+            tenant_id=principal.tenant_id,
+            primary_store_id=employee.primary_store_id,
+            before_sessions=before_sessions,
+            after_sessions=after_sessions,
+            already_checked=direct_checks,
+        )
         return await self._attendance_repo.append(candidate)
 
 
@@ -463,7 +580,7 @@ class GetAttendanceLedgerUseCase:
         return AttendanceLedgerResult(items=tuple(items))
 
 
-_CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+_CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r", "\n")
 
 _ALERT_LABELS_ES: dict[AlertCode, str] = {
     AlertCode.DAILY_MAX_EXCEEDED: "Exceso de jornada diaria (Art. 34.3 ET)",
@@ -480,7 +597,7 @@ _ALERT_LABELS_ES: dict[AlertCode, str] = {
 
 def _sanitize_csv_cell(value: str) -> str:
     """Neutralize spreadsheet formula injection (CWE-1236) with a leading single quote."""
-    stripped = value.lstrip(" \t\r")
+    stripped = value.lstrip(" \t\r\n")
     if value.startswith(_CSV_FORMULA_PREFIXES) or stripped.startswith(_CSV_FORMULA_PREFIXES):
         return f"'{value}"
     return value

@@ -101,3 +101,27 @@ export type DocumentDetailResponse =
 export type CreateSignedUrlRequest =
   components['schemas']['CreateSignedUrlRequest']
 export type SignedUrlResponse = components['schemas']['SignedUrlResponse']
+
+// Phase 5: Monthly Payroll Closing & Gestoría Export
+export type MonthlyClosingStatus = components['schemas']['MonthlyClosingStatus']
+export type ClosingBlockerCode = components['schemas']['ClosingBlockerCode']
+export type ClosingBlockerResponse =
+  components['schemas']['ClosingBlockerResponse']
+export type MonthlyClosingResponse =
+  components['schemas']['MonthlyClosingResponse']
+export type MonthlyClosingItemResponse =
+  components['schemas']['MonthlyClosingItemResponse']
+export type MonthlyClosingDetailResponse =
+  components['schemas']['MonthlyClosingDetailResponse']
+export type MonthlyClosingListItemResponse =
+  components['schemas']['MonthlyClosingListItemResponse']
+export type MonthlyClosingListResponse =
+  components['schemas']['MonthlyClosingListResponse']
+export type MonthlyEmployeePreviewResponse =
+  components['schemas']['MonthlyEmployeePreviewResponse']
+export type MonthlyReadinessPreviewResponse =
+  components['schemas']['MonthlyReadinessPreviewResponse']
+export type CloseMonthlyPayrollRequest =
+  components['schemas']['CloseMonthlyPayrollRequest']
+export type ReopenMonthlyClosingRequest =
+  components['schemas']['ReopenMonthlyClosingRequest']

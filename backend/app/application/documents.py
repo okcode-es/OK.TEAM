@@ -91,12 +91,7 @@ def _require_document_read_access(
         return
 
     if principal.role == UserRole.STORE_MANAGER:
-        if document.category in STORE_MANAGER_RESTRICTED_CATEGORIES:
-            raise ForbiddenScopeError(
-                f"Store managers cannot access '{document.category.value}' documents"
-            )
-        if document.store_id is None or document.store_id not in principal.store_ids:
-            raise ForbiddenScopeError("Store manager lacks access to this document's store")
+        is_self_doc = self_employee is not None and document.employee_id == self_employee.id
         if employee is not None and employee.employment_status in (
             EmploymentStatus.LEGAL_HOLD,
             EmploymentStatus.ANONYMIZED,
@@ -104,6 +99,14 @@ def _require_document_read_access(
             raise ForbiddenScopeError(
                 "Store managers cannot access documents for legal_hold employees (Art. 32 LOPDGDD)"
             )
+        if is_self_doc:
+            return
+        if document.category in STORE_MANAGER_RESTRICTED_CATEGORIES:
+            raise ForbiddenScopeError(
+                f"Store managers cannot access '{document.category.value}' documents"
+            )
+        if document.store_id is None or document.store_id not in principal.store_ids:
+            raise ForbiddenScopeError("Store manager lacks access to this document's store")
         return
 
     # Employee role: own documents OR general 'other' policies in own store / tenant-wide
@@ -164,29 +167,63 @@ class ListDocumentsUseCase:
                 requires_signature=requires_signature,
             )
         elif principal.role == UserRole.STORE_MANAGER:
-            if category in STORE_MANAGER_RESTRICTED_CATEGORIES:
-                raise ForbiddenScopeError(
-                    f"Store managers cannot access '{category.value}' documents"
-                )
             if store_id is not None:
                 principal.require_store_access(principal.tenant_id, store_id)
-            docs = await self._doc_repo.list_by_tenant(
-                principal.tenant_id,
-                allowed_store_ids=principal.store_ids,
-                category=category,
-                employee_id=employee_id,
-                store_id=store_id,
-                requires_signature=requires_signature,
-                exclude_categories=STORE_MANAGER_RESTRICTED_CATEGORIES,
-            )
-            emps = await self._employee_repo.list_by_tenant(principal.tenant_id)
-            blocked_ids = {
-                e.id
-                for e in emps
-                if e.employment_status
-                in (EmploymentStatus.LEGAL_HOLD, EmploymentStatus.ANONYMIZED)
-            }
-            docs = [d for d in docs if d.employee_id is None or d.employee_id not in blocked_ids]
+            if category in STORE_MANAGER_RESTRICTED_CATEGORIES:
+                if (
+                    self_emp is None
+                    or (employee_id is not None and employee_id != self_emp.id)
+                    or self_emp.employment_status
+                    in (EmploymentStatus.LEGAL_HOLD, EmploymentStatus.ANONYMIZED)
+                ):
+                    raise ForbiddenScopeError(
+                        f"Store managers cannot access '{category.value}' documents"
+                    )
+                docs = await self._doc_repo.list_by_tenant(
+                    principal.tenant_id,
+                    only_employee_id=self_emp.id,
+                    category=category,
+                    store_id=store_id,
+                    requires_signature=requires_signature,
+                )
+            else:
+                docs = await self._doc_repo.list_by_tenant(
+                    principal.tenant_id,
+                    allowed_store_ids=principal.store_ids,
+                    category=category,
+                    employee_id=employee_id,
+                    store_id=store_id,
+                    requires_signature=requires_signature,
+                    exclude_categories=STORE_MANAGER_RESTRICTED_CATEGORIES,
+                )
+                emps = await self._employee_repo.list_by_tenant(principal.tenant_id)
+                blocked_ids = {
+                    e.id
+                    for e in emps
+                    if e.employment_status
+                    in (EmploymentStatus.LEGAL_HOLD, EmploymentStatus.ANONYMIZED)
+                }
+                docs = [
+                    d for d in docs if d.employee_id is None or d.employee_id not in blocked_ids
+                ]
+                if (
+                    category is None
+                    and self_emp is not None
+                    and self_emp.id not in blocked_ids
+                    and (employee_id is None or employee_id == self_emp.id)
+                ):
+                    self_docs = await self._doc_repo.list_by_tenant(
+                        principal.tenant_id,
+                        only_employee_id=self_emp.id,
+                        store_id=store_id,
+                        requires_signature=requires_signature,
+                    )
+                    seen_ids = {d.id for d in docs}
+                    for sd in self_docs:
+                        if sd.id not in seen_ids:
+                            docs.append(sd)
+                            seen_ids.add(sd.id)
+                    docs.sort(key=lambda d: d.created_at, reverse=True)
         else:
             docs = await self._doc_repo.list_by_tenant(
                 principal.tenant_id,
@@ -378,7 +415,7 @@ class GetDocumentUseCase:
             await _resolve_self_employee(
                 self._employee_repo, principal.tenant_id, principal.user_id
             )
-            if principal.role == UserRole.EMPLOYEE
+            if principal.role in (UserRole.EMPLOYEE, UserRole.STORE_MANAGER)
             else None
         )
         _require_document_read_access(principal, doc, emp, self_employee=self_emp)
@@ -422,7 +459,7 @@ class CreateSignedUrlUseCase:
             await _resolve_self_employee(
                 self._employee_repo, principal.tenant_id, principal.user_id
             )
-            if principal.role == UserRole.EMPLOYEE
+            if principal.role in (UserRole.EMPLOYEE, UserRole.STORE_MANAGER)
             else None
         )
         _require_document_read_access(principal, doc, emp, self_employee=self_emp)

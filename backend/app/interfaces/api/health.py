@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Annotated, Literal
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from app.infrastructure.config import get_settings
+from app.infrastructure.config import Settings
+from app.interfaces.api.deps import get_app_settings
 
 router = APIRouter(tags=["system"])
 
@@ -24,8 +25,9 @@ class HealthResponse(BaseModel):
     response_model=HealthResponse,
     summary="Service health check",
 )
-async def get_health() -> HealthResponse:
-    settings = get_settings()
+async def get_health(
+    settings: Annotated[Settings, Depends(get_app_settings)],
+) -> HealthResponse:
     return HealthResponse(
         status="ok",
         service=settings.app_name,

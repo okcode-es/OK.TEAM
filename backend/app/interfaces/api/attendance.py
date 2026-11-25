@@ -31,6 +31,7 @@ from app.domain.attendance import (
 from app.domain.repositories import (
     AttendanceRepository,
     EmployeeRepository,
+    PayrollClosingRepository,
     StoreRepository,
     TenantRepository,
 )
@@ -41,6 +42,7 @@ from app.interfaces.api.deps import (
     get_commit_fn,
     get_current_principal,
     get_employee_repository,
+    get_payroll_closing_repository,
     get_store_repository,
     get_tenant_repository,
     get_utc_now,
@@ -252,6 +254,7 @@ async def clock_attendance(
     attendance_repo: Annotated[AttendanceRepository, Depends(get_attendance_repository)],
     employee_repo: Annotated[EmployeeRepository, Depends(get_employee_repository)],
     store_repo: Annotated[StoreRepository, Depends(get_store_repository)],
+    payroll_repo: Annotated[PayrollClosingRepository, Depends(get_payroll_closing_repository)],
     commit: Annotated[CommitFn, Depends(get_commit_fn)],
     now_utc: Annotated[datetime, Depends(get_utc_now)],
 ) -> ClockAttendanceResponse:
@@ -260,6 +263,7 @@ async def clock_attendance(
         employee_repo,
         store_repo,
         utc_now=lambda: now_utc,
+        payroll_repo=payroll_repo,
     ).execute(
         principal,
         ClockAttendanceCommand(
@@ -292,9 +296,12 @@ async def append_attendance_correction(
     attendance_repo: Annotated[AttendanceRepository, Depends(get_attendance_repository)],
     employee_repo: Annotated[EmployeeRepository, Depends(get_employee_repository)],
     store_repo: Annotated[StoreRepository, Depends(get_store_repository)],
+    payroll_repo: Annotated[PayrollClosingRepository, Depends(get_payroll_closing_repository)],
     commit: Annotated[CommitFn, Depends(get_commit_fn)],
 ) -> AttendanceEventResponse:
-    event = await AppendCorrectionUseCase(attendance_repo, employee_repo, store_repo).execute(
+    event = await AppendCorrectionUseCase(
+        attendance_repo, employee_repo, store_repo, payroll_repo=payroll_repo
+    ).execute(
         principal,
         AppendCorrectionCommand(
             employee_id=payload.employee_id,

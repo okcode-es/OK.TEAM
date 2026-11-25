@@ -38,6 +38,7 @@ from app.interfaces.api.deps import (
     get_employee_repository,
     get_jwt_verifier,
     get_membership_repository,
+    get_payroll_closing_repository,
     get_store_repository,
     get_tenant_repository,
     get_utc_now,
@@ -834,12 +835,24 @@ def _build_phase3_test_app():
     async def _noop_commit() -> None:
         return None
 
+    class _OpenPayrollRepo:
+        async def is_store_month_closed(
+            self, _tenant_id: UUID, _store_id: UUID, _period_month: str
+        ) -> bool:
+            return False
+
+        async def list_closed_months_for_store(
+            self, _tenant_id: UUID, _store_id: UUID, _period_months: object
+        ) -> set[str]:
+            return set()
+
     app.dependency_overrides[get_jwt_verifier] = lambda: verifier
     app.dependency_overrides[get_tenant_repository] = lambda: tenant_repo
     app.dependency_overrides[get_store_repository] = lambda: store_repo
     app.dependency_overrides[get_membership_repository] = lambda: membership_repo
     app.dependency_overrides[get_employee_repository] = lambda: employee_repo
     app.dependency_overrides[get_attendance_repository] = lambda: attendance_repo
+    app.dependency_overrides[get_payroll_closing_repository] = lambda: _OpenPayrollRepo()
     app.dependency_overrides[get_commit_fn] = lambda: _noop_commit
     app.dependency_overrides[get_utc_now] = lambda: clock_state["now"]
 
