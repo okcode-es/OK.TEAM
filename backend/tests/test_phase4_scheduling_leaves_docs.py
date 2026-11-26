@@ -49,11 +49,14 @@ from app.infrastructure.document_storage import (
 )
 from app.infrastructure.supabase_jwt import SupabaseJWTVerifier, sign_dev_hs256_token
 from app.interfaces.api.deps import (
+    get_announcement_repository,
+    get_break_policy_repository,
     get_commit_fn,
     get_document_repository,
     get_document_storage,
     get_employee_repository,
     get_jwt_verifier,
+    get_leave_entitlement_repository,
     get_leave_repository,
     get_membership_repository,
     get_payroll_closing_repository,
@@ -229,6 +232,7 @@ class InMemoryDocumentRepo:
         category: DocumentCategory | None = None,
         employee_id: UUID | None = None,
         store_id: UUID | None = None,
+        period_month: str | None = None,
         requires_signature: bool | None = None,
         exclude_categories: frozenset[DocumentCategory] | None = None,
     ) -> list[ComplianceDocument]:
@@ -258,6 +262,8 @@ class InMemoryDocumentRepo:
             if employee_id is not None and d.employee_id != employee_id:
                 continue
             if store_id is not None and d.store_id != store_id:
+                continue
+            if period_month is not None and d.period_month != period_month:
                 continue
             if requires_signature is not None and d.requires_signature != requires_signature:
                 continue
@@ -547,6 +553,10 @@ def _setup_phase4_app(
         ) -> set[str]:
             return set()
 
+    class _EmptyAnnRepo:
+        async def list_by_tenant(self, _tenant_id: UUID, *, category: object = None) -> list:
+            return []
+
     app.dependency_overrides[get_jwt_verifier] = lambda: verifier
     app.dependency_overrides[get_tenant_repository] = lambda: org_repo
     app.dependency_overrides[get_store_repository] = lambda: store_repo
@@ -555,8 +565,28 @@ def _setup_phase4_app(
     app.dependency_overrides[get_shift_repository] = lambda: shift_repo
     app.dependency_overrides[get_leave_repository] = lambda: leave_repo
     app.dependency_overrides[get_document_repository] = lambda: doc_repo
+    app.dependency_overrides[get_announcement_repository] = lambda: _EmptyAnnRepo()
     app.dependency_overrides[get_document_storage] = lambda: storage
+    class _EmptyBreakPolicyRepo:
+        async def list_by_tenant(self, _tenant_id: UUID) -> list[object]:
+            return []
+
+    class _EmptyLeaveEntitlementRepo:
+        async def get_by_employee_year(
+            self, _tenant_id: UUID, _employee_id: UUID, _year: int
+        ) -> None:
+            return None
+
+        async def list_by_tenant(
+            self, _tenant_id: UUID, *, year: int | None = None, employee_id: UUID | None = None
+        ) -> list[object]:
+            return []
+
     app.dependency_overrides[get_payroll_closing_repository] = lambda: _OpenPayrollRepo()
+    app.dependency_overrides[get_break_policy_repository] = lambda: _EmptyBreakPolicyRepo()
+    app.dependency_overrides[get_leave_entitlement_repository] = (
+        lambda: _EmptyLeaveEntitlementRepo()
+    )
     app.dependency_overrides[get_commit_fn] = lambda: _noop_commit
     app.dependency_overrides[get_utc_now] = lambda: now_ref[0]
 
@@ -794,6 +824,7 @@ def test_scheduling_api_conflicts_labor_blocks_and_rbac(tmp_path: Path) -> None:
 def test_leaves_api_workflow_and_shift_conflict(tmp_path: Path) -> None:
     client, ctx = _setup_phase4_app(tmp_path)
     headers = ctx["headers"]
+    hr_h = headers(ctx["hr_id"])  # type: ignore[operator]
     mgr_h = headers(ctx["mgr_id"])  # type: ignore[operator]
     emp_h = headers(ctx["emp1_user_id"])  # type: ignore[operator]
     acc_h = headers(ctx["acc_id"])  # type: ignore[operator]
@@ -837,12 +868,20 @@ def test_leaves_api_workflow_and_shift_conflict(tmp_path: Path) -> None:
         == 403
     )
 
-    # Approve fails 409 because of published shift on 2026-12-01
+    # Manager endorses stage 1 -> pending_hr; HR final approval fails 409 because of published shift
     assert (
         client.post(
             f"/api/v1/leaves/{leave_id}/review",
             json={"approve": True},
             headers=mgr_h,
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            f"/api/v1/leaves/{leave_id}/review",
+            json={"approve": True},
+            headers=hr_h,
         ).status_code
         == 409
     )
@@ -865,6 +904,14 @@ def test_leaves_api_workflow_and_shift_conflict(tmp_path: Path) -> None:
             f"/api/v1/leaves/{lv2.json()['id']}/review",
             json={"approve": True, "review_note": "OK"},
             headers=mgr_h,
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            f"/api/v1/leaves/{lv2.json()['id']}/review",
+            json={"approve": True, "review_note": "OK HR"},
+            headers=hr_h,
         ).status_code
         == 200
     )
@@ -1246,7 +1293,7 @@ def test_p0_p1_red_team_regressions(tmp_path: Path) -> None:
         start_date=date(2026, 12, 15),
         end_date=date(2026, 12, 16),
         natural_days=2,
-        status=LeaveStatus.PENDING,
+        status=LeaveStatus.PENDING_MANAGER,
         reason="",
         requested_by_user_id=ctx["hr_id"],  # type: ignore[arg-type]
         reviewed_by_user_id=None,

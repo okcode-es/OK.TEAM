@@ -136,6 +136,7 @@ class InMemoryEmployeeRepo:
         employee_code: str,
         full_name: str,
         preferred_name: str,
+        department: str = "",
         email: str,
         phone: str,
         birth_date: date | None,
@@ -153,6 +154,10 @@ class InMemoryEmployeeRepo:
         naf_enc: str | None,
         naf_masked: str | None,
         updated_at: datetime,
+        job_title: str = "",
+        emergency_contact_name: str = "",
+        emergency_contact_phone: str = "",
+        default_break_minutes: int | None = None,
     ) -> Employee | None:
         existing = await self.get_by_id(tenant_id, employee_id)
         if existing is None or existing.deleted_at is not None:
@@ -164,6 +169,11 @@ class InMemoryEmployeeRepo:
             employee_code=employee_code,
             full_name=full_name,
             preferred_name=preferred_name,
+            department=department,
+            job_title=job_title,
+            emergency_contact_name=emergency_contact_name,
+            emergency_contact_phone=emergency_contact_phone,
+            default_break_minutes=default_break_minutes,
             email=email,
             phone=phone,
             birth_date=birth_date,
@@ -180,6 +190,31 @@ class InMemoryEmployeeRepo:
             iban_masked=iban_masked,
             naf_enc=naf_enc,
             naf_masked=naf_masked,
+            updated_at=updated_at,
+        )
+        self.employees[employee_id] = updated
+        return updated
+
+    async def update_avatar(
+        self,
+        tenant_id: UUID,
+        employee_id: UUID,
+        *,
+        avatar_storage_backend: str | None,
+        avatar_storage_key: str | None,
+        avatar_mime_type: str | None,
+        avatar_updated_at: datetime | None,
+        updated_at: datetime,
+    ) -> Employee | None:
+        existing = await self.get_by_id(tenant_id, employee_id)
+        if existing is None or existing.deleted_at is not None:
+            return None
+        updated = replace(
+            existing,
+            avatar_storage_backend=avatar_storage_backend,
+            avatar_storage_key=avatar_storage_key,
+            avatar_mime_type=avatar_mime_type,
+            avatar_updated_at=avatar_updated_at,
             updated_at=updated_at,
         )
         self.employees[employee_id] = updated
@@ -223,6 +258,9 @@ class InMemoryEmployeeRepo:
             user_id=None,
             full_name=anonymized_full_name,
             preferred_name="",
+            job_title="",
+            emergency_contact_name="",
+            emergency_contact_phone="",
             email="",
             phone="",
             birth_date=None,

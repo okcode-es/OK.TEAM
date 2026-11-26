@@ -29,6 +29,7 @@ class CreateMembershipCommand:
     role: UserRole
     store_ids: frozenset[UUID] = frozenset()
     status: MembershipStatus = MembershipStatus.ACTIVE
+    department_scope: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +38,14 @@ class UpdateMembershipCommand:
     role: UserRole
     status: MembershipStatus
     store_ids: frozenset[UUID]
+    department_scope: str | None = None
+
+
+def _normalize_department_scope(raw: str | None) -> str | None:
+    if raw is None:
+        return None
+    cleaned = raw.strip()[:100]
+    return cleaned or None
 
 
 class ListMembershipsUseCase:
@@ -105,6 +114,7 @@ class CreateMembershipUseCase:
             role=cmd.role,
             status=cmd.status,
             store_ids=cmd.store_ids,
+            department_scope=_normalize_department_scope(cmd.department_scope),
             created_at=now,
             updated_at=now,
         )
@@ -165,6 +175,7 @@ class UpdateMembershipUseCase:
             role=cmd.role,
             status=cmd.status,
             store_ids=cmd.store_ids,
+            department_scope=_normalize_department_scope(cmd.department_scope),
             updated_at=datetime.now(UTC),
         )
         if updated is None:

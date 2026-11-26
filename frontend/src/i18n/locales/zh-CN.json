@@ -19,13 +19,16 @@
     "inactive": "已归档"
   },
   "nav": {
+    "dashboard": "工作台",
     "employees": "员工档案",
     "attendance": "考勤台账",
     "kiosk": "平板打卡",
     "schedule": "排班日历",
     "leaves": "年假与请假",
     "documents": "合规文档",
+    "announcements": "公告与制度",
     "payroll": "月度关账",
+    "reports": "报表中心",
     "stores": "门店管理",
     "members": "成员与权限",
     "organization": "企业设置",
@@ -36,18 +39,41 @@
   "auth": {
     "title": "登录 okTeam HR",
     "subtitle": "面向西班牙华人企业的合规人力资源管理平台",
+    "brandHeadline": "专为西班牙华人企业打造的合规 HR 平台",
+    "brandSubtitle": "一站式管理多门店考勤、排班、年假与月度薪资关账，全面满足西班牙劳动法与欧盟数据合规要求。",
+    "trustBullets": {
+      "rdl": "100% 符合西班牙劳动法考勤 4 年留痕要求",
+      "gdpr": "欧盟数据节点加密存储，严格遵循 GDPR",
+      "bilingual": "中西双语界面，无缝协同门店主管与会计师（Gestoría）"
+    },
+    "euResidency": "© 2026 okTeam HR · EU Data Residency",
+    "localeShort": {
+      "zh-CN": "中文",
+      "es-ES": "ES"
+    },
     "email": "工作邮箱",
     "password": "密码",
+    "forgotPassword": "忘记密码？",
+    "forgotPasswordHelp": "请联系您所在企业的管理员或人事主管（HR）协助重置登录密码。",
     "showPassword": "显示密码",
     "hidePassword": "隐藏密码",
     "signIn": "登录系统",
     "signingIn": "正在登录...",
-    "supabaseNotConfigured": "当前未配置 Supabase Auth 环境变量，请使用下方本地开发模式登录或在 .env 中配置 VITE_SUPABASE_URL。",
-    "devSectionTitle": "本地开发快捷登录（仅开发环境）",
+    "termsNotice": "登录即表示同意服务条款与欧盟隐私政策",
+    "supabaseNotConfigured": "当前未配置在线身份认证服务（Supabase Auth）。如需本地联调，请使用右下角 Dev Login 快捷登录。",
+    "devTrigger": "Dev Login",
+    "devSectionTitle": "本地开发快捷登录",
     "devEmailPlaceholder": "输入测试邮箱，例如 owner@dragon.es",
     "devSignIn": "使用开发令牌登录",
-    "devHint": "支持无 Supabase 本地全链路联调，生产环境已物理禁用。",
-    "errorGeneric": "登录失败，请检查凭据或后端服务状态。"
+    "devHint": "仅限本地开发环境，生产环境已物理禁用。",
+    "errorGeneric": "登录失败，请检查凭据或后端服务状态。",
+    "devPresets": {
+      "owner": "企业主 (Owner)",
+      "hr": "人事主管 (HR)",
+      "manager": "门店经理",
+      "employee": "员工 (Ming Zhou)",
+      "accountant": "外部会计师"
+    }
   },
   "onboarding": {
     "badge": "企业初始化",
@@ -92,6 +118,7 @@
       "address": "详细地址",
       "city": "城市",
       "postalCode": "邮编",
+      "regionCode": "西班牙自治区",
       "save": "保存门店",
       "saving": "保存中...",
       "archive": "归档门店",
@@ -129,6 +156,8 @@
       "generateUuid": "生成测试 UUID",
       "email": "工作邮箱",
       "displayName": "显示姓名",
+      "departmentScope": "部门范围（可选）",
+      "departmentScopePlaceholder": "例如：Cocina / Sala",
       "role": "角色",
       "status": "状态",
       "assignedStores": "授权门店（门店经理与员工受此范围限制）",
@@ -194,6 +223,7 @@
       "code": "员工工号",
       "fullName": "法定全名（西语证件名）",
       "preferredName": "中文常用名",
+      "department": "所属部门",
       "email": "联系邮箱",
       "phone": "联系电话",
       "primaryStore": "主属门店",
@@ -205,7 +235,8 @@
       "vacationDays": "法定年假天数（>= 30 自然日）",
       "nieDni": "NIE / DNI（AES-256-GCM 加密存储）",
       "iban": "IBAN 工资卡号（加密存储）",
-      "naf": "NAF 社保号 12 位（加密存储）"
+      "naf": "NAF 社保号 12 位（加密存储）",
+      "status": "在职状态"
     },
     "drawer": {
       "createTitle": "新建员工档案",
@@ -214,6 +245,66 @@
       "saving": "正在保存…",
       "cancel": "取消"
     },
+    "avatar": {
+      "editBtn": "更换头像",
+      "title": "上传并裁剪员工头像",
+      "description": "拖拽或缩放照片调整正方形头像区域，自动压缩上传。",
+      "selectImage": "选择图片（JPG / PNG / WebP）",
+      "zoom": "缩放比例",
+      "upload": "保存头像",
+      "remove": "移除头像",
+      "tooLarge": "裁剪后图片超过 2 MB 限制。"
+    },
+    "bulkImport": {
+      "button": "批量导入",
+      "title": "批量导入员工档案",
+      "description": "下载标准模板，先执行预校验（Dry-Run）确认无误后再正式原子导入。",
+      "downloadCsv": "下载 CSV 模板",
+      "downloadXlsx": "下载 Excel 模板",
+      "selectFile": "上传填好的 CSV / XLSX 文件",
+      "dryRun": "预校验 (Dry-Run)",
+      "commit": "确认正式导入",
+      "totalRows": "总行数 {{count}}",
+      "validRows": "通过 {{count}}",
+      "errorRows": "错误 {{count}}",
+      "committed": "已成功导入 {{count}} 名员工",
+      "colRow": "行号",
+      "colField": "字段",
+      "colMessage": "错误说明",
+      "fields": {
+        "employee_code": "员工编号",
+        "full_name": "姓名",
+        "store_code": "门店编号",
+        "contract_type": "合同类型",
+        "work_schedule_type": "工时类型",
+        "contracted_weekly_hours": "每周合同工时",
+        "annual_vacation_days": "年假天数",
+        "hire_date": "入职日期",
+        "birth_date": "出生日期",
+        "nie_dni": "NIE / DNI",
+        "iban": "银行账号 (IBAN)",
+        "naf": "社保号 (NAF)",
+        "email": "电子邮箱"
+      },
+      "errorCodes": {
+        "REQUIRED": "该字段为必填项。",
+        "INVALID_FORMAT": "格式不正确，请检查后重试。",
+        "TOO_LONG": "输入内容过长。",
+        "INVALID_ENUM": "枚举值无效，请参考模板中的可选值。",
+        "INVALID_HOURS": "每周合同工时不符合西班牙法定工时规则。",
+        "INVALID_VACATION_DAYS": "年假天数无效（西班牙法定最低 30 个自然日）。",
+        "INVALID_DATE": "日期格式无效，请使用 YYYY-MM-DD。",
+        "INVALID_NIE_DNI": "西班牙 DNI / NIE 格式或校验位无效。",
+        "INVALID_IBAN": "西班牙 IBAN 格式或校验位无效（需以 ES 开头共 24 位）。",
+        "INVALID_NAF": "西班牙社保号 (NAF) 须为 12 位数字。",
+        "INVALID_EMAIL": "电子邮箱格式无效。",
+        "STORE_NOT_FOUND": "未找到对应的有效门店编号。",
+        "DUPLICATE_CODE": "员工编号与现有档案或导入文件重复。",
+        "DUPLICATE_EMAIL": "电子邮箱与现有档案或导入文件重复。",
+        "DUPLICATE_NIE_DNI": "证件号 (NIE/DNI) 与现有档案或导入文件重复。",
+        "GENERIC": "该行数据校验未通过，请核对格式。"
+      }
+    },
     "profile": {
       "backToList": "返回员工名册",
       "navBasic": "基本资料",
@@ -221,6 +312,13 @@
       "navPii": "敏感合规证件",
       "navRetention": "离职与 4 年留存",
       "savedNotice": "员工档案已保存。",
+      "savedSuccess": "员工档案更改已保存。",
+      "hrSections": {
+        "contract": "合同与岗位信息",
+        "payrollSs": "薪资与社保信息",
+        "bank": "银行卡信息 (IBAN)",
+        "emergency": "紧急联系人"
+      },
       "frozenBanner": "该员工已进入西班牙 4 年法定留存冻结或已完成匿名化，档案处于只读锁定状态。",
       "piiSubtitle": "默认仅展示脱敏掩码；授权角色可临时解密查看，15 秒后自动重新隐藏。",
       "storeManagerNoPii": "依据 GDPR 最小必要原则，门店经理无权解密查看 NIE / IBAN / NAF 明文。",
@@ -247,6 +345,24 @@
         "confirm": "确认匿名化",
         "cancel": "取消"
       }
+    },
+    "pii": {
+      "description": "默认仅展示脱敏掩码；授权角色可临时解密查看，15 秒后自动重新隐藏。",
+      "revealButton": "查看明文（15 秒）",
+      "hideButton": "立即隐藏",
+      "rotatePlaceholder": "留空则保留原值；输入新值将覆盖"
+    },
+    "lifecycle": {
+      "title": "离职与 4 年法定留存合规",
+      "activeRetentionHint": "在职员工档案受西班牙《工人法》保护；办理离职后将自动锁定 4 年法定留存期。",
+      "terminationDate": "离职日期",
+      "terminateBtn": "办理离职并冻结",
+      "terminateConfirmTitle": "确认办理离职并进入 4 年法定留存冻结？",
+      "terminateConfirmDesc": "档案将立即锁定为只读冻结态（绝不物理删除），并在离职日起计算 4 年法定留存期限。",
+      "retentionUntil": "法定留存到期日",
+      "anonymizeBtn": "执行 GDPR 匿名化",
+      "anonymizeConfirmTitle": "确认执行不可逆 GDPR 匿名化？",
+      "anonymizeConfirmDesc": "将永久清除姓名、联系方式及全部加密证件（NIE/IBAN/NAF），仅保留去标识化聚合记录。"
     }
   },
   "attendance": {
@@ -272,7 +388,34 @@
     "selfClock": {
       "title": "我的 Web 考勤打卡",
       "subtitle": "实时写入不可变考勤账本",
-      "success": "打卡成功：{{action}} · {{time}}"
+      "success": "打卡成功：{{action}} · {{time}}",
+      "customTimeToggle": "自定义打卡时间"
+    },
+    "manualDay": {
+      "trigger": "自选时间打卡 / 登记工时",
+      "title": "自选时间打卡 / 登记单日工时",
+      "description": "可选择上班、休息与下班时间，按门店 IANA 时区写入不可变考勤账本。",
+      "employee": "员工",
+      "date": "打卡日期",
+      "clockInTime": "上班时间",
+      "clockOutTime": "下班时间",
+      "breakStartTime": "开始休息（可选）",
+      "breakEndTime": "结束休息（可选）",
+      "note": "备注（可选）",
+      "notePlaceholder": "填写外勤或班次说明…",
+      "submit": "确认登记工时",
+      "submitting": "正在登记…",
+      "validation": {
+        "summaryTitle": "请先修正以下必填或时间异常项：",
+        "missingGuidance": "请补充以下信息：{{fields}}",
+        "requiredItem": "请填写「{{field}}」",
+        "clockOutPastRequired": "历史日期必须填写下班时间",
+        "breakPairRequired": "开始休息与结束休息时间须成对填写",
+        "breakAfterIn": "开始休息时间必须晚于上班时间",
+        "breakEndAfterStart": "结束休息时间必须晚于开始休息时间",
+        "outAfterBreak": "下班时间必须晚于结束休息时间",
+        "outAfterIn": "下班时间必须晚于上班时间"
+      }
     },
     "actions": {
       "clock_in": "上班打卡",
@@ -435,13 +578,35 @@
       "daysUnit": "自然日"
     },
     "types": {
-      "vacation": "带薪年假 (Vacaciones)",
-      "sick_leave": "病假 (Baja médica)",
+      "vacation": "带薪年假",
+      "sick_leave": "医疗病假 (Baja IT)",
+      "medical_appointment": "就医预约",
+      "day_off": "调休 / 休息日",
       "paid_leave": "法定带薪假 (Art. 37.3 ET)",
       "unpaid_leave": "无薪事假"
     },
+    "prevYear": "上一年",
+    "nextYear": "下一年",
+    "typeSwitcherTitle": "假期类型",
+    "allTypes": "全部类型",
+    "annualCalendarTitle": "{{year}} 年全年休假与西班牙法定节假日日历",
+    "legend": {
+      "approved": "已批准",
+      "pending": "审批中",
+      "holiday": "法定节假日"
+    },
+    "justificante": {
+      "title": "医疗证明 (Justificante)",
+      "uploadLabel": "上传医疗证明 / 就医凭证 (可选)",
+      "hint": "支持 PDF / JPG / PNG / WebP，最大 10 MB",
+      "attached": "已附证明文件",
+      "preview60s": "查看证明文件（60秒临时链接）",
+      "uploadNew": "上传 / 替换证明文件"
+    },
     "statuses": {
       "pending": "待审批",
+      "pending_manager": "待门店经理审批",
+      "pending_hr": "待 HR 终审",
       "approved": "已批准",
       "rejected": "已驳回",
       "cancelled": "已取消"
@@ -466,7 +631,25 @@
       "reasonPlaceholder": "填写请假说明或病假备注…",
       "submit": "提交申请",
       "submitting": "正在提交…",
-      "cancel": "取消"
+      "cancel": "取消",
+      "validation": {
+        "summaryTitle": "请先修正以下必填或异常项：",
+        "missingGuidance": "请补充以下必填信息：{{fields}}",
+        "fieldEmployee": "员工",
+        "fieldType": "请假类型",
+        "fieldStartDate": "开始日期",
+        "fieldEndDate": "结束日期",
+        "requiredItem": "请填写或选择「{{field}}」",
+        "endBeforeStart": "结束日期不能早于开始日期",
+        "vacationExceeded": "当前申请 {{requested}} 天，已超出剩余年假额度（剩余 {{remaining}} 天）。",
+        "selectPlaceholder": "请选择员工…"
+      }
+    },
+    "balance": {
+      "entitled": "全年年假额度",
+      "used": "已使用",
+      "pending": "审批中",
+      "remaining": "剩余可用"
     },
     "detailDrawer": {
       "title": "请假申请详情",
@@ -481,10 +664,22 @@
       "reviewNotePlaceholder": "可选：填写批准或驳回说明…",
       "reviewedAt": "审批时间",
       "approve": "批准申请",
+      "finalApprove": "HR 终审批准",
       "reject": "驳回申请",
       "cancelRequest": "撤回申请",
       "processing": "正在处理…",
-      "close": "关闭"
+      "close": "关闭",
+      "hrWaitingManagerBanner": "需先经门店经理审批，通过后转交 HR 终审。",
+      "managerWaitingHrBanner": "门店经理已审批通过，等待 HR 终审。",
+      "timeline": {
+        "title": "两级审批进度",
+        "step1": "① 门店经理审批",
+        "step2": "② HR 终审",
+        "waiting": "待处理",
+        "passed": "已通过",
+        "skipped": "已跳过",
+        "pendingPrev": "待前序通过"
+      }
     }
   },
   "documents": {
@@ -677,6 +872,256 @@
   },
   "common": {
     "loading": "加载中…",
-    "error": "操作失败，请稍后重试。"
+    "error": "操作失败，请稍后重试。",
+    "cancel": "取消",
+    "close": "关闭"
+  },
+  "clock": {
+    "workModeLabel": "工作模式",
+    "workMode": {
+      "onsite": "到店",
+      "remote": "远程"
+    },
+    "status": {
+      "working": "工作中",
+      "onBreak": "休息中",
+      "clockedOut": "未打卡"
+    },
+    "actions": {
+      "clockIn": "上班打卡",
+      "pause": "暂停休息",
+      "resume": "恢复工作",
+      "clockOut": "下班签退"
+    }
+  },
+  "mobile": {
+    "nav": {
+      "ariaLabel": "移动端底部导航",
+      "home": "首页",
+      "apps": "应用",
+      "profile": "我的"
+    },
+    "apps": {
+      "title": "全部业务应用",
+      "subtitle": "快速进入考勤、排班、请假、文档与门店管理。"
+    }
+  },
+  "dashboard": {
+    "adminTitle": "企业实时运营台",
+    "adminSubtitle": "实时掌握全员在岗状态、近期生日与西班牙节假日、公告签收进度。",
+    "employeeTitle": "我的工作台",
+    "employeeSubtitle": "实时工时结余、团队成员、年假额度与待签收合规文件。",
+    "viewSwitchLabel": "切换工作台视角",
+    "views": {
+      "admin": "管理员视角",
+      "employee": "员工视角"
+    },
+    "allStores": "全部门店",
+    "departmentPlaceholder": "按部门筛选…",
+    "pendingLeavesBadge": "待审批请假 ({{count}})",
+    "noEmployeeProfileTitle": "当前账号尚未关联员工档案",
+    "noEmployeeProfileDesc": "您仍可浏览企业节假日与公告；如需使用个人打卡、年假申请与工资单签收，请联系企业主或 HR 在员工档案中关联您的账号。",
+    "employeeSearch": {
+      "placeholder": "搜索员工姓名、工号、岗位、部门或邮箱...",
+      "clear": "清空搜索",
+      "noResults": "未找到匹配的员工档案。"
+    },
+    "whoIsIn": {
+      "title": "全员在岗状态 (Who's in)",
+      "drawerDescription": "当前状态下的全部员工实时明细。",
+      "emptyGroup": "该状态下暂无员工。",
+      "statuses": {
+        "working": "到店工作中",
+        "remote": "远程办公",
+        "on_break": "休息中",
+        "vacation": "休年假",
+        "absence": "请假/缺勤",
+        "absenteeism": "未打卡/缺席"
+      }
+    },
+    "birthdays": {
+      "title": "近期生日",
+      "empty": "未来 30 天暂无员工生日。"
+    },
+    "holidays": {
+      "title": "近期西班牙节假日",
+      "empty": "近期暂无全国或自治区节假日。"
+    },
+    "quickReports": {
+      "title": "快捷合规报表"
+    },
+    "announcements": {
+      "title": "公司公告与制度",
+      "viewAll": "查看全部",
+      "empty": "暂无公告或制度文档。"
+    },
+    "emptyProfile": {
+      "title": "当前账号尚未关联员工档案",
+      "description": "您仍可浏览企业节假日与公告；如需使用个人打卡、年假申请与工资单签收，请联系企业主或 HR 在员工档案中关联您的账号。"
+    },
+    "myWorkTime": {
+      "title": "今日工时与结余",
+      "saldo": "工时结余 (Saldo)",
+      "viewLedger": "查看考勤台账"
+    },
+    "myVacations": {
+      "title": "年假余额",
+      "entitled": "全年总额 {{days}} 天",
+      "requestCta": "申请休假 / 查看日历"
+    },
+    "notifications": {
+      "title": "异常与合规提醒",
+      "empty": "当前无异常提醒，考勤合规。"
+    },
+    "team": {
+      "title": "我的团队与审批主管",
+      "empty": "同门店暂无其他同事。",
+      "approvers": "审批主管"
+    },
+    "pendingAnnouncements": {
+      "title": "待签收公告与制度",
+      "empty": "所有必读公告均已签收。"
+    },
+    "myDocuments": {
+      "title": "个人文档与工资单",
+      "empty": "暂无个人文档。",
+      "sign": "签收"
+    }
+  },
+  "announcements": {
+    "title": "公司公告与制度文档",
+    "subtitle": "发布全员或指定门店/部门通知与制度，支持员工 SHA-256 不可变阅读签收。",
+    "publishButton": "发布公告",
+    "count": "共 {{count}} 条",
+    "empty": "当前分类下暂无公告。",
+    "allStoresScope": "全企业门店",
+    "acknowledgedBadge": "已签收",
+    "pendingAckBadge": "待签收",
+    "acknowledgeBtn": "确认阅读并签收",
+    "alreadyAcknowledged": "您已完成 SHA-256 电子签收。",
+    "acknowledgedSuccess": "签收成功，已写入不可变存证。",
+    "publishSuccess": "公告已发布。",
+    "downloadAttachment": "下载附件 PDF（60秒链接）",
+    "ackReportTitle": "签收进度明细",
+    "pendingListTitle": "未签收 ({{count}})",
+    "acknowledgedListTitle": "已签收 ({{count}})",
+    "categories": {
+      "all": "全部",
+      "notice": "通知公告",
+      "policy": "制度资料"
+    },
+    "publishDrawer": {
+      "title": "发布新公告 / 制度",
+      "description": "支持按门店或部门定向发布，并可附加 PDF 文件与开启强制签收。",
+      "category": "分类",
+      "storeScope": "适用门店",
+      "departmentScope": "适用部门（可选）",
+      "departmentPlaceholder": "留空表示全员",
+      "docTitle": "公告标题",
+      "body": "正文内容",
+      "attachment": "附件 PDF / 图片（可选）",
+      "requiresAck": "要求员工进行 SHA-256 阅读签收",
+      "isPinned": "置顶显示",
+      "requiredFields": "请填写标题和正文内容。",
+      "submit": "立即发布",
+      "publishing": "正在发布…",
+      "cancel": "取消"
+    }
+  },
+  "reports": {
+    "title": "管理层报表中心",
+    "subtitle": "实时汇总在职人数、工时与加班、合规预警与两级请假进度，支持一键导出 Excel CSV 与 A4 PDF。",
+    "exportCsv": "导出 CSV (Excel)",
+    "exportPdf": "导出 A4 PDF",
+    "filters": {
+      "fromDate": "开始日期",
+      "toDate": "结束日期",
+      "leaveYear": "假期统计年份",
+      "store": "所属门店",
+      "department": "部门"
+    },
+    "kpi": {
+      "headcount": "在职员工总数",
+      "workedHours": "累计净工时",
+      "overtimeHours": "加班工时",
+      "alerts": "合规预警数",
+      "alertsHint": "依据西班牙工时红线自动核算",
+      "pendingLeaves": "待审批请假",
+      "pendingManager": "待经理审",
+      "pendingHr": "待 HR 审",
+      "approvedVacations": "已批年假天数",
+      "approvedSickDays": "已批病假天数",
+      "pendingAck": "待签收公告人次数",
+      "pendingAckHint": "含全员及指定门店必读制度"
+    },
+    "cards": {
+      "attendance": {
+        "title": "考勤工时与加班汇总报表",
+        "description": "按员工与门店统计所选周期内的常规工时、加班工时与合规预警。"
+      },
+      "leaves": {
+        "title": "假期与缺勤统计报表",
+        "description": "汇总全年已批年假、待审请假及缺勤天数（会计师角色自动脱敏医疗病假）。"
+      },
+      "roster": {
+        "title": "员工花名册与合同合规报表",
+        "description": "导出当前权限范围内的在职人员、合同类型与每周工时（不含敏感证件明文）。"
+      }
+    },
+    "storeBreakdown": {
+      "title": "各门店运营与合规明细",
+      "empty": "当前筛选条件下暂无门店汇总数据。",
+      "store": "门店",
+      "employees": "在职人数",
+      "workedHours": "累计工时",
+      "overtimeHours": "加班工时",
+      "alerts": "合规预警",
+      "pendingLeaves": "待审请假"
+    }
+  },
+  "errors": {
+    "ATTENDANCE_SHIFT_ALREADY_OPEN": "您当前已在上班中，无需重复上班打卡（如需操作请选择休息或下班）。",
+    "ATTENDANCE_NO_OPEN_SHIFT": "您当前尚未上班打卡，请先完成上班打卡后再执行该操作。",
+    "ATTENDANCE_BREAK_ALREADY_OPEN": "您当前已在休息中，无需重复开始休息。",
+    "ATTENDANCE_NO_OPEN_BREAK": "当前没有进行中的休息记录，无法结束休息。",
+    "ATTENDANCE_BREAK_NOT_ENDED": "请先结束当前休息，再执行下班签退。",
+    "ATTENDANCE_CHRONOLOGY_ERROR": "打卡或补卡时间顺序无效，请检查时间是否在当前班次之后。",
+    "ATTENDANCE_INVALID_TIME_RANGE": "工时时段顺序无效，请确认上班 < 开始休息 < 结束休息 < 下班。",
+    "ATTENDANCE_SESSION_OVERLAP": "所选日期时段与已有考勤班次重叠，请核对时间。",
+    "LEAVE_REQUIRES_MANAGER_FIRST": "该请假单尚未经过门店经理初审，请先由门店经理审批。",
+    "LEAVE_REQUIRES_HR_FINAL": "门店经理已通过初审，需由 HR 或企业主执行终审。",
+    "PAYROLL_MONTH_CLOSED": "该门店当月工资单已封账锁定，无法再修改考勤或请假记录。",
+    "PAYROLL_CONFLICT": "月度工资封账状态发生冲突，请刷新后重试。",
+    "RETENTION_LOCK": "该员工档案处于西班牙 4 年法定留存锁定期，无法删除或修改。",
+    "FROZEN_RECORD": "该记录已封存或匿名化，当前处于只读状态。",
+    "LEAVE_OVERLAP": "所选请假日期与已有请假申请重叠，请核对日期范围。",
+    "LEAVE_INSUFFICIENT_BALANCE": "剩余年假余额不足，无法提交该申请。",
+    "SHIFT_CONFLICT": "排班时间与该员工现有班次冲突，请调整时段。",
+    "FILE_INVALID_TYPE": "不支持的文件格式，请上传符合要求的 PDF 或图片文件。",
+    "FILE_TOO_LARGE": "文件体积超出限制，请压缩后重新上传。",
+    "IMPORT_INVALID_FILE": "导入文件格式无效或已损坏，请使用标准 CSV / XLSX 模板。",
+    "INVALID_NIE_DNI": "西班牙 DNI / NIE 格式或校验位无效，请核对后重试。",
+    "INVALID_IBAN": "西班牙银行账号 (IBAN) 格式或校验位无效。",
+    "INVALID_NAF": "西班牙社保号 (NAF) 格式无效，应为 12 位数字。",
+    "DUPLICATE_RECORD": "已存在相同记录，请勿重复提交。",
+    "AUTH_INVALID_TOKEN": "登录会话已过期或无效，请重新登录。",
+    "FORBIDDEN": "您当前的角色权限不足，无法执行此操作。",
+    "SIGNED_URL_INVALID": "文件下载链接已失效，请重新获取。",
+    "NOT_FOUND": "请求的记录不存在或已被移除。",
+    "LAST_OWNER_PROTECTED": "企业至少需保留一名所有者 (Owner)，无法移除或降级最后一位所有者。",
+    "CONFLICT": "数据状态发生冲突，请刷新页面后重试。",
+    "VALIDATION_ERROR": "提交的数据未通过校验，请检查填写内容。",
+    "REQUEST_VALIDATION_ERROR": "请求参数格式有误，请检查填写内容后重试。",
+    "PII_SERVICE_ERROR": "敏感证件加密服务暂不可用，请稍后重试。",
+    "STORAGE_SERVICE_ERROR": "文件存储服务暂不可用，请稍后重试。",
+    "INTERNAL_ERROR": "服务器处理时遇到问题，请稍后重试。",
+    "HTTP_401": "登录状态已失效，请重新登录。",
+    "HTTP_403": "您没有权限执行此操作。",
+    "HTTP_404": "未找到请求的资源或记录。",
+    "HTTP_405": "当前操作不被允许。",
+    "HTTP_422": "填写内容格式有误，请检查后重试。",
+    "HTTP_ERROR": "请求未能完成，请稍后重试。",
+    "NETWORK_ERROR": "网络连接异常，请检查网络后重试。",
+    "GENERIC": "操作未能完成，请稍后重试。"
   }
 }

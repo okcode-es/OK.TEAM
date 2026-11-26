@@ -5,36 +5,47 @@ from decimal import Decimal
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, File, Query, Response, UploadFile, status
 from pydantic import BaseModel, Field
 
+from app.application.bulk_import import BulkImportEmployeesUseCase, DownloadImportTemplateUseCase
 from app.application.employees import (
     AnonymizeEmployeeUseCase,
     CreateEmployeeCommand,
     CreateEmployeeUseCase,
+    DeleteEmployeeAvatarUseCase,
     GetEmployeeSensitivePiiUseCase,
     GetEmployeeUseCase,
     ListEmployeesUseCase,
     TerminateEmployeeUseCase,
     UpdateEmployeeCommand,
     UpdateEmployeeUseCase,
+    UploadEmployeeAvatarUseCase,
+    mint_avatar_url,
 )
+from app.domain.bulk_import import MAX_BULK_IMPORT_FILE_BYTES
+from app.domain.documents import DocumentStoragePort
 from app.domain.employees import (
+    MAX_AVATAR_SIZE_BYTES,
     ContractType,
     Employee,
     EmploymentStatus,
     PiiCipher,
     WorkScheduleType,
 )
+from app.domain.organization import EntityNotFoundError
 from app.domain.repositories import EmployeeRepository, StoreRepository
 from app.domain.security import AuthenticatedPrincipal
+from app.infrastructure.document_storage import LocalDocumentStorageAdapter, SignedTokenError
 from app.interfaces.api.deps import (
     CommitFn,
     get_commit_fn,
     get_current_principal,
+    get_document_storage,
     get_employee_repository,
     get_pii_cipher,
     get_store_repository,
+    get_utc_now,
 )
 
 router = APIRouter(prefix="/employees", tags=["employees"])
@@ -45,6 +56,10 @@ class EmployeeCreateRequest(BaseModel):
     employee_code: str = Field(min_length=1, max_length=32)
     full_name: str = Field(min_length=1, max_length=160)
     preferred_name: str = Field(default="", max_length=120)
+    department: str = Field(default="", max_length=100)
+    job_title: str = Field(default="", max_length=120)
+    emergency_contact_name: str = Field(default="", max_length=120)
+    emergency_contact_phone: str = Field(default="", max_length=40)
     email: str = Field(default="", max_length=255)
     phone: str = Field(default="", max_length=40)
     user_id: UUID | None = None
@@ -57,6 +72,7 @@ class EmployeeCreateRequest(BaseModel):
         le=Decimal("40.00"),
     )
     annual_vacation_days: int = Field(default=30, ge=30, le=90)
+    default_break_minutes: int | None = Field(default=None, ge=5, le=180)
     hire_date: date
     nie_dni: str | None = Field(default=None, max_length=32)
     iban: str | None = Field(default=None, max_length=40)
@@ -68,6 +84,10 @@ class EmployeeUpdateRequest(BaseModel):
     employee_code: str = Field(min_length=1, max_length=32)
     full_name: str = Field(min_length=1, max_length=160)
     preferred_name: str = Field(default="", max_length=120)
+    department: str = Field(default="", max_length=100)
+    job_title: str = Field(default="", max_length=120)
+    emergency_contact_name: str = Field(default="", max_length=120)
+    emergency_contact_phone: str = Field(default="", max_length=40)
     email: str = Field(default="", max_length=255)
     phone: str = Field(default="", max_length=40)
     user_id: UUID | None = None
@@ -76,6 +96,7 @@ class EmployeeUpdateRequest(BaseModel):
     work_schedule_type: WorkScheduleType
     contracted_weekly_hours: Decimal = Field(gt=Decimal("0"), le=Decimal("40.00"))
     annual_vacation_days: int = Field(ge=30, le=90)
+    default_break_minutes: int | None = Field(default=None, ge=5, le=180)
     hire_date: date
     employment_status: EmploymentStatus = EmploymentStatus.ACTIVE
     # Omit/null to preserve existing encrypted value; send "" to clear; send new value to rotate.
@@ -98,6 +119,10 @@ class EmployeeResponse(BaseModel):
     employee_code: str
     full_name: str
     preferred_name: str
+    department: str
+    job_title: str = ""
+    emergency_contact_name: str = ""
+    emergency_contact_phone: str = ""
     email: str
     phone: str
     birth_date: date | None
@@ -105,6 +130,7 @@ class EmployeeResponse(BaseModel):
     work_schedule_type: WorkScheduleType
     contracted_weekly_hours: Decimal
     annual_vacation_days: int
+    default_break_minutes: int | None = None
     is_overtime_prohibited: bool
     hire_date: date
     termination_date: date | None
@@ -115,13 +141,19 @@ class EmployeeResponse(BaseModel):
     has_iban: bool
     has_naf: bool
     employment_status: EmploymentStatus
+    avatar_url: str | None = None
     retention_until: datetime | None
     anonymized_at: datetime | None
     created_at: datetime
     updated_at: datetime
 
     @classmethod
-    def from_domain(cls, employee: Employee) -> EmployeeResponse:
+    def from_domain(
+        cls,
+        employee: Employee,
+        *,
+        avatar_url: str | None = None,
+    ) -> EmployeeResponse:
         return cls(
             id=employee.id,
             tenant_id=employee.tenant_id,
@@ -130,6 +162,10 @@ class EmployeeResponse(BaseModel):
             employee_code=employee.employee_code,
             full_name=employee.full_name,
             preferred_name=employee.preferred_name,
+            department=employee.department,
+            job_title=employee.job_title,
+            emergency_contact_name=employee.emergency_contact_name,
+            emergency_contact_phone=employee.emergency_contact_phone,
             email=employee.email,
             phone=employee.phone,
             birth_date=employee.birth_date,
@@ -137,6 +173,7 @@ class EmployeeResponse(BaseModel):
             work_schedule_type=employee.work_schedule_type,
             contracted_weekly_hours=employee.contracted_weekly_hours,
             annual_vacation_days=employee.annual_vacation_days,
+            default_break_minutes=employee.default_break_minutes,
             is_overtime_prohibited=employee.is_overtime_prohibited,
             hire_date=employee.hire_date,
             termination_date=employee.termination_date,
@@ -147,6 +184,7 @@ class EmployeeResponse(BaseModel):
             has_iban=employee.iban_enc is not None,
             has_naf=employee.naf_enc is not None,
             employment_status=employee.employment_status,
+            avatar_url=avatar_url,
             retention_until=employee.retention_until,
             anonymized_at=employee.anonymized_at,
             created_at=employee.created_at,
@@ -168,6 +206,149 @@ class EmployeeSensitivePiiResponse(BaseModel):
     naf: str | None
 
 
+class BulkImportErrorResponse(BaseModel):
+    row_number: int
+    field: str
+    code: str
+    message: str
+
+
+class BulkImportResponse(BaseModel):
+    dry_run: bool
+    committed: bool
+    total_rows: int
+    valid_rows: int
+    error_rows: int
+    created_count: int
+    errors: list[BulkImportErrorResponse]
+
+
+@router.get(
+    "/import/template",
+    operation_id="downloadEmployeeImportTemplate",
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {
+            "content": {
+                "text/csv": {},
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {},
+            },
+            "description": "Download CSV or XLSX bulk employee import template (owner / hr only)",
+        }
+    },
+)
+async def download_employee_import_template(
+    principal: Annotated[AuthenticatedPrincipal, Depends(get_current_principal)],
+    file_format: Annotated[str, Query(alias="format")] = "csv",
+) -> Response:
+    content, media_type, filename = DownloadImportTemplateUseCase().execute(
+        principal, file_format=file_format
+    )
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post(
+    "/import",
+    operation_id="bulkImportEmployees",
+    response_model=BulkImportResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Validate or atomically bulk-import employees from CSV/XLSX (owner / hr only)",
+)
+async def bulk_import_employees(
+    principal: Annotated[AuthenticatedPrincipal, Depends(get_current_principal)],
+    employee_repo: Annotated[EmployeeRepository, Depends(get_employee_repository)],
+    store_repo: Annotated[StoreRepository, Depends(get_store_repository)],
+    pii_cipher: Annotated[PiiCipher, Depends(get_pii_cipher)],
+    commit: Annotated[CommitFn, Depends(get_commit_fn)],
+    now_utc: Annotated[datetime, Depends(get_utc_now)],
+    file: Annotated[UploadFile, File()],
+    dry_run: Annotated[bool, Query()] = False,
+) -> BulkImportResponse:
+    content = await file.read(MAX_BULK_IMPORT_FILE_BYTES + 1)
+    result = await BulkImportEmployeesUseCase(
+        employee_repo, store_repo, pii_cipher
+    ).execute(
+        principal,
+        filename=file.filename or "employees.csv",
+        content=content,
+        dry_run=dry_run,
+        now_utc=now_utc,
+    )
+    if result.committed:
+        await commit()
+    return BulkImportResponse(
+        dry_run=result.dry_run,
+        committed=result.committed,
+        total_rows=result.total_rows,
+        valid_rows=result.valid_rows,
+        error_rows=result.error_rows,
+        created_count=result.created_count,
+        errors=[
+            BulkImportErrorResponse(
+                row_number=e.row_number,
+                field=e.field,
+                code=e.code,
+                message=e.message,
+            )
+            for e in result.errors
+        ],
+    )
+
+
+@router.get(
+    "/avatars/local/{token}",
+    operation_id="getLocalEmployeeAvatar",
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {
+            "content": {"image/png": {}, "image/jpeg": {}, "image/webp": {}},
+            "description": "Short-lived (<= 60s) HMAC-signed employee avatar image",
+        }
+    },
+)
+async def get_local_employee_avatar(
+    token: str,
+    storage: Annotated[DocumentStoragePort, Depends(get_document_storage)],
+    employee_repo: Annotated[EmployeeRepository, Depends(get_employee_repository)],
+) -> Response:
+    if not isinstance(storage, LocalDocumentStorageAdapter):
+        raise SignedTokenError("Local avatar endpoint is disabled for current storage backend")
+
+    content, mime_type, storage_key = storage.verify_and_read_avatar(token)
+    parts = storage_key.split("/")
+    if len(parts) != 4 or parts[0] != "avatars":
+        raise SignedTokenError("Invalid avatar storage key in token")
+    try:
+        tenant_id = UUID(parts[1])
+        employee_id = UUID(parts[2])
+    except ValueError as exc:
+        raise SignedTokenError("Invalid UUID in avatar storage key") from exc
+
+    emp = await employee_repo.get_by_id(tenant_id, employee_id)
+    if (
+        emp is None
+        or emp.deleted_at is not None
+        or emp.employment_status == EmploymentStatus.ANONYMIZED
+        or emp.avatar_storage_key != storage_key
+    ):
+        raise EntityNotFoundError("Avatar not found or employee anonymized")
+
+    return Response(
+        content=content,
+        media_type=mime_type,
+        headers={
+            "X-Content-Type-Options": "nosniff",
+            "Content-Security-Policy": "default-src 'none'",
+            "Cache-Control": "no-store",
+            "Content-Disposition": "inline",
+        },
+    )
+
+
 @router.get(
     "",
     operation_id="listEmployees",
@@ -177,6 +358,7 @@ class EmployeeSensitivePiiResponse(BaseModel):
 async def list_employees(
     principal: Annotated[AuthenticatedPrincipal, Depends(get_current_principal)],
     employee_repo: Annotated[EmployeeRepository, Depends(get_employee_repository)],
+    storage: Annotated[DocumentStoragePort, Depends(get_document_storage)],
     store_id: Annotated[UUID | None, Query()] = None,
     employment_status: Annotated[EmploymentStatus | None, Query(alias="status")] = None,
 ) -> EmployeeListResponse:
@@ -186,9 +368,16 @@ async def list_employees(
         store_id=store_id,
         status=employment_status,
     )
+    responses = [
+        EmployeeResponse.from_domain(
+            item,
+            avatar_url=await mint_avatar_url(storage, item),
+        )
+        for item in items
+    ]
     return EmployeeListResponse(
-        items=[EmployeeResponse.from_domain(item) for item in items],
-        total=len(items),
+        items=responses,
+        total=len(responses),
     )
 
 
@@ -205,6 +394,7 @@ async def create_employee(
     employee_repo: Annotated[EmployeeRepository, Depends(get_employee_repository)],
     store_repo: Annotated[StoreRepository, Depends(get_store_repository)],
     pii_cipher: Annotated[PiiCipher, Depends(get_pii_cipher)],
+    storage: Annotated[DocumentStoragePort, Depends(get_document_storage)],
     commit: Annotated[CommitFn, Depends(get_commit_fn)],
 ) -> EmployeeResponse:
     use_case = CreateEmployeeUseCase(employee_repo, store_repo, pii_cipher)
@@ -215,6 +405,10 @@ async def create_employee(
             employee_code=payload.employee_code,
             full_name=payload.full_name,
             preferred_name=payload.preferred_name,
+            department=payload.department,
+            job_title=payload.job_title,
+            emergency_contact_name=payload.emergency_contact_name,
+            emergency_contact_phone=payload.emergency_contact_phone,
             email=payload.email,
             phone=payload.phone,
             user_id=payload.user_id,
@@ -223,6 +417,7 @@ async def create_employee(
             work_schedule_type=payload.work_schedule_type,
             contracted_weekly_hours=payload.contracted_weekly_hours,
             annual_vacation_days=payload.annual_vacation_days,
+            default_break_minutes=payload.default_break_minutes,
             hire_date=payload.hire_date,
             nie_dni=payload.nie_dni,
             iban=payload.iban,
@@ -243,10 +438,14 @@ async def get_employee(
     employee_id: UUID,
     principal: Annotated[AuthenticatedPrincipal, Depends(get_current_principal)],
     employee_repo: Annotated[EmployeeRepository, Depends(get_employee_repository)],
+    storage: Annotated[DocumentStoragePort, Depends(get_document_storage)],
 ) -> EmployeeResponse:
     use_case = GetEmployeeUseCase(employee_repo)
     employee = await use_case.execute(principal, employee_id)
-    return EmployeeResponse.from_domain(employee)
+    return EmployeeResponse.from_domain(
+        employee,
+        avatar_url=await mint_avatar_url(storage, employee),
+    )
 
 
 @router.patch(
@@ -262,6 +461,7 @@ async def update_employee(
     employee_repo: Annotated[EmployeeRepository, Depends(get_employee_repository)],
     store_repo: Annotated[StoreRepository, Depends(get_store_repository)],
     pii_cipher: Annotated[PiiCipher, Depends(get_pii_cipher)],
+    storage: Annotated[DocumentStoragePort, Depends(get_document_storage)],
     commit: Annotated[CommitFn, Depends(get_commit_fn)],
 ) -> EmployeeResponse:
     use_case = UpdateEmployeeUseCase(employee_repo, store_repo, pii_cipher)
@@ -273,6 +473,10 @@ async def update_employee(
             employee_code=payload.employee_code,
             full_name=payload.full_name,
             preferred_name=payload.preferred_name,
+            department=payload.department,
+            job_title=payload.job_title,
+            emergency_contact_name=payload.emergency_contact_name,
+            emergency_contact_phone=payload.emergency_contact_phone,
             email=payload.email,
             phone=payload.phone,
             user_id=payload.user_id,
@@ -281,6 +485,7 @@ async def update_employee(
             work_schedule_type=payload.work_schedule_type,
             contracted_weekly_hours=payload.contracted_weekly_hours,
             annual_vacation_days=payload.annual_vacation_days,
+            default_break_minutes=payload.default_break_minutes,
             hire_date=payload.hire_date,
             employment_status=payload.employment_status,
             nie_dni=payload.nie_dni,
@@ -289,7 +494,10 @@ async def update_employee(
         ),
     )
     await commit()
-    return EmployeeResponse.from_domain(updated)
+    return EmployeeResponse.from_domain(
+        updated,
+        avatar_url=await mint_avatar_url(storage, updated),
+    )
 
 
 @router.get(
@@ -341,6 +549,59 @@ async def terminate_employee(
 
 
 @router.post(
+    "/{employee_id}/avatar",
+    operation_id="uploadEmployeeAvatar",
+    response_model=EmployeeResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Upload or replace employee avatar image (JPEG/PNG/WebP <= 2 MiB)",
+)
+async def upload_employee_avatar(
+    employee_id: UUID,
+    principal: Annotated[AuthenticatedPrincipal, Depends(get_current_principal)],
+    employee_repo: Annotated[EmployeeRepository, Depends(get_employee_repository)],
+    storage: Annotated[DocumentStoragePort, Depends(get_document_storage)],
+    commit: Annotated[CommitFn, Depends(get_commit_fn)],
+    now_utc: Annotated[datetime, Depends(get_utc_now)],
+    file: Annotated[UploadFile, File()],
+) -> EmployeeResponse:
+    content = await file.read(MAX_AVATAR_SIZE_BYTES + 1)
+    mime_type = (file.content_type or "application/octet-stream").split(";")[0].strip().lower()
+    updated = await UploadEmployeeAvatarUseCase(employee_repo, storage).execute(
+        principal,
+        employee_id,
+        mime_type=mime_type,
+        content=content,
+        now_utc=now_utc,
+    )
+    await commit()
+    return EmployeeResponse.from_domain(
+        updated,
+        avatar_url=await mint_avatar_url(storage, updated),
+    )
+
+
+@router.delete(
+    "/{employee_id}/avatar",
+    operation_id="deleteEmployeeAvatar",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Remove employee avatar image",
+)
+async def delete_employee_avatar(
+    employee_id: UUID,
+    principal: Annotated[AuthenticatedPrincipal, Depends(get_current_principal)],
+    employee_repo: Annotated[EmployeeRepository, Depends(get_employee_repository)],
+    storage: Annotated[DocumentStoragePort, Depends(get_document_storage)],
+    commit: Annotated[CommitFn, Depends(get_commit_fn)],
+    now_utc: Annotated[datetime, Depends(get_utc_now)],
+) -> Response:
+    await DeleteEmployeeAvatarUseCase(employee_repo, storage).execute(
+        principal, employee_id, now_utc=now_utc
+    )
+    await commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
     "/{employee_id}/anonymize",
     operation_id="anonymizeEmployee",
     response_model=EmployeeResponse,
@@ -350,9 +611,10 @@ async def anonymize_employee(
     employee_id: UUID,
     principal: Annotated[AuthenticatedPrincipal, Depends(get_current_principal)],
     employee_repo: Annotated[EmployeeRepository, Depends(get_employee_repository)],
+    storage: Annotated[DocumentStoragePort, Depends(get_document_storage)],
     commit: Annotated[CommitFn, Depends(get_commit_fn)],
 ) -> EmployeeResponse:
-    use_case = AnonymizeEmployeeUseCase(employee_repo)
+    use_case = AnonymizeEmployeeUseCase(employee_repo, storage=storage)
     anonymized = await use_case.execute(principal, employee_id)
     await commit()
     return EmployeeResponse.from_domain(anonymized)

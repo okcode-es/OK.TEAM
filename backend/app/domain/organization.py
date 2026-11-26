@@ -121,6 +121,7 @@ class Store:
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    region_code: str = ""
     deleted_at: datetime | None = None
 
 
@@ -136,6 +137,7 @@ class Membership:
     store_ids: frozenset[UUID]
     created_at: datetime
     updated_at: datetime
+    department_scope: str | None = None
     deleted_at: datetime | None = None
 
 
@@ -151,3 +153,5 @@ class TenantMembershipSummary:
     role: UserRole
     status: MembershipStatus
     store_ids: frozenset[UUID]
+    department_scope: str | None = None
+    display_name: str = ""

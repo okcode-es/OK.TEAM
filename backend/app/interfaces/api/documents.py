@@ -28,12 +28,18 @@ from app.domain.documents import (
     StorageBackend,
 )
 from app.domain.organization import EntityNotFoundError
-from app.domain.repositories import DocumentRepository, EmployeeRepository, StoreRepository
+from app.domain.repositories import (
+    AnnouncementRepository,
+    DocumentRepository,
+    EmployeeRepository,
+    StoreRepository,
+)
 from app.domain.security import AuthenticatedPrincipal
 from app.infrastructure.config import Settings
 from app.infrastructure.document_storage import LocalDocumentStorageAdapter, SignedTokenError
 from app.interfaces.api.deps import (
     CommitFn,
+    get_announcement_repository,
     get_app_settings,
     get_commit_fn,
     get_current_principal,
@@ -166,16 +172,19 @@ async def list_documents(
     principal: Annotated[AuthenticatedPrincipal, Depends(get_current_principal)],
     doc_repo: Annotated[DocumentRepository, Depends(get_document_repository)],
     employee_repo: Annotated[EmployeeRepository, Depends(get_employee_repository)],
+    ann_repo: Annotated[AnnouncementRepository, Depends(get_announcement_repository)],
     category: Annotated[DocumentCategory | None, Query()] = None,
     employee_id: Annotated[UUID | None, Query()] = None,
     store_id: Annotated[UUID | None, Query()] = None,
+    period_month: Annotated[str | None, Query()] = None,
     requires_signature: Annotated[bool | None, Query()] = None,
 ) -> DocumentListResponse:
-    items = await ListDocumentsUseCase(doc_repo, employee_repo).execute(
+    items = await ListDocumentsUseCase(doc_repo, employee_repo, ann_repo=ann_repo).execute(
         principal,
         category=category,
         employee_id=employee_id,
         store_id=store_id,
+        period_month=period_month,
         requires_signature=requires_signature,
     )
     return DocumentListResponse(
@@ -301,8 +310,9 @@ async def get_document(
     principal: Annotated[AuthenticatedPrincipal, Depends(get_current_principal)],
     doc_repo: Annotated[DocumentRepository, Depends(get_document_repository)],
     employee_repo: Annotated[EmployeeRepository, Depends(get_employee_repository)],
+    ann_repo: Annotated[AnnouncementRepository, Depends(get_announcement_repository)],
 ) -> DocumentDetailResponse:
-    detail = await GetDocumentUseCase(doc_repo, employee_repo).execute(
+    detail = await GetDocumentUseCase(doc_repo, employee_repo, ann_repo=ann_repo).execute(
         principal, document_id=document_id
     )
     return DocumentDetailResponse(
@@ -324,10 +334,13 @@ async def create_document_signed_url(
     doc_repo: Annotated[DocumentRepository, Depends(get_document_repository)],
     employee_repo: Annotated[EmployeeRepository, Depends(get_employee_repository)],
     storage: Annotated[DocumentStoragePort, Depends(get_document_storage)],
+    ann_repo: Annotated[AnnouncementRepository, Depends(get_announcement_repository)],
     body: CreateSignedUrlRequest | None = None,
 ) -> SignedUrlResponse:
     ttl = body.ttl_seconds if body is not None else 60
-    result = await CreateSignedUrlUseCase(doc_repo, employee_repo, storage).execute(
+    result = await CreateSignedUrlUseCase(
+        doc_repo, employee_repo, storage, ann_repo=ann_repo
+    ).execute(
         principal, document_id=document_id, ttl_seconds=ttl
     )
     response.headers["Cache-Control"] = "no-store"

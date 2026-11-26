@@ -55,12 +55,15 @@ from app.infrastructure.document_storage import LocalDocumentStorageAdapter
 from app.infrastructure.pdf_generator import PurePythonAttendancePdfRenderer
 from app.infrastructure.supabase_jwt import SupabaseJWTVerifier, sign_dev_hs256_token
 from app.interfaces.api.deps import (
+    get_announcement_repository,
     get_attendance_repository,
+    get_break_policy_repository,
     get_commit_fn,
     get_document_repository,
     get_document_storage,
     get_employee_repository,
     get_jwt_verifier,
+    get_leave_entitlement_repository,
     get_leave_repository,
     get_membership_repository,
     get_payroll_closing_repository,
@@ -358,7 +361,7 @@ def test_domain_evaluate_employee_monthly_summary_blockers_and_leaves() -> None:
             start_date=date(2026, 5, 20),
             end_date=date(2026, 5, 20),
             natural_days=1,
-            status=LeaveStatus.PENDING,
+            status=LeaveStatus.PENDING_HR,
             reason="Medico",
             requested_by_user_id=uid,
             reviewed_by_user_id=None,
@@ -701,7 +704,7 @@ def _build_phase5_app(tmp_path: Path):
         start_date=date(2026, 5, 18),
         end_date=date(2026, 5, 18),
         natural_days=1,
-        status=LeaveStatus.PENDING,
+        status=LeaveStatus.PENDING_HR,
         reason="Cita medica",
         requested_by_user_id=emp_uid,
         reviewed_by_user_id=None,
@@ -744,6 +747,10 @@ def _build_phase5_app(tmp_path: Path):
     async def _noop_commit() -> None:
         return None
 
+    class _EmptyAnnRepo:
+        async def list_by_tenant(self, _tenant_id: UUID, *, category: object = None) -> list:
+            return []
+
     app.dependency_overrides[get_jwt_verifier] = lambda: verifier
     app.dependency_overrides[get_tenant_repository] = lambda: org_repo
     app.dependency_overrides[get_store_repository] = lambda: store_repo
@@ -753,8 +760,28 @@ def _build_phase5_app(tmp_path: Path):
     app.dependency_overrides[get_shift_repository] = lambda: shift_repo
     app.dependency_overrides[get_leave_repository] = lambda: leave_repo
     app.dependency_overrides[get_document_repository] = lambda: doc_repo
+    app.dependency_overrides[get_announcement_repository] = lambda: _EmptyAnnRepo()
     app.dependency_overrides[get_document_storage] = lambda: storage
+    class _EmptyBreakPolicyRepo:
+        async def list_by_tenant(self, _tenant_id: UUID) -> list[object]:
+            return []
+
+    class _EmptyLeaveEntitlementRepo:
+        async def get_by_employee_year(
+            self, _tenant_id: UUID, _employee_id: UUID, _year: int
+        ) -> None:
+            return None
+
+        async def list_by_tenant(
+            self, _tenant_id: UUID, *, year: int | None = None, employee_id: UUID | None = None
+        ) -> list[object]:
+            return []
+
     app.dependency_overrides[get_payroll_closing_repository] = lambda: payroll_repo
+    app.dependency_overrides[get_break_policy_repository] = lambda: _EmptyBreakPolicyRepo()
+    app.dependency_overrides[get_leave_entitlement_repository] = (
+        lambda: _EmptyLeaveEntitlementRepo()
+    )
     app.dependency_overrides[get_pdf_renderer] = lambda: PurePythonAttendancePdfRenderer()
     app.dependency_overrides[get_commit_fn] = lambda: _noop_commit
     app.dependency_overrides[get_utc_now] = lambda: now_ref[0]

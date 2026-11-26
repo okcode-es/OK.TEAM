@@ -74,6 +74,10 @@ export function KioskPage() {
       try {
         const res = await apiClient.GET('/api/v1/stores')
         if (cancelled) return
+        if (res.error) {
+          setErrorMessage(extractApiError(res.error))
+          return
+        }
         if (res.data) {
           const activeStores = res.data.items.filter((item) => item.is_active)
           setStores(activeStores)
@@ -86,6 +90,10 @@ export function KioskPage() {
           } else {
             setSelectedStoreId('')
           }
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setErrorMessage(extractApiError(err))
         }
       } finally {
         if (!cancelled) {
@@ -143,16 +151,19 @@ export function KioskPage() {
           source: 'kiosk',
           store_id: selectedStoreId,
           employee_code: trimmedCode,
+          work_mode: 'onsite',
         },
       })
 
       if (res.error || !res.data) {
-        setErrorMessage(extractApiError(res.error, t('common.error')))
+        setErrorMessage(extractApiError(res.error, t('errors.GENERIC')))
         return
       }
 
       setReceipt(res.data)
       setEmployeeCode('')
+    } catch (err) {
+      setErrorMessage(extractApiError(err, t('errors.GENERIC')))
     } finally {
       setSubmittingAction(null)
     }

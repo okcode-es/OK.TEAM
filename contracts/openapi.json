@@ -787,6 +787,189 @@
         }
       }
     },
+    "/api/v1/employees/import/template": {
+      "get": {
+        "tags": [
+          "employees"
+        ],
+        "summary": "Download Employee Import Template",
+        "operationId": "downloadEmployeeImportTemplate",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "csv",
+              "title": "Format"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Download CSV or XLSX bulk employee import template (owner / hr only)",
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "text/csv": {},
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {}
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/employees/import": {
+      "post": {
+        "tags": [
+          "employees"
+        ],
+        "summary": "Validate or atomically bulk-import employees from CSV/XLSX (owner / hr only)",
+        "operationId": "bulkImportEmployees",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "dry_run",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Dry Run"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_bulkImportEmployees"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkImportResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/employees/avatars/local/{token}": {
+      "get": {
+        "tags": [
+          "employees"
+        ],
+        "summary": "Get Local Employee Avatar",
+        "operationId": "getLocalEmployeeAvatar",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Short-lived (<= 60s) HMAC-signed employee avatar image",
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "image/png": {},
+              "image/jpeg": {},
+              "image/webp": {}
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/employees": {
       "get": {
         "tags": [
@@ -1216,6 +1399,137 @@
         }
       }
     },
+    "/api/v1/employees/{employee_id}/avatar": {
+      "post": {
+        "tags": [
+          "employees"
+        ],
+        "summary": "Upload or replace employee avatar image (JPEG/PNG/WebP <= 2 MiB)",
+        "operationId": "uploadEmployeeAvatar",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "employee_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Employee Id"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_uploadEmployeeAvatar"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmployeeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "employees"
+        ],
+        "summary": "Remove employee avatar image",
+        "operationId": "deleteEmployeeAvatar",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "employee_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Employee Id"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/employees/{employee_id}/anonymize": {
       "post": {
         "tags": [
@@ -1329,6 +1643,71 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ClockAttendanceResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/attendance/manual-day": {
+      "post": {
+        "tags": [
+          "attendance"
+        ],
+        "summary": "Record Manual Attendance Day",
+        "operationId": "recordManualAttendanceDay",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordManualDayRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordManualDayResponse"
                 }
               }
             }
@@ -2282,6 +2661,516 @@
         }
       }
     },
+    "/api/v1/leaves/calendar": {
+      "get": {
+        "tags": [
+          "leaves"
+        ],
+        "summary": "Get Leave Calendar",
+        "operationId": "get_leave_calendar",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 2000
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Year"
+            }
+          },
+          {
+            "name": "employee_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Employee Id"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaveCalendarResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/leaves/team-calendar": {
+      "get": {
+        "tags": [
+          "leaves"
+        ],
+        "summary": "GDPR Art. 9 safe team leave calendar (Gantt) within caller scope",
+        "operationId": "get_team_leave_calendar",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "from_date",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "From Date"
+            }
+          },
+          {
+            "name": "to_date",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "To Date"
+            }
+          },
+          {
+            "name": "store_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Store Id"
+            }
+          },
+          {
+            "name": "department",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Department"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamCalendarResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/leaves/entitlements": {
+      "get": {
+        "tags": [
+          "leaves"
+        ],
+        "summary": "List Leave Entitlements",
+        "operationId": "list_leave_entitlements",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2100,
+                  "minimum": 2020
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Year"
+            }
+          },
+          {
+            "name": "employee_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Employee Id"
+            }
+          },
+          {
+            "name": "store_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Store Id"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaveEntitlementListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/leaves/entitlements/bulk": {
+      "post": {
+        "tags": [
+          "leaves"
+        ],
+        "summary": "Bulk Upsert Leave Entitlements",
+        "operationId": "bulk_upsert_leave_entitlements",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkUpsertLeaveEntitlementsBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaveEntitlementListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/leaves/entitlements/{employee_id}": {
+      "put": {
+        "tags": [
+          "leaves"
+        ],
+        "summary": "Upsert Leave Entitlement",
+        "operationId": "upsert_leave_entitlement",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "employee_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Employee Id"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertLeaveEntitlementBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmployeeEntitlementResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/leaves/assign": {
+      "post": {
+        "tags": [
+          "leaves"
+        ],
+        "summary": "Direct Assign Leave",
+        "operationId": "direct_assign_leave",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DirectAssignLeaveBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaveRequestResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/leaves/{leave_id}/review": {
       "post": {
         "tags": [
@@ -2422,6 +3311,146 @@
         }
       }
     },
+    "/api/v1/leaves/{leave_id}/justificante": {
+      "post": {
+        "tags": [
+          "leaves"
+        ],
+        "summary": "Upload Leave Justificante",
+        "operationId": "upload_leave_justificante",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "leave_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Leave Id"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_leave_justificante"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LeaveRequestResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/leaves/{leave_id}/justificante/signed-url": {
+      "post": {
+        "tags": [
+          "leaves"
+        ],
+        "summary": "Create Justificante Signed Url",
+        "operationId": "create_justificante_signed_url",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "leave_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Leave Id"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedUrlResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/documents": {
       "get": {
         "tags": [
@@ -2483,6 +3512,22 @@
                 }
               ],
               "title": "Store Id"
+            }
+          },
+          {
+            "name": "period_month",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Period Month"
             }
           },
           {
@@ -3346,6 +4391,1397 @@
         }
       }
     },
+    "/api/v1/announcements": {
+      "get": {
+        "tags": [
+          "announcements"
+        ],
+        "summary": "List Announcements",
+        "operationId": "list_announcements",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "all",
+                "notice",
+                "policy"
+              ],
+              "type": "string",
+              "default": "all",
+              "title": "Category"
+            }
+          },
+          {
+            "name": "pending_only",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Pending Only"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnouncementListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "announcements"
+        ],
+        "summary": "Create Announcement",
+        "operationId": "create_announcement",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_create_announcement"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnouncementResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/announcements/{announcement_id}": {
+      "get": {
+        "tags": [
+          "announcements"
+        ],
+        "summary": "Get Announcement",
+        "operationId": "get_announcement",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "announcement_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Announcement Id"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnouncementResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/announcements/{announcement_id}/acknowledge": {
+      "post": {
+        "tags": [
+          "announcements"
+        ],
+        "summary": "Acknowledge Announcement",
+        "operationId": "acknowledge_announcement",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "announcement_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Announcement Id"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnouncementAcknowledgementResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/announcements/{announcement_id}/acknowledgements": {
+      "get": {
+        "tags": [
+          "announcements"
+        ],
+        "summary": "List Announcement Acknowledgements",
+        "operationId": "list_announcement_acknowledgements",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "announcement_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Announcement Id"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnnouncementAcknowledgementsReportResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/announcements/{announcement_id}/attachment/signed-url": {
+      "post": {
+        "tags": [
+          "announcements"
+        ],
+        "summary": "Create Announcement Attachment Signed Url",
+        "operationId": "create_announcement_attachment_signed_url",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "announcement_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Announcement Id"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignedUrlResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/break-policies": {
+      "get": {
+        "tags": [
+          "break-policies"
+        ],
+        "summary": "List Break Policies",
+        "operationId": "list_break_policies",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BreakPolicyListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/break-policies/tenant": {
+      "put": {
+        "tags": [
+          "break-policies"
+        ],
+        "summary": "Upsert Tenant Break Policy",
+        "operationId": "upsert_tenant_break_policy",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertBreakPolicyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BreakPolicyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/break-policies/store/{store_id}": {
+      "put": {
+        "tags": [
+          "break-policies"
+        ],
+        "summary": "Upsert Store Break Policy",
+        "operationId": "upsert_store_break_policy",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "store_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Store Id"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertBreakPolicyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BreakPolicyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/break-policies/employee/{employee_id}": {
+      "put": {
+        "tags": [
+          "break-policies"
+        ],
+        "summary": "Upsert Employee Break Policy",
+        "operationId": "upsert_employee_break_policy",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "employee_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Employee Id"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertBreakPolicyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BreakPolicyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/break-policies/{policy_id}": {
+      "delete": {
+        "tags": [
+          "break-policies"
+        ],
+        "summary": "Delete Break Policy",
+        "operationId": "delete_break_policy",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "policy_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Policy Id"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BreakPolicyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/break-policies/effective/{employee_id}": {
+      "get": {
+        "tags": [
+          "break-policies"
+        ],
+        "summary": "Get Effective Break Policy",
+        "operationId": "get_effective_break_policy",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "employee_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Employee Id"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EffectiveBreakPolicyResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/dashboard/admin": {
+      "get": {
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Get Admin Dashboard",
+        "operationId": "get_admin_dashboard",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "store_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Store Id"
+            }
+          },
+          {
+            "name": "department",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Department"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminDashboardResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/dashboard/me": {
+      "get": {
+        "tags": [
+          "dashboard"
+        ],
+        "summary": "Get My Dashboard",
+        "operationId": "get_my_dashboard",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyDashboardResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reports/executive-summary": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Get Executive Summary",
+        "operationId": "getExecutiveSummaryReport",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "from_date",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "From Date"
+            }
+          },
+          {
+            "name": "to_date",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "To Date"
+            }
+          },
+          {
+            "name": "store_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Store Id"
+            }
+          },
+          {
+            "name": "department",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Department"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecutiveSummaryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reports/attendance-summary": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Get Attendance Summary Report",
+        "operationId": "exportAttendanceSummaryReport",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "from_date",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "From Date"
+            }
+          },
+          {
+            "name": "to_date",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "To Date"
+            }
+          },
+          {
+            "name": "store_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Store Id"
+            }
+          },
+          {
+            "name": "department",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Department"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "csv",
+                "pdf"
+              ],
+              "type": "string",
+              "default": "csv",
+              "title": "Format"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Attendance summary report in CSV (UTF-8 BOM) or A4 PDF",
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "text/csv": {},
+              "application/pdf": {}
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reports/leave-summary": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Get Leave Summary Report",
+        "operationId": "exportLeaveSummaryReport",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "year",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 2100,
+              "minimum": 2020,
+              "title": "Year"
+            }
+          },
+          {
+            "name": "store_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Store Id"
+            }
+          },
+          {
+            "name": "department",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Department"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "csv",
+                "pdf"
+              ],
+              "type": "string",
+              "default": "csv",
+              "title": "Format"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Leave summary report in CSV (UTF-8 BOM) or A4 PDF",
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "text/csv": {},
+              "application/pdf": {}
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reports/headcount-roster": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Get Headcount Roster Report",
+        "operationId": "exportHeadcountRosterReport",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "store_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Store Id"
+            }
+          },
+          {
+            "name": "department",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Department"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "csv",
+                "pdf"
+              ],
+              "type": "string",
+              "default": "csv",
+              "title": "Format"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Headcount roster report in CSV (UTF-8 BOM) or A4 PDF",
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "text/csv": {},
+              "application/pdf": {}
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/dev/token": {
       "post": {
         "tags": [
@@ -3390,6 +5826,144 @@
   },
   "components": {
     "schemas": {
+      "AcknowledgementStatusEmployeeResponse": {
+        "properties": {
+          "employee_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Employee Id"
+          },
+          "employee_code": {
+            "type": "string",
+            "title": "Employee Code"
+          },
+          "full_name": {
+            "type": "string",
+            "title": "Full Name"
+          },
+          "department": {
+            "type": "string",
+            "title": "Department"
+          },
+          "acknowledged_at_utc": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acknowledged At Utc"
+          },
+          "statement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Statement"
+          }
+        },
+        "type": "object",
+        "required": [
+          "employee_id",
+          "employee_code",
+          "full_name",
+          "department",
+          "acknowledged_at_utc",
+          "statement"
+        ],
+        "title": "AcknowledgementStatusEmployeeResponse"
+      },
+      "AdminDashboardResponse": {
+        "properties": {
+          "who_is_in": {
+            "items": {
+              "$ref": "#/components/schemas/WhoIsInGroupResponse"
+            },
+            "type": "array",
+            "title": "Who Is In"
+          },
+          "upcoming_birthdays": {
+            "items": {
+              "$ref": "#/components/schemas/UpcomingBirthdayResponse"
+            },
+            "type": "array",
+            "title": "Upcoming Birthdays"
+          },
+          "upcoming_holidays": {
+            "items": {
+              "$ref": "#/components/schemas/UpcomingHolidayResponse"
+            },
+            "type": "array",
+            "title": "Upcoming Holidays"
+          },
+          "quick_reports": {
+            "items": {
+              "$ref": "#/components/schemas/QuickReportEntryResponse"
+            },
+            "type": "array",
+            "title": "Quick Reports"
+          },
+          "recent_announcements": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardAnnouncementSummaryResponse"
+            },
+            "type": "array",
+            "title": "Recent Announcements"
+          },
+          "pending_leaves_count": {
+            "type": "integer",
+            "title": "Pending Leaves Count"
+          },
+          "upcoming_anniversaries": {
+            "items": {
+              "$ref": "#/components/schemas/UpcomingAnniversaryResponse"
+            },
+            "type": "array",
+            "title": "Upcoming Anniversaries",
+            "default": []
+          },
+          "attendance_alerts_count": {
+            "type": "integer",
+            "title": "Attendance Alerts Count",
+            "default": 0
+          },
+          "pending_justificantes_count": {
+            "type": "integer",
+            "title": "Pending Justificantes Count",
+            "default": 0
+          },
+          "unacknowledged_announcements_count": {
+            "type": "integer",
+            "title": "Unacknowledged Announcements Count",
+            "default": 0
+          },
+          "available_departments": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Available Departments",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "who_is_in",
+          "upcoming_birthdays",
+          "upcoming_holidays",
+          "quick_reports",
+          "recent_announcements",
+          "pending_leaves_count"
+        ],
+        "title": "AdminDashboardResponse"
+      },
       "AlertCode": {
         "type": "string",
         "enum": [
@@ -3410,6 +5984,289 @@
           "violation"
         ],
         "title": "AlertSeverity"
+      },
+      "AnnouncementAcknowledgementResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "tenant_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Tenant Id"
+          },
+          "announcement_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Announcement Id"
+          },
+          "employee_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Employee Id"
+          },
+          "acknowledged_by_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Acknowledged By User Id"
+          },
+          "content_sha256_hex": {
+            "type": "string",
+            "title": "Content Sha256 Hex"
+          },
+          "acknowledged_at_utc": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Acknowledged At Utc"
+          },
+          "ip_address": {
+            "type": "string",
+            "title": "Ip Address"
+          },
+          "user_agent": {
+            "type": "string",
+            "title": "User Agent"
+          },
+          "statement": {
+            "type": "string",
+            "title": "Statement"
+          },
+          "retention_until": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Retention Until"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "announcement_id",
+          "employee_id",
+          "acknowledged_by_user_id",
+          "content_sha256_hex",
+          "acknowledged_at_utc",
+          "ip_address",
+          "user_agent",
+          "statement",
+          "retention_until"
+        ],
+        "title": "AnnouncementAcknowledgementResponse"
+      },
+      "AnnouncementAcknowledgementsReportResponse": {
+        "properties": {
+          "announcement_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Announcement Id"
+          },
+          "total_target_count": {
+            "type": "integer",
+            "title": "Total Target Count"
+          },
+          "acknowledged_count": {
+            "type": "integer",
+            "title": "Acknowledged Count"
+          },
+          "pending_count": {
+            "type": "integer",
+            "title": "Pending Count"
+          },
+          "acknowledged": {
+            "items": {
+              "$ref": "#/components/schemas/AcknowledgementStatusEmployeeResponse"
+            },
+            "type": "array",
+            "title": "Acknowledged"
+          },
+          "pending": {
+            "items": {
+              "$ref": "#/components/schemas/AcknowledgementStatusEmployeeResponse"
+            },
+            "type": "array",
+            "title": "Pending"
+          }
+        },
+        "type": "object",
+        "required": [
+          "announcement_id",
+          "total_target_count",
+          "acknowledged_count",
+          "pending_count",
+          "acknowledged",
+          "pending"
+        ],
+        "title": "AnnouncementAcknowledgementsReportResponse"
+      },
+      "AnnouncementCategory": {
+        "type": "string",
+        "enum": [
+          "notice",
+          "policy"
+        ],
+        "title": "AnnouncementCategory"
+      },
+      "AnnouncementListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AnnouncementResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "AnnouncementListResponse"
+      },
+      "AnnouncementResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "tenant_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Tenant Id"
+          },
+          "store_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Store Id"
+          },
+          "department_scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Department Scope"
+          },
+          "category": {
+            "$ref": "#/components/schemas/AnnouncementCategory"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "body": {
+            "type": "string",
+            "title": "Body"
+          },
+          "attachment_document_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attachment Document Id"
+          },
+          "content_sha256_hex": {
+            "type": "string",
+            "title": "Content Sha256 Hex"
+          },
+          "requires_acknowledgement": {
+            "type": "boolean",
+            "title": "Requires Acknowledgement"
+          },
+          "is_pinned": {
+            "type": "boolean",
+            "title": "Is Pinned"
+          },
+          "published_by_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Published By User Id"
+          },
+          "published_at_utc": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Published At Utc"
+          },
+          "retention_until": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Retention Until"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "acknowledged_count": {
+            "type": "integer",
+            "title": "Acknowledged Count",
+            "default": 0
+          },
+          "target_count": {
+            "type": "integer",
+            "title": "Target Count",
+            "default": 0
+          },
+          "acknowledged_by_self": {
+            "type": "boolean",
+            "title": "Acknowledged By Self",
+            "default": false
+          },
+          "acknowledged_at_utc": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acknowledged At Utc"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "store_id",
+          "department_scope",
+          "category",
+          "title",
+          "body",
+          "attachment_document_id",
+          "content_sha256_hex",
+          "requires_acknowledgement",
+          "is_pinned",
+          "published_by_user_id",
+          "published_at_utc",
+          "retention_until",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AnnouncementResponse"
       },
       "AppendCorrectionRequest": {
         "properties": {
@@ -3582,6 +6439,10 @@
           "correction_reason": {
             "type": "string",
             "title": "Correction Reason"
+          },
+          "work_mode": {
+            "$ref": "#/components/schemas/WorkMode",
+            "default": "onsite"
           }
         },
         "type": "object",
@@ -3678,6 +6539,101 @@
         ],
         "title": "AuthMeResponse"
       },
+      "Body_bulkImportEmployees": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_bulkImportEmployees"
+      },
+      "Body_create_announcement": {
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/AnnouncementCategory"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "body": {
+            "type": "string",
+            "title": "Body"
+          },
+          "store_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Store Id"
+          },
+          "department_scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Department Scope"
+          },
+          "requires_acknowledgement": {
+            "type": "boolean",
+            "title": "Requires Acknowledgement",
+            "default": false
+          },
+          "is_pinned": {
+            "type": "boolean",
+            "title": "Is Pinned",
+            "default": false
+          },
+          "file": {
+            "anyOf": [
+              {
+                "type": "string",
+                "contentMediaType": "application/octet-stream"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "category",
+          "title",
+          "body"
+        ],
+        "title": "Body_create_announcement"
+      },
+      "Body_uploadEmployeeAvatar": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_uploadEmployeeAvatar"
+      },
       "Body_upload_document": {
         "properties": {
           "file": {
@@ -3741,6 +6697,379 @@
         ],
         "title": "Body_upload_document"
       },
+      "Body_upload_leave_justificante": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_leave_justificante"
+      },
+      "BreakMode": {
+        "type": "string",
+        "enum": [
+          "fixed_duration",
+          "fixed_window"
+        ],
+        "title": "BreakMode"
+      },
+      "BreakPolicyListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BreakPolicyResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "BreakPolicyListResponse"
+      },
+      "BreakPolicyResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "tenant_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Tenant Id"
+          },
+          "scope_type": {
+            "$ref": "#/components/schemas/BreakScopeType"
+          },
+          "store_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Store Id"
+          },
+          "employee_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Employee Id"
+          },
+          "break_mode": {
+            "$ref": "#/components/schemas/BreakMode"
+          },
+          "duration_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Minutes"
+          },
+          "windows": {
+            "items": {
+              "$ref": "#/components/schemas/BreakWindowSchema"
+            },
+            "type": "array",
+            "title": "Windows"
+          },
+          "is_paid": {
+            "type": "boolean",
+            "title": "Is Paid"
+          },
+          "tracking_mode": {
+            "$ref": "#/components/schemas/BreakTrackingMode"
+          },
+          "min_shift_minutes_for_auto_deduct": {
+            "type": "integer",
+            "title": "Min Shift Minutes For Auto Deduct"
+          },
+          "auto_end_manual_break": {
+            "type": "boolean",
+            "title": "Auto End Manual Break"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "updated_by_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Updated By User Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "scope_type",
+          "store_id",
+          "employee_id",
+          "break_mode",
+          "duration_minutes",
+          "windows",
+          "is_paid",
+          "tracking_mode",
+          "min_shift_minutes_for_auto_deduct",
+          "auto_end_manual_break",
+          "is_active",
+          "updated_by_user_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "BreakPolicyResponse"
+      },
+      "BreakScopeType": {
+        "type": "string",
+        "enum": [
+          "tenant",
+          "store",
+          "employee"
+        ],
+        "title": "BreakScopeType"
+      },
+      "BreakTrackingMode": {
+        "type": "string",
+        "enum": [
+          "manual_punch",
+          "auto_deduct"
+        ],
+        "title": "BreakTrackingMode"
+      },
+      "BreakWindowSchema": {
+        "properties": {
+          "start": {
+            "type": "string",
+            "title": "Start"
+          },
+          "end": {
+            "type": "string",
+            "title": "End"
+          }
+        },
+        "type": "object",
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "BreakWindowSchema"
+      },
+      "BulkImportErrorResponse": {
+        "properties": {
+          "row_number": {
+            "type": "integer",
+            "title": "Row Number"
+          },
+          "field": {
+            "type": "string",
+            "title": "Field"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "row_number",
+          "field",
+          "code",
+          "message"
+        ],
+        "title": "BulkImportErrorResponse"
+      },
+      "BulkImportResponse": {
+        "properties": {
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run"
+          },
+          "committed": {
+            "type": "boolean",
+            "title": "Committed"
+          },
+          "total_rows": {
+            "type": "integer",
+            "title": "Total Rows"
+          },
+          "valid_rows": {
+            "type": "integer",
+            "title": "Valid Rows"
+          },
+          "error_rows": {
+            "type": "integer",
+            "title": "Error Rows"
+          },
+          "created_count": {
+            "type": "integer",
+            "title": "Created Count"
+          },
+          "errors": {
+            "items": {
+              "$ref": "#/components/schemas/BulkImportErrorResponse"
+            },
+            "type": "array",
+            "title": "Errors"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dry_run",
+          "committed",
+          "total_rows",
+          "valid_rows",
+          "error_rows",
+          "created_count",
+          "errors"
+        ],
+        "title": "BulkImportResponse"
+      },
+      "BulkUpsertLeaveEntitlementsBody": {
+        "properties": {
+          "year": {
+            "type": "integer",
+            "maximum": 2100.0,
+            "minimum": 2020.0,
+            "title": "Year"
+          },
+          "base_vacation_days": {
+            "type": "integer",
+            "maximum": 90.0,
+            "minimum": 30.0,
+            "title": "Base Vacation Days"
+          },
+          "carryover_days": {
+            "type": "integer",
+            "maximum": 60.0,
+            "minimum": -30.0,
+            "title": "Carryover Days",
+            "default": 0
+          },
+          "comp_off_days": {
+            "type": "integer",
+            "maximum": 90.0,
+            "minimum": 0.0,
+            "title": "Comp Off Days",
+            "default": 0
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Reason"
+          },
+          "employee_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Employee Ids"
+          },
+          "store_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Store Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "year",
+          "base_vacation_days",
+          "reason"
+        ],
+        "title": "BulkUpsertLeaveEntitlementsBody"
+      },
+      "CalendarHolidayResponse": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "name_es": {
+            "type": "string",
+            "title": "Name Es"
+          },
+          "name_zh": {
+            "type": "string",
+            "title": "Name Zh"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/HolidayScope"
+          },
+          "region_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Region Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "date",
+          "name_es",
+          "name_zh",
+          "scope",
+          "region_code"
+        ],
+        "title": "CalendarHolidayResponse"
+      },
       "ClockAttendanceRequest": {
         "properties": {
           "event_type": {
@@ -3773,6 +7102,22 @@
               }
             ],
             "title": "Employee Code"
+          },
+          "work_mode": {
+            "$ref": "#/components/schemas/WorkMode",
+            "default": "onsite"
+          },
+          "occurred_at_utc": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurred At Utc"
           }
         },
         "type": "object",
@@ -4309,6 +7654,181 @@
         ],
         "title": "DailyAttendanceSummaryResponse"
       },
+      "DashboardAnnouncementSummaryResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "is_pinned": {
+            "type": "boolean",
+            "title": "Is Pinned"
+          },
+          "requires_acknowledgement": {
+            "type": "boolean",
+            "title": "Requires Acknowledgement"
+          },
+          "published_at_utc": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Published At Utc"
+          },
+          "acknowledged_count": {
+            "type": "integer",
+            "title": "Acknowledged Count"
+          },
+          "target_count": {
+            "type": "integer",
+            "title": "Target Count"
+          },
+          "acknowledged_by_self": {
+            "type": "boolean",
+            "title": "Acknowledged By Self",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "category",
+          "title",
+          "is_pinned",
+          "requires_acknowledgement",
+          "published_at_utc",
+          "acknowledged_count",
+          "target_count"
+        ],
+        "title": "DashboardAnnouncementSummaryResponse"
+      },
+      "DashboardApproverResponse": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "role": {
+            "$ref": "#/components/schemas/UserRole"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "display_name",
+          "role"
+        ],
+        "title": "DashboardApproverResponse"
+      },
+      "DashboardMemberItemResponse": {
+        "properties": {
+          "employee_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Employee Id"
+          },
+          "full_name": {
+            "type": "string",
+            "title": "Full Name"
+          },
+          "preferred_name": {
+            "type": "string",
+            "title": "Preferred Name"
+          },
+          "employee_code": {
+            "type": "string",
+            "title": "Employee Code"
+          },
+          "department": {
+            "type": "string",
+            "title": "Department"
+          },
+          "store_name": {
+            "type": "string",
+            "title": "Store Name"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "since_utc": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Since Utc"
+          },
+          "job_title": {
+            "type": "string",
+            "title": "Job Title",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "employee_id",
+          "full_name",
+          "preferred_name",
+          "employee_code",
+          "department",
+          "store_name",
+          "avatar_url"
+        ],
+        "title": "DashboardMemberItemResponse"
+      },
+      "DashboardNotificationResponse": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "local_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Local Date"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "severity": {
+            "type": "string",
+            "title": "Severity"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "local_date",
+          "message",
+          "severity"
+        ],
+        "title": "DashboardNotificationResponse"
+      },
       "DevTokenRequest": {
         "properties": {
           "email": {
@@ -4364,6 +7884,42 @@
           "email"
         ],
         "title": "DevTokenResponse"
+      },
+      "DirectAssignLeaveBody": {
+        "properties": {
+          "employee_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Employee Id"
+          },
+          "leave_type": {
+            "$ref": "#/components/schemas/LeaveType"
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Start Date"
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date",
+            "title": "End Date"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Reason",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "employee_id",
+          "leave_type",
+          "start_date",
+          "end_date"
+        ],
+        "title": "DirectAssignLeaveBody"
       },
       "DocumentCategory": {
         "type": "string",
@@ -4518,6 +8074,93 @@
         ],
         "title": "DocumentReceiptResponse"
       },
+      "EffectiveBreakPolicyResponse": {
+        "properties": {
+          "policy_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Id"
+          },
+          "inherited_from": {
+            "type": "string",
+            "enum": [
+              "employee",
+              "store",
+              "tenant",
+              "legacy_default",
+              "none"
+            ],
+            "title": "Inherited From"
+          },
+          "break_mode": {
+            "$ref": "#/components/schemas/BreakMode"
+          },
+          "duration_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Minutes"
+          },
+          "windows": {
+            "items": {
+              "$ref": "#/components/schemas/BreakWindowSchema"
+            },
+            "type": "array",
+            "title": "Windows"
+          },
+          "is_paid": {
+            "type": "boolean",
+            "title": "Is Paid"
+          },
+          "tracking_mode": {
+            "$ref": "#/components/schemas/BreakTrackingMode"
+          },
+          "min_shift_minutes_for_auto_deduct": {
+            "type": "integer",
+            "title": "Min Shift Minutes For Auto Deduct"
+          },
+          "auto_end_manual_break": {
+            "type": "boolean",
+            "title": "Auto End Manual Break"
+          },
+          "effective_duration_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Duration Minutes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "policy_id",
+          "inherited_from",
+          "break_mode",
+          "duration_minutes",
+          "windows",
+          "is_paid",
+          "tracking_mode",
+          "min_shift_minutes_for_auto_deduct",
+          "auto_end_manual_break"
+        ],
+        "title": "EffectiveBreakPolicyResponse"
+      },
       "EmployeeAttendanceLedgerResponse": {
         "properties": {
           "employee_id": {
@@ -4615,6 +8258,136 @@
         ],
         "title": "EmployeeAttendanceLedgerResponse"
       },
+      "EmployeeClockStateResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "work_mode": {
+            "$ref": "#/components/schemas/WorkMode"
+          },
+          "active_clock_in_utc": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Clock In Utc"
+          },
+          "active_break_start_utc": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Break Start Utc"
+          },
+          "worked_minutes_today": {
+            "type": "integer",
+            "title": "Worked Minutes Today"
+          },
+          "break_minutes_today": {
+            "type": "integer",
+            "title": "Break Minutes Today"
+          },
+          "target_daily_minutes": {
+            "type": "integer",
+            "title": "Target Daily Minutes"
+          },
+          "today_shift_start_utc": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Today Shift Start Utc"
+          },
+          "today_shift_end_utc": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Today Shift End Utc"
+          },
+          "saldo_minutes": {
+            "type": "integer",
+            "title": "Saldo Minutes"
+          },
+          "today_segments": {
+            "items": {
+              "$ref": "#/components/schemas/TodayClockSegmentResponse"
+            },
+            "type": "array",
+            "title": "Today Segments",
+            "default": []
+          },
+          "default_break_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Break Minutes"
+          },
+          "auto_break_end_utc": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Break End Utc"
+          },
+          "effective_break_policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EffectiveBreakPolicyResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "work_mode",
+          "active_clock_in_utc",
+          "active_break_start_utc",
+          "worked_minutes_today",
+          "break_minutes_today",
+          "target_daily_minutes",
+          "today_shift_start_utc",
+          "today_shift_end_utc",
+          "saldo_minutes"
+        ],
+        "title": "EmployeeClockStateResponse"
+      },
       "EmployeeCreateRequest": {
         "properties": {
           "primary_store_id": {
@@ -4638,6 +8411,30 @@
             "type": "string",
             "maxLength": 120,
             "title": "Preferred Name",
+            "default": ""
+          },
+          "department": {
+            "type": "string",
+            "maxLength": 100,
+            "title": "Department",
+            "default": ""
+          },
+          "job_title": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Job Title",
+            "default": ""
+          },
+          "emergency_contact_name": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Emergency Contact Name",
+            "default": ""
+          },
+          "emergency_contact_phone": {
+            "type": "string",
+            "maxLength": 40,
+            "title": "Emergency Contact Phone",
             "default": ""
           },
           "email": {
@@ -4705,6 +8502,19 @@
             "title": "Annual Vacation Days",
             "default": 30
           },
+          "default_break_minutes": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 180.0,
+                "minimum": 5.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Break Minutes"
+          },
           "hire_date": {
             "type": "string",
             "format": "date",
@@ -4755,6 +8565,94 @@
           "hire_date"
         ],
         "title": "EmployeeCreateRequest"
+      },
+      "EmployeeEntitlementResponse": {
+        "properties": {
+          "employee_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Employee Id"
+          },
+          "employee_code": {
+            "type": "string",
+            "title": "Employee Code"
+          },
+          "full_name": {
+            "type": "string",
+            "title": "Full Name"
+          },
+          "preferred_name": {
+            "type": "string",
+            "title": "Preferred Name"
+          },
+          "store_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Store Id"
+          },
+          "department": {
+            "type": "string",
+            "title": "Department"
+          },
+          "year": {
+            "type": "integer",
+            "title": "Year"
+          },
+          "base_vacation_days": {
+            "type": "integer",
+            "title": "Base Vacation Days"
+          },
+          "carryover_days": {
+            "type": "integer",
+            "title": "Carryover Days"
+          },
+          "comp_off_days": {
+            "type": "integer",
+            "title": "Comp Off Days"
+          },
+          "entitled_days": {
+            "type": "integer",
+            "title": "Entitled Days"
+          },
+          "approved_days": {
+            "type": "integer",
+            "title": "Approved Days"
+          },
+          "pending_days": {
+            "type": "integer",
+            "title": "Pending Days"
+          },
+          "remaining_days": {
+            "type": "integer",
+            "title": "Remaining Days"
+          },
+          "adjustments": {
+            "items": {
+              "$ref": "#/components/schemas/LeaveEntitlementAdjustmentResponse"
+            },
+            "type": "array",
+            "title": "Adjustments"
+          }
+        },
+        "type": "object",
+        "required": [
+          "employee_id",
+          "employee_code",
+          "full_name",
+          "preferred_name",
+          "store_id",
+          "department",
+          "year",
+          "base_vacation_days",
+          "carryover_days",
+          "comp_off_days",
+          "entitled_days",
+          "approved_days",
+          "pending_days",
+          "remaining_days",
+          "adjustments"
+        ],
+        "title": "EmployeeEntitlementResponse"
       },
       "EmployeeListResponse": {
         "properties": {
@@ -4818,6 +8716,25 @@
             "type": "string",
             "title": "Preferred Name"
           },
+          "department": {
+            "type": "string",
+            "title": "Department"
+          },
+          "job_title": {
+            "type": "string",
+            "title": "Job Title",
+            "default": ""
+          },
+          "emergency_contact_name": {
+            "type": "string",
+            "title": "Emergency Contact Name",
+            "default": ""
+          },
+          "emergency_contact_phone": {
+            "type": "string",
+            "title": "Emergency Contact Phone",
+            "default": ""
+          },
           "email": {
             "type": "string",
             "title": "Email"
@@ -4851,6 +8768,17 @@
           "annual_vacation_days": {
             "type": "integer",
             "title": "Annual Vacation Days"
+          },
+          "default_break_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Break Minutes"
           },
           "is_overtime_prohibited": {
             "type": "boolean",
@@ -4921,6 +8849,17 @@
           "employment_status": {
             "$ref": "#/components/schemas/EmploymentStatus"
           },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
           "retention_until": {
             "anyOf": [
               {
@@ -4965,6 +8904,7 @@
           "employee_code",
           "full_name",
           "preferred_name",
+          "department",
           "email",
           "phone",
           "birth_date",
@@ -5142,6 +9082,30 @@
             "title": "Preferred Name",
             "default": ""
           },
+          "department": {
+            "type": "string",
+            "maxLength": 100,
+            "title": "Department",
+            "default": ""
+          },
+          "job_title": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Job Title",
+            "default": ""
+          },
+          "emergency_contact_name": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Emergency Contact Name",
+            "default": ""
+          },
+          "emergency_contact_phone": {
+            "type": "string",
+            "maxLength": 40,
+            "title": "Emergency Contact Phone",
+            "default": ""
+          },
           "email": {
             "type": "string",
             "maxLength": 255,
@@ -5202,6 +9166,19 @@
             "maximum": 90.0,
             "minimum": 30.0,
             "title": "Annual Vacation Days"
+          },
+          "default_break_minutes": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 180.0,
+                "minimum": 5.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Break Minutes"
           },
           "hire_date": {
             "type": "string",
@@ -5273,6 +9250,119 @@
         ],
         "title": "EmploymentStatus"
       },
+      "EntitlementAdjustmentType": {
+        "type": "string",
+        "enum": [
+          "base_update",
+          "carryover",
+          "comp_off",
+          "bulk_init"
+        ],
+        "title": "EntitlementAdjustmentType"
+      },
+      "ExecutiveSummaryResponse": {
+        "properties": {
+          "from_date": {
+            "type": "string",
+            "format": "date",
+            "title": "From Date"
+          },
+          "to_date": {
+            "type": "string",
+            "format": "date",
+            "title": "To Date"
+          },
+          "total_active_employees": {
+            "type": "integer",
+            "title": "Total Active Employees"
+          },
+          "full_time_count": {
+            "type": "integer",
+            "title": "Full Time Count"
+          },
+          "part_time_count": {
+            "type": "integer",
+            "title": "Part Time Count"
+          },
+          "contract_breakdown": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Contract Breakdown"
+          },
+          "total_worked_hours": {
+            "type": "string",
+            "title": "Total Worked Hours"
+          },
+          "total_regular_hours": {
+            "type": "string",
+            "title": "Total Regular Hours"
+          },
+          "total_overtime_hours": {
+            "type": "string",
+            "title": "Total Overtime Hours"
+          },
+          "total_compliance_alerts": {
+            "type": "integer",
+            "title": "Total Compliance Alerts"
+          },
+          "pending_manager_leaves": {
+            "type": "integer",
+            "title": "Pending Manager Leaves"
+          },
+          "pending_hr_leaves": {
+            "type": "integer",
+            "title": "Pending Hr Leaves"
+          },
+          "approved_vacation_days": {
+            "type": "integer",
+            "title": "Approved Vacation Days"
+          },
+          "approved_sick_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved Sick Days"
+          },
+          "announcements_pending_ack_count": {
+            "type": "integer",
+            "title": "Announcements Pending Ack Count"
+          },
+          "by_store": {
+            "items": {
+              "$ref": "#/components/schemas/StoreReportSummaryResponse"
+            },
+            "type": "array",
+            "title": "By Store"
+          }
+        },
+        "type": "object",
+        "required": [
+          "from_date",
+          "to_date",
+          "total_active_employees",
+          "full_time_count",
+          "part_time_count",
+          "contract_breakdown",
+          "total_worked_hours",
+          "total_regular_hours",
+          "total_overtime_hours",
+          "total_compliance_alerts",
+          "pending_manager_leaves",
+          "pending_hr_leaves",
+          "approved_vacation_days",
+          "approved_sick_days",
+          "announcements_pending_ack_count",
+          "by_store"
+        ],
+        "title": "ExecutiveSummaryResponse"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -5315,6 +9405,143 @@
           "timestamp_utc"
         ],
         "title": "HealthResponse"
+      },
+      "HolidayScope": {
+        "type": "string",
+        "enum": [
+          "national",
+          "regional"
+        ],
+        "title": "HolidayScope"
+      },
+      "LeaveCalendarResponse": {
+        "properties": {
+          "year": {
+            "type": "integer",
+            "title": "Year"
+          },
+          "employee_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Employee Id"
+          },
+          "region_code": {
+            "type": "string",
+            "title": "Region Code"
+          },
+          "vacation_balance": {
+            "$ref": "#/components/schemas/VacationBalanceResponse"
+          },
+          "type_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Type Counts"
+          },
+          "holidays": {
+            "items": {
+              "$ref": "#/components/schemas/CalendarHolidayResponse"
+            },
+            "type": "array",
+            "title": "Holidays"
+          },
+          "leaves": {
+            "items": {
+              "$ref": "#/components/schemas/LeaveRequestResponse"
+            },
+            "type": "array",
+            "title": "Leaves"
+          }
+        },
+        "type": "object",
+        "required": [
+          "year",
+          "employee_id",
+          "region_code",
+          "vacation_balance",
+          "type_counts",
+          "holidays",
+          "leaves"
+        ],
+        "title": "LeaveCalendarResponse"
+      },
+      "LeaveEntitlementAdjustmentResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "employee_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Employee Id"
+          },
+          "year": {
+            "type": "integer",
+            "title": "Year"
+          },
+          "adjustment_type": {
+            "$ref": "#/components/schemas/EntitlementAdjustmentType"
+          },
+          "delta_days": {
+            "type": "integer",
+            "title": "Delta Days"
+          },
+          "previous_total_days": {
+            "type": "integer",
+            "title": "Previous Total Days"
+          },
+          "new_total_days": {
+            "type": "integer",
+            "title": "New Total Days"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "adjusted_by_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Adjusted By User Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "employee_id",
+          "year",
+          "adjustment_type",
+          "delta_days",
+          "previous_total_days",
+          "new_total_days",
+          "reason",
+          "adjusted_by_user_id",
+          "created_at"
+        ],
+        "title": "LeaveEntitlementAdjustmentResponse"
+      },
+      "LeaveEntitlementListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EmployeeEntitlementResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "LeaveEntitlementListResponse"
       },
       "LeaveListResponse": {
         "properties": {
@@ -5411,6 +9638,81 @@
             "type": "string",
             "title": "Review Note"
           },
+          "manager_reviewed_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manager Reviewed By User Id"
+          },
+          "manager_reviewed_at_utc": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manager Reviewed At Utc"
+          },
+          "manager_review_note": {
+            "type": "string",
+            "title": "Manager Review Note",
+            "default": ""
+          },
+          "hr_reviewed_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hr Reviewed By User Id"
+          },
+          "hr_reviewed_at_utc": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hr Reviewed At Utc"
+          },
+          "hr_review_note": {
+            "type": "string",
+            "title": "Hr Review Note",
+            "default": ""
+          },
+          "assigned_directly": {
+            "type": "boolean",
+            "title": "Assigned Directly",
+            "default": false
+          },
+          "assigned_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned By User Id"
+          },
           "medical_document_id": {
             "anyOf": [
               {
@@ -5465,7 +9767,8 @@
       "LeaveStatus": {
         "type": "string",
         "enum": [
-          "pending",
+          "pending_manager",
+          "pending_hr",
           "approved",
           "rejected",
           "cancelled"
@@ -5477,6 +9780,8 @@
         "enum": [
           "vacation",
           "sick_leave",
+          "medical_appointment",
+          "day_off",
           "paid_leave",
           "unpaid_leave"
         ],
@@ -5515,6 +9820,18 @@
             },
             "type": "array",
             "title": "Store Ids"
+          },
+          "department_scope": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Department Scope"
           }
         },
         "type": "object",
@@ -5586,6 +9903,17 @@
             "type": "array",
             "title": "Store Ids"
           },
+          "department_scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Department Scope"
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -5643,6 +9971,18 @@
             },
             "type": "array",
             "title": "Store Ids"
+          },
+          "department_scope": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Department Scope"
           }
         },
         "type": "object",
@@ -6213,6 +10553,199 @@
         ],
         "title": "MonthlyReadinessPreviewResponse"
       },
+      "MyDashboardEmployeeSummaryResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "employee_code": {
+            "type": "string",
+            "title": "Employee Code"
+          },
+          "full_name": {
+            "type": "string",
+            "title": "Full Name"
+          },
+          "preferred_name": {
+            "type": "string",
+            "title": "Preferred Name"
+          },
+          "department": {
+            "type": "string",
+            "title": "Department"
+          },
+          "store_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Store Id"
+          },
+          "store_name": {
+            "type": "string",
+            "title": "Store Name"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "contracted_weekly_hours": {
+            "type": "string",
+            "title": "Contracted Weekly Hours"
+          },
+          "job_title": {
+            "type": "string",
+            "title": "Job Title",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "employee_code",
+          "full_name",
+          "preferred_name",
+          "department",
+          "store_id",
+          "store_name",
+          "avatar_url",
+          "contracted_weekly_hours"
+        ],
+        "title": "MyDashboardEmployeeSummaryResponse"
+      },
+      "MyDashboardResponse": {
+        "properties": {
+          "has_employee_profile": {
+            "type": "boolean",
+            "title": "Has Employee Profile"
+          },
+          "employee": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MyDashboardEmployeeSummaryResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "clock_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EmployeeClockStateResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "teammates": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardMemberItemResponse"
+            },
+            "type": "array",
+            "title": "Teammates"
+          },
+          "attendance_approvers": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardApproverResponse"
+            },
+            "type": "array",
+            "title": "Attendance Approvers"
+          },
+          "leave_approvers": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardApproverResponse"
+            },
+            "type": "array",
+            "title": "Leave Approvers"
+          },
+          "notifications": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardNotificationResponse"
+            },
+            "type": "array",
+            "title": "Notifications"
+          },
+          "vacation_balance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VacationBalanceResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pending_announcements": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardAnnouncementSummaryResponse"
+            },
+            "type": "array",
+            "title": "Pending Announcements"
+          },
+          "recent_announcements": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardAnnouncementSummaryResponse"
+            },
+            "type": "array",
+            "title": "Recent Announcements"
+          },
+          "recent_documents": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentListItemResponse"
+            },
+            "type": "array",
+            "title": "Recent Documents"
+          },
+          "upcoming_birthdays": {
+            "items": {
+              "$ref": "#/components/schemas/UpcomingBirthdayResponse"
+            },
+            "type": "array",
+            "title": "Upcoming Birthdays"
+          },
+          "upcoming_holidays": {
+            "items": {
+              "$ref": "#/components/schemas/UpcomingHolidayResponse"
+            },
+            "type": "array",
+            "title": "Upcoming Holidays"
+          },
+          "upcoming_anniversaries": {
+            "items": {
+              "$ref": "#/components/schemas/UpcomingAnniversaryResponse"
+            },
+            "type": "array",
+            "title": "Upcoming Anniversaries",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "has_employee_profile",
+          "employee",
+          "clock_state",
+          "teammates",
+          "attendance_approvers",
+          "leave_approvers",
+          "notifications",
+          "vacation_balance",
+          "pending_announcements",
+          "recent_announcements",
+          "recent_documents",
+          "upcoming_birthdays",
+          "upcoming_holidays"
+        ],
+        "title": "MyDashboardResponse"
+      },
       "PublishWeekRequest": {
         "properties": {
           "store_id": {
@@ -6253,6 +10786,164 @@
           "shifts"
         ],
         "title": "PublishWeekResponse"
+      },
+      "QuickReportEntryResponse": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "title_es": {
+            "type": "string",
+            "title": "Title Es"
+          },
+          "title_zh": {
+            "type": "string",
+            "title": "Title Zh"
+          },
+          "endpoint": {
+            "type": "string",
+            "title": "Endpoint"
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "title_es",
+          "title_zh",
+          "endpoint",
+          "available"
+        ],
+        "title": "QuickReportEntryResponse"
+      },
+      "RecordManualDayRequest": {
+        "properties": {
+          "employee_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Employee Id"
+          },
+          "local_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Local Date"
+          },
+          "clock_in_time": {
+            "type": "string",
+            "maxLength": 5,
+            "minLength": 5,
+            "title": "Clock In Time"
+          },
+          "break_start_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 5,
+                "minLength": 5
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Break Start Time"
+          },
+          "break_end_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 5,
+                "minLength": 5
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Break End Time"
+          },
+          "clock_out_time": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 5,
+                "minLength": 5
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clock Out Time"
+          },
+          "work_mode": {
+            "$ref": "#/components/schemas/WorkMode",
+            "default": "onsite"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 300,
+            "title": "Note",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "local_date",
+          "clock_in_time"
+        ],
+        "title": "RecordManualDayRequest"
+      },
+      "RecordManualDayResponse": {
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/AttendanceEventResponse"
+            },
+            "type": "array",
+            "title": "Events"
+          },
+          "employee_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Employee Id"
+          },
+          "employee_code": {
+            "type": "string",
+            "title": "Employee Code"
+          },
+          "employee_name": {
+            "type": "string",
+            "title": "Employee Name"
+          },
+          "store_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Store Id"
+          },
+          "store_name": {
+            "type": "string",
+            "title": "Store Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "events",
+          "employee_id",
+          "employee_code",
+          "employee_name",
+          "store_id",
+          "store_name"
+        ],
+        "title": "RecordManualDayResponse"
       },
       "ReopenMonthlyClosingRequest": {
         "properties": {
@@ -6573,6 +11264,12 @@
             "maxLength": 16,
             "title": "Postal Code",
             "default": ""
+          },
+          "region_code": {
+            "type": "string",
+            "maxLength": 16,
+            "title": "Region Code",
+            "default": ""
           }
         },
         "type": "object",
@@ -6602,6 +11299,50 @@
           "total"
         ],
         "title": "StoreListResponse"
+      },
+      "StoreReportSummaryResponse": {
+        "properties": {
+          "store_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Store Id"
+          },
+          "store_name": {
+            "type": "string",
+            "title": "Store Name"
+          },
+          "active_employees": {
+            "type": "integer",
+            "title": "Active Employees"
+          },
+          "worked_hours": {
+            "type": "string",
+            "title": "Worked Hours"
+          },
+          "overtime_hours": {
+            "type": "string",
+            "title": "Overtime Hours"
+          },
+          "compliance_alerts": {
+            "type": "integer",
+            "title": "Compliance Alerts"
+          },
+          "pending_leaves": {
+            "type": "integer",
+            "title": "Pending Leaves"
+          }
+        },
+        "type": "object",
+        "required": [
+          "store_id",
+          "store_name",
+          "active_employees",
+          "worked_hours",
+          "overtime_hours",
+          "compliance_alerts",
+          "pending_leaves"
+        ],
+        "title": "StoreReportSummaryResponse"
       },
       "StoreResponse": {
         "properties": {
@@ -6639,6 +11380,10 @@
             "type": "string",
             "title": "Postal Code"
           },
+          "region_code": {
+            "type": "string",
+            "title": "Region Code"
+          },
           "is_active": {
             "type": "boolean",
             "title": "Is Active"
@@ -6664,6 +11409,7 @@
           "address",
           "city",
           "postal_code",
+          "region_code",
           "is_active",
           "created_at",
           "updated_at"
@@ -6708,6 +11454,12 @@
             "title": "Postal Code",
             "default": ""
           },
+          "region_code": {
+            "type": "string",
+            "maxLength": 16,
+            "title": "Region Code",
+            "default": ""
+          },
           "is_active": {
             "type": "boolean",
             "title": "Is Active",
@@ -6721,6 +11473,147 @@
           "timezone"
         ],
         "title": "StoreUpdateRequest"
+      },
+      "TeamCalendarEntryResponse": {
+        "properties": {
+          "leave_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Leave Id"
+          },
+          "display_type": {
+            "type": "string",
+            "title": "Display Type"
+          },
+          "status": {
+            "$ref": "#/components/schemas/LeaveStatus"
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Start Date"
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date",
+            "title": "End Date"
+          },
+          "natural_days": {
+            "type": "integer",
+            "title": "Natural Days"
+          }
+        },
+        "type": "object",
+        "required": [
+          "leave_id",
+          "display_type",
+          "status",
+          "start_date",
+          "end_date",
+          "natural_days"
+        ],
+        "title": "TeamCalendarEntryResponse"
+      },
+      "TeamCalendarMemberResponse": {
+        "properties": {
+          "employee_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Employee Id"
+          },
+          "full_name": {
+            "type": "string",
+            "title": "Full Name"
+          },
+          "preferred_name": {
+            "type": "string",
+            "title": "Preferred Name"
+          },
+          "job_title": {
+            "type": "string",
+            "title": "Job Title"
+          },
+          "department": {
+            "type": "string",
+            "title": "Department"
+          },
+          "store_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Store Id"
+          },
+          "store_name": {
+            "type": "string",
+            "title": "Store Name"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/TeamCalendarEntryResponse"
+            },
+            "type": "array",
+            "title": "Entries"
+          }
+        },
+        "type": "object",
+        "required": [
+          "employee_id",
+          "full_name",
+          "preferred_name",
+          "job_title",
+          "department",
+          "store_id",
+          "store_name",
+          "avatar_url",
+          "entries"
+        ],
+        "title": "TeamCalendarMemberResponse"
+      },
+      "TeamCalendarResponse": {
+        "properties": {
+          "from_date": {
+            "type": "string",
+            "format": "date",
+            "title": "From Date"
+          },
+          "to_date": {
+            "type": "string",
+            "format": "date",
+            "title": "To Date"
+          },
+          "holidays": {
+            "items": {
+              "$ref": "#/components/schemas/CalendarHolidayResponse"
+            },
+            "type": "array",
+            "title": "Holidays"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/TeamCalendarMemberResponse"
+            },
+            "type": "array",
+            "title": "Members"
+          }
+        },
+        "type": "object",
+        "required": [
+          "from_date",
+          "to_date",
+          "holidays",
+          "members"
+        ],
+        "title": "TeamCalendarResponse"
       },
       "TenantCreateRequest": {
         "properties": {
@@ -6801,6 +11694,10 @@
           "status": {
             "$ref": "#/components/schemas/MembershipStatus"
           },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
           "store_ids": {
             "items": {
               "type": "string",
@@ -6808,6 +11705,17 @@
             },
             "type": "array",
             "title": "Store Ids"
+          },
+          "department_scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Department Scope"
           }
         },
         "type": "object",
@@ -6819,6 +11727,7 @@
           "default_locale",
           "role",
           "status",
+          "display_name",
           "store_ids"
         ],
         "title": "TenantMembershipSummaryResponse"
@@ -6919,6 +11828,223 @@
         ],
         "title": "TenantUpdateRequest"
       },
+      "TodayClockSegmentResponse": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "work",
+              "break"
+            ],
+            "title": "Kind"
+          },
+          "start_utc": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Start Utc"
+          },
+          "end_utc": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Utc"
+          },
+          "duration_minutes": {
+            "type": "integer",
+            "title": "Duration Minutes"
+          },
+          "work_mode": {
+            "$ref": "#/components/schemas/WorkMode"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "start_utc",
+          "end_utc",
+          "duration_minutes",
+          "work_mode"
+        ],
+        "title": "TodayClockSegmentResponse"
+      },
+      "UpcomingAnniversaryResponse": {
+        "properties": {
+          "employee_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Employee Id"
+          },
+          "full_name": {
+            "type": "string",
+            "title": "Full Name"
+          },
+          "preferred_name": {
+            "type": "string",
+            "title": "Preferred Name"
+          },
+          "job_title": {
+            "type": "string",
+            "title": "Job Title"
+          },
+          "department": {
+            "type": "string",
+            "title": "Department"
+          },
+          "store_name": {
+            "type": "string",
+            "title": "Store Name"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "anniversary_month": {
+            "type": "integer",
+            "title": "Anniversary Month"
+          },
+          "anniversary_day": {
+            "type": "integer",
+            "title": "Anniversary Day"
+          },
+          "years_of_service": {
+            "type": "integer",
+            "title": "Years Of Service"
+          },
+          "days_until": {
+            "type": "integer",
+            "title": "Days Until"
+          }
+        },
+        "type": "object",
+        "required": [
+          "employee_id",
+          "full_name",
+          "preferred_name",
+          "job_title",
+          "department",
+          "store_name",
+          "avatar_url",
+          "anniversary_month",
+          "anniversary_day",
+          "years_of_service",
+          "days_until"
+        ],
+        "title": "UpcomingAnniversaryResponse"
+      },
+      "UpcomingBirthdayResponse": {
+        "properties": {
+          "employee_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Employee Id"
+          },
+          "full_name": {
+            "type": "string",
+            "title": "Full Name"
+          },
+          "preferred_name": {
+            "type": "string",
+            "title": "Preferred Name"
+          },
+          "department": {
+            "type": "string",
+            "title": "Department"
+          },
+          "store_name": {
+            "type": "string",
+            "title": "Store Name"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "birth_month": {
+            "type": "integer",
+            "title": "Birth Month"
+          },
+          "birth_day": {
+            "type": "integer",
+            "title": "Birth Day"
+          },
+          "days_until": {
+            "type": "integer",
+            "title": "Days Until"
+          }
+        },
+        "type": "object",
+        "required": [
+          "employee_id",
+          "full_name",
+          "preferred_name",
+          "department",
+          "store_name",
+          "avatar_url",
+          "birth_month",
+          "birth_day",
+          "days_until"
+        ],
+        "title": "UpcomingBirthdayResponse"
+      },
+      "UpcomingHolidayResponse": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "name_es": {
+            "type": "string",
+            "title": "Name Es"
+          },
+          "name_zh": {
+            "type": "string",
+            "title": "Name Zh"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/HolidayScope"
+          },
+          "region_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Region Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "date",
+          "name_es",
+          "name_zh",
+          "scope",
+          "region_code"
+        ],
+        "title": "UpcomingHolidayResponse"
+      },
       "UpdateShiftRequest": {
         "properties": {
           "start_at_utc": {
@@ -6982,6 +12108,108 @@
         },
         "type": "object",
         "title": "UpdateShiftRequest"
+      },
+      "UpsertBreakPolicyRequest": {
+        "properties": {
+          "break_mode": {
+            "$ref": "#/components/schemas/BreakMode"
+          },
+          "duration_minutes": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 240.0,
+                "minimum": 5.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Minutes"
+          },
+          "windows": {
+            "items": {
+              "$ref": "#/components/schemas/BreakWindowSchema"
+            },
+            "type": "array",
+            "maxItems": 4,
+            "title": "Windows"
+          },
+          "is_paid": {
+            "type": "boolean",
+            "title": "Is Paid",
+            "default": false
+          },
+          "tracking_mode": {
+            "$ref": "#/components/schemas/BreakTrackingMode",
+            "default": "manual_punch"
+          },
+          "min_shift_minutes_for_auto_deduct": {
+            "type": "integer",
+            "maximum": 720.0,
+            "minimum": 60.0,
+            "title": "Min Shift Minutes For Auto Deduct",
+            "default": 360
+          },
+          "auto_end_manual_break": {
+            "type": "boolean",
+            "title": "Auto End Manual Break",
+            "default": true
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "break_mode"
+        ],
+        "title": "UpsertBreakPolicyRequest"
+      },
+      "UpsertLeaveEntitlementBody": {
+        "properties": {
+          "year": {
+            "type": "integer",
+            "maximum": 2100.0,
+            "minimum": 2020.0,
+            "title": "Year"
+          },
+          "base_vacation_days": {
+            "type": "integer",
+            "maximum": 90.0,
+            "minimum": 30.0,
+            "title": "Base Vacation Days"
+          },
+          "carryover_days": {
+            "type": "integer",
+            "maximum": 60.0,
+            "minimum": -30.0,
+            "title": "Carryover Days",
+            "default": 0
+          },
+          "comp_off_days": {
+            "type": "integer",
+            "maximum": 90.0,
+            "minimum": 0.0,
+            "title": "Comp Off Days",
+            "default": 0
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "year",
+          "base_vacation_days",
+          "reason"
+        ],
+        "title": "UpsertLeaveEntitlementBody"
       },
       "UserRole": {
         "type": "string",
@@ -7122,6 +12350,64 @@
           "rows"
         ],
         "title": "WeeklyScheduleResponse"
+      },
+      "WhoIsInGroupResponse": {
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/WhoIsInStatus"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "preview_members": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardMemberItemResponse"
+            },
+            "type": "array",
+            "title": "Preview Members"
+          },
+          "overflow_count": {
+            "type": "integer",
+            "title": "Overflow Count"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardMemberItemResponse"
+            },
+            "type": "array",
+            "title": "Members"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "count",
+          "preview_members",
+          "overflow_count",
+          "members"
+        ],
+        "title": "WhoIsInGroupResponse"
+      },
+      "WhoIsInStatus": {
+        "type": "string",
+        "enum": [
+          "working",
+          "remote",
+          "on_break",
+          "vacation",
+          "absence",
+          "absenteeism"
+        ],
+        "title": "WhoIsInStatus"
+      },
+      "WorkMode": {
+        "type": "string",
+        "enum": [
+          "onsite",
+          "remote"
+        ],
+        "title": "WorkMode"
       },
       "WorkScheduleType": {
         "type": "string",

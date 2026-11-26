@@ -5,11 +5,12 @@ import {
   useReactTable,
   type ColumnDef,
 } from '@tanstack/react-table'
-import { Download } from 'lucide-react'
+import { CalendarPlus, Download } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import {
   apiClient,
   extractApiError,
+  extractFetchError,
   getApiBaseUrl,
   getAuthHeaders,
 } from '@/api/client'
@@ -52,7 +53,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { ManualDayClockSheet } from '@/features/attendance/ManualDayClockSheet'
 import { useAuth } from '@/features/auth/AuthContext'
+import { useClockState } from '@/features/clock/ClockStateContext'
 import { formatUtcDateTime, isImeComposing } from '@/lib/ime'
 
 type PunchAction = Exclude<AttendanceEventType, 'correction'>
@@ -182,12 +185,34 @@ function localDateTimeInZoneToUtcIso(
 export function AttendancePage() {
   const { t, i18n } = useTranslation()
   const { activeTenant } = useAuth()
+  const {
+    clockState,
+    clockBusy,
+    clockVersion,
+    hasEmployeeProfile,
+    employee: selfEmployee,
+    refreshClockState,
+  } = useClockState()
   const locale = i18n.language || 'zh-CN'
 
   const role = activeTenant?.role
   const canCorrect =
     role === 'owner' || role === 'hr' || role === 'store_manager'
-  const canSelfClock = role !== 'accountant'
+  const canSelfClock = role !== 'accountant' && hasEmployeeProfile
+
+  const liveClockStatus = clockState?.status ?? 'not_clocked_in'
+  const isWorkingStatus =
+    liveClockStatus === 'working' || liveClockStatus === 'remote'
+  const isOnBreakStatus = liveClockStatus === 'on_break'
+  const isClockedOutStatus = !isWorkingStatus && !isOnBreakStatus
+
+  const isPunchActionAllowed = (action: PunchAction): boolean => {
+    if (action === 'clock_in') return isClockedOutStatus
+    if (action === 'break_start') return isWorkingStatus
+    if (action === 'break_end') return isOnBreakStatus
+    if (action === 'clock_out') return isWorkingStatus || isOnBreakStatus
+    return false
+  }
 
   const [ledgerItems, setLedgerItems] = useState<
     EmployeeAttendanceLedgerResponse[]
@@ -210,6 +235,15 @@ export function AttendancePage() {
     kind: 'success' | 'error'
     text: string
   } | null>(null)
+  const [useCustomPunchTime, setUseCustomPunchTime] = useState(false)
+  const [customPunchTime, setCustomPunchTime] = useState<string>(() => {
+    const now = new Date()
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  })
+  const [manualDayOpen, setManualDayOpen] = useState(false)
+  const [manualSuccessNotice, setManualSuccessNotice] = useState<string | null>(
+    null,
+  )
 
   const [selectedRowKey, setSelectedRowKey] = useState<string | null>(null)
   const [correctedType, setCorrectedType] =
@@ -222,15 +256,19 @@ export function AttendancePage() {
   const [drawerSuccess, setDrawerSuccess] = useState<string | null>(null)
 
   const loadMetadata = useCallback(async () => {
-    const [storeRes, empRes] = await Promise.all([
-      apiClient.GET('/api/v1/stores'),
-      apiClient.GET('/api/v1/employees'),
-    ])
-    if (storeRes.data) {
-      setStores(storeRes.data.items)
-    }
-    if (empRes.data) {
-      setEmployees(empRes.data.items)
+    try {
+      const [storeRes, empRes] = await Promise.all([
+        apiClient.GET('/api/v1/stores'),
+        apiClient.GET('/api/v1/employees'),
+      ])
+      if (storeRes.data) {
+        setStores(storeRes.data.items)
+      }
+      if (empRes.data) {
+        setEmployees(empRes.data.items)
+      }
+    } catch (err) {
+      setErrorBanner(extractApiError(err))
     }
   }, [])
 
@@ -249,10 +287,12 @@ export function AttendancePage() {
         },
       })
       if (res.error || !res.data) {
-        setErrorBanner(extractApiError(res.error, t('common.error')))
+        setErrorBanner(extractApiError(res.error, t('errors.GENERIC')))
         return
       }
       setLedgerItems(res.data.items)
+    } catch (err) {
+      setErrorBanner(extractApiError(err))
     } finally {
       setLoading(false)
     }
@@ -268,7 +308,7 @@ export function AttendancePage() {
 
   useEffect(() => {
     void loadLedger()
-  }, [loadLedger, activeTenant?.tenant_id])
+  }, [loadLedger, activeTenant?.tenant_id, clockVersion])
 
   const kpis = useMemo(() => {
     let totalHours = 0
@@ -332,20 +372,35 @@ export function AttendancePage() {
   }, [])
 
   const handleSelfClock = async (action: PunchAction) => {
+    if (!isPunchActionAllowed(action)) return
     setSelfClockAction(action)
     setSelfClockFeedback(null)
     try {
+      let occurredAtUtc: string | null = null
+      if (useCustomPunchTime && customPunchTime) {
+        const todayIso = new Date().toISOString().slice(0, 10)
+        const tz =
+          stores.find((s) => s.id === selfEmployee?.store_id)?.timezone ||
+          'Europe/Madrid'
+        occurredAtUtc = localDateTimeInZoneToUtcIso(
+          `${todayIso}T${customPunchTime}`,
+          tz,
+        )
+      }
       const res = await apiClient.POST('/api/v1/attendance/clock', {
         body: {
           event_type: action,
           source: 'web',
+          work_mode: clockState?.work_mode ?? 'onsite',
+          occurred_at_utc: occurredAtUtc,
         },
       })
       if (res.error || !res.data) {
         setSelfClockFeedback({
           kind: 'error',
-          text: extractApiError(res.error, t('common.error')),
+          text: extractApiError(res.error, t('errors.GENERIC')),
         })
+        await refreshClockState()
         return
       }
       const formattedTime = formatUtcDateTime(
@@ -360,7 +415,13 @@ export function AttendancePage() {
           time: formattedTime,
         }),
       })
-      await loadLedger()
+      await Promise.all([refreshClockState(), loadLedger()])
+    } catch (err) {
+      setSelfClockFeedback({
+        kind: 'error',
+        text: extractApiError(err, t('errors.GENERIC')),
+      })
+      await refreshClockState()
     } finally {
       setSelfClockAction(null)
     }
@@ -381,7 +442,7 @@ export function AttendancePage() {
       const headers = await getAuthHeaders()
       const response = await fetch(url, { headers })
       if (!response.ok) {
-        setErrorBanner(t('common.error'))
+        setErrorBanner(await extractFetchError(response, t('errors.GENERIC')))
         return
       }
       const blob = await response.blob()
@@ -393,6 +454,8 @@ export function AttendancePage() {
       link.click()
       link.remove()
       window.URL.revokeObjectURL(objectUrl)
+    } catch (err) {
+      setErrorBanner(extractApiError(err, t('errors.GENERIC')))
     } finally {
       setExportingCsv(false)
     }
@@ -428,13 +491,15 @@ export function AttendancePage() {
         },
       })
       if (res.error || !res.data) {
-        setDrawerError(extractApiError(res.error, t('common.error')))
+        setDrawerError(extractApiError(res.error, t('errors.GENERIC')))
         return
       }
       setCorrectionReason('')
       setSupersedesEventId('none')
       setDrawerSuccess(t('attendance.drawer.savedNotice'))
-      await loadLedger()
+      await Promise.all([refreshClockState(), loadLedger()])
+    } catch (err) {
+      setDrawerError(extractApiError(err, t('errors.GENERIC')))
     } finally {
       setSubmittingCorrection(false)
     }
@@ -582,15 +647,31 @@ export function AttendancePage() {
           <p className="text-sm text-slate-600">{t('attendance.subtitle')}</p>
         </div>
 
-        <Button
-          type="button"
-          variant="outline"
-          disabled={exportingCsv}
-          onClick={() => void handleExportCsv()}
-        >
-          <Download className="h-4 w-4" aria-hidden="true" />
-          {exportingCsv ? t('attendance.exporting') : t('attendance.exportCsv')}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {(canSelfClock || canCorrect) && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setManualDayOpen(true)}
+              className="bg-white"
+            >
+              <CalendarPlus
+                className="h-4 w-4 text-[#2563EB]"
+                aria-hidden="true"
+              />
+              {t('attendance.manualDay.trigger')}
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            disabled={exportingCsv}
+            onClick={() => void handleExportCsv()}
+          >
+            <Download className="h-4 w-4" aria-hidden="true" />
+            {exportingCsv ? t('attendance.exporting') : t('attendance.exportCsv')}
+          </Button>
+        </div>
       </div>
 
       {!canCorrect && (
@@ -640,14 +721,50 @@ export function AttendancePage() {
         <section className="rounded-md border border-slate-200 bg-white px-4 py-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-sm font-semibold text-slate-900">
-                {t('attendance.selfClock.title')}
-              </h2>
-              <p className="text-xs text-slate-500">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-sm font-semibold text-slate-900">
+                  {t('attendance.selfClock.title')}
+                </h2>
+                <Badge
+                  variant="outline"
+                  className={
+                    isWorkingStatus
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                      : isOnBreakStatus
+                        ? 'border-amber-200 bg-amber-50 text-amber-800'
+                        : 'border-slate-200 bg-slate-50 text-slate-600'
+                  }
+                >
+                  {isWorkingStatus
+                    ? t('clock.status.working')
+                    : isOnBreakStatus
+                      ? t('clock.status.onBreak')
+                      : t('clock.status.clockedOut')}
+                </Badge>
+              </div>
+              <p className="mt-0.5 text-xs text-slate-500">
                 {t('attendance.selfClock.subtitle')}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={useCustomPunchTime}
+                  onChange={(e) => setUseCustomPunchTime(e.target.checked)}
+                  className="rounded border-slate-300"
+                />
+                <span>{t('attendance.selfClock.customTimeToggle')}</span>
+              </label>
+              {useCustomPunchTime && (
+                <Input
+                  type="time"
+                  value={customPunchTime}
+                  onChange={(e) => setCustomPunchTime(e.target.value)}
+                  aria-label={t('attendance.selfClock.customTimeToggle')}
+                  className="h-8 w-28 text-xs tabular-nums"
+                />
+              )}
               {PUNCH_ACTIONS.map((action) => (
                 <Button
                   key={action}
@@ -658,7 +775,11 @@ export function AttendancePage() {
                       ? 'default'
                       : 'outline'
                   }
-                  disabled={selfClockAction !== null}
+                  disabled={
+                    selfClockAction !== null ||
+                    clockBusy ||
+                    !isPunchActionAllowed(action)
+                  }
                   onClick={() => void handleSelfClock(action)}
                 >
                   {t(`attendance.actions.${action}`)}
@@ -764,7 +885,7 @@ export function AttendancePage() {
           tabIndex={0}
           role="region"
           aria-labelledby="attendance-table-heading"
-          className="overflow-x-auto focus-visible:ring-2 focus-visible:ring-teal-700 focus-visible:outline-none"
+          className="overflow-x-auto focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:outline-none"
         >
           <Table>
             <TableHeader className="sticky top-0 bg-slate-50">
@@ -1114,6 +1235,28 @@ export function AttendancePage() {
           )}
         </SheetContent>
       </Sheet>
+      <ManualDayClockSheet
+        open={manualDayOpen}
+        onOpenChange={setManualDayOpen}
+        employees={employees}
+        canSelectEmployee={canCorrect}
+        onSuccess={async () => {
+          setManualSuccessNotice(
+            i18n.language.startsWith('es')
+              ? 'Jornada registrada correctamente.'
+              : '整日工时补录已保存并更新台账。',
+          )
+          await loadLedger()
+        }}
+      />
+      {manualSuccessNotice && (
+        <div
+          role="status"
+          className="fixed right-4 bottom-4 z-50 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs font-medium text-emerald-700 shadow-sm"
+        >
+          {manualSuccessNotice}
+        </div>
+      )}
     </div>
   )
 }

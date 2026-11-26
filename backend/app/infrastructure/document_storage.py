@@ -22,11 +22,12 @@ from app.domain.documents import (
 )
 
 _TOKEN_DOMAIN = "okteam-local-doc-v1"
+_AVATAR_TOKEN_DOMAIN = "okteam-local-avatar-v1"
 _MIN_SIGNING_SECRET_BYTES = 32
 _BUCKET_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9._-]+$")
+_UUID_SEG = r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
 _SAFE_KEY_PATTERN = re.compile(
-    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/"
-    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    rf"^(?:{_UUID_SEG}/{_UUID_SEG}|avatars/{_UUID_SEG}/{_UUID_SEG}/{_UUID_SEG})$"
 )
 
 
@@ -77,7 +78,7 @@ class LocalDocumentStorageAdapter:
             raise StorageBackendError("Storage path escapes controlled volume") from exc
         return candidate
 
-    def _sign_payload(self, payload_b64: str) -> str:
+    def _sign_payload(self, payload_b64: str, *, domain: str = _TOKEN_DOMAIN) -> str:
         if len(self._signing_secret.decode("utf-8", errors="ignore").strip().encode("utf-8")) < (
             _MIN_SIGNING_SECRET_BYTES
         ):
@@ -86,7 +87,7 @@ class LocalDocumentStorageAdapter:
             )
         mac = hmac.new(
             self._signing_secret,
-            f"{_TOKEN_DOMAIN}:{payload_b64}".encode("ascii"),
+            f"{domain}:{payload_b64}".encode("ascii"),
             hashlib.sha256,
         ).digest()
         return _b64url_encode(mac)
@@ -123,7 +124,7 @@ class LocalDocumentStorageAdapter:
         payload_b64 = _b64url_encode(
             json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
         )
-        sig_b64 = self._sign_payload(payload_b64)
+        sig_b64 = self._sign_payload(payload_b64, domain=_TOKEN_DOMAIN)
         token = f"{payload_b64}.{sig_b64}"
         base = f"{self._public_api_base_url}{self._api_v1_prefix}"
         url = f"{base}/documents/local-download?token={token}"
@@ -137,7 +138,7 @@ class LocalDocumentStorageAdapter:
             raise SignedTokenError("Malformed signed download token")
         payload_b64, sig_b64 = parts
         try:
-            expected_sig = self._sign_payload(payload_b64)
+            expected_sig = self._sign_payload(payload_b64, domain=_TOKEN_DOMAIN)
         except StorageBackendError as exc:
             raise SignedTokenError("Signing secret unavailable or weak") from exc
 
@@ -177,6 +178,70 @@ class LocalDocumentStorageAdapter:
         target = self._resolve_safe_path(storage_key)
         if target.is_file():
             target.unlink()
+
+    def create_avatar_signed_url(
+        self,
+        *,
+        storage_key: str,
+        mime_type: str,
+        ttl_seconds: int = 60,
+    ) -> SignedUrlResult:
+        if mime_type not in ALLOWED_MIME_TYPES or mime_type == "application/pdf":
+            raise StorageBackendError(f"Disallowed avatar mime_type '{mime_type}'")
+        ttl = validate_signed_url_ttl(ttl_seconds)
+        self._resolve_safe_path(storage_key)
+        now = self._now_fn().astimezone(UTC)
+        expires_at = now + timedelta(seconds=ttl)
+        payload = {
+            "v": 1,
+            "dom": _AVATAR_TOKEN_DOMAIN,
+            "k": storage_key,
+            "ct": mime_type,
+            "exp_ms": int(expires_at.timestamp() * 1000),
+        }
+        payload_b64 = _b64url_encode(
+            json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+        )
+        sig_b64 = self._sign_payload(payload_b64, domain=_AVATAR_TOKEN_DOMAIN)
+        token = f"{payload_b64}.{sig_b64}"
+        base = f"{self._public_api_base_url}{self._api_v1_prefix}"
+        url = f"{base}/employees/avatars/local/{token}"
+        return SignedUrlResult(url=url, expires_at_utc=expires_at, ttl_seconds=ttl)
+
+    def verify_and_read_avatar(self, token: str) -> tuple[bytes, str, str]:
+        if not token or "." not in token:
+            raise SignedTokenError("Invalid signed avatar token")
+        parts = token.split(".")
+        if len(parts) != 2:
+            raise SignedTokenError("Malformed signed avatar token")
+        payload_b64, sig_b64 = parts
+        try:
+            expected_sig = self._sign_payload(payload_b64, domain=_AVATAR_TOKEN_DOMAIN)
+        except StorageBackendError as exc:
+            raise SignedTokenError("Signing secret unavailable or weak") from exc
+        if not hmac.compare_digest(sig_b64, expected_sig):
+            raise SignedTokenError("Invalid signed avatar token signature")
+        try:
+            payload = json.loads(_b64url_decode(payload_b64).decode("utf-8"))
+        except Exception as exc:
+            raise SignedTokenError("Corrupted signed avatar token payload") from exc
+        if not isinstance(payload, dict) or payload.get("dom") != _AVATAR_TOKEN_DOMAIN:
+            raise SignedTokenError("Invalid signed avatar token domain")
+        exp_ms = payload.get("exp_ms")
+        now_ms = int(self._now_fn().astimezone(UTC).timestamp() * 1000)
+        if not isinstance(exp_ms, int) or isinstance(exp_ms, bool) or now_ms > exp_ms:
+            raise SignedTokenError("Signed avatar token has expired")
+        storage_key = str(payload.get("k", ""))
+        mime_type = str(payload.get("ct", ""))
+        if mime_type not in ("image/jpeg", "image/png", "image/webp"):
+            raise SignedTokenError("Disallowed MIME type in signed avatar token")
+        try:
+            target = self._resolve_safe_path(storage_key)
+        except StorageBackendError as exc:
+            raise SignedTokenError("Invalid storage key in avatar token") from exc
+        if not target.is_file():
+            raise SignedTokenError("Avatar object not found in private storage")
+        return target.read_bytes(), mime_type, storage_key
 
 
 class SupabaseDocumentStorageAdapter:

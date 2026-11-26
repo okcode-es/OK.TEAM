@@ -34,6 +34,7 @@ from app.infrastructure.config import Settings
 from app.infrastructure.supabase_jwt import SupabaseJWTVerifier, sign_dev_hs256_token
 from app.interfaces.api.deps import (
     get_attendance_repository,
+    get_break_policy_repository,
     get_commit_fn,
     get_employee_repository,
     get_jwt_verifier,
@@ -841,6 +842,10 @@ def _build_phase3_test_app():
         ) -> bool:
             return False
 
+    class _EmptyBreakPolicyRepo:
+        async def list_by_tenant(self, _tenant_id: UUID) -> list[object]:
+            return []
+
         async def list_closed_months_for_store(
             self, _tenant_id: UUID, _store_id: UUID, _period_months: object
         ) -> set[str]:
@@ -853,6 +858,7 @@ def _build_phase3_test_app():
     app.dependency_overrides[get_employee_repository] = lambda: employee_repo
     app.dependency_overrides[get_attendance_repository] = lambda: attendance_repo
     app.dependency_overrides[get_payroll_closing_repository] = lambda: _OpenPayrollRepo()
+    app.dependency_overrides[get_break_policy_repository] = lambda: _EmptyBreakPolicyRepo()
     app.dependency_overrides[get_commit_fn] = lambda: _noop_commit
     app.dependency_overrides[get_utc_now] = lambda: clock_state["now"]
 
@@ -939,7 +945,7 @@ def test_api_attendance_clock_kiosk_corrections_rbac_and_csv() -> None:
     )
     assert res_mgr_web_unassigned.status_code == 403
 
-    # 4. Legal hold employee blocked from kiosk clock (422)
+    # 4. Legal hold employee blocked from kiosk clock (403 for store_manager, 422 for HR)
     res_hold_kiosk = client.post(
         "/api/v1/attendance/clock",
         headers=_headers(ids["mgr"], t_a),
@@ -950,17 +956,38 @@ def test_api_attendance_clock_kiosk_corrections_rbac_and_csv() -> None:
             "employee_code": "EMP-HOLD",
         },
     )
-    assert res_hold_kiosk.status_code == 422
+    assert res_hold_kiosk.status_code == 403
+    res_hold_kiosk_hr = client.post(
+        "/api/v1/attendance/clock",
+        headers=_headers(ids["hr"], t_a),
+        json={
+            "event_type": "clock_in",
+            "source": "kiosk",
+            "store_id": str(ids["store_a1"]),
+            "employee_code": "EMP-HOLD",
+        },
+    )
+    assert res_hold_kiosk_hr.status_code == 422
 
-    # 5. Employee self-clocks IN (web) — client-spoofed occurred_at_utc is ignored
+    # 5. Employee self-clocks IN (web) — stale >31d occurred_at_utc is rejected (422),
+    # and omitted occurred_at_utc defaults to now_utc (201)
     clock_state["now"] = datetime(2026, 5, 4, 7, 0, 0, tzinfo=UTC)
-    res_in = client.post(
+    res_stale = client.post(
         "/api/v1/attendance/clock",
         headers=_headers(ids["emp"], t_a),
         json={
             "event_type": "clock_in",
             "source": "web",
             "occurred_at_utc": "2020-01-01T00:00:00Z",
+        },
+    )
+    assert res_stale.status_code == 422
+    res_in = client.post(
+        "/api/v1/attendance/clock",
+        headers=_headers(ids["emp"], t_a),
+        json={
+            "event_type": "clock_in",
+            "source": "web",
         },
     )
     assert res_in.status_code == 201

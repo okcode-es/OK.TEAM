@@ -17,6 +17,7 @@ import { useTranslation } from 'react-i18next'
 import {
   apiClient,
   extractApiError,
+  extractFetchError,
   getApiBaseUrl,
   getAuthHeaders,
 } from '@/api/client'
@@ -99,18 +100,21 @@ export function DocumentsPage() {
   const locale = i18n.language || 'zh-CN'
 
   const role = activeTenant?.role
-  const canUpload = role !== 'accountant'
+  const canUpload = Boolean(role)
   const isEmployeeRole = role === 'employee'
   const isManagerRole = role === 'store_manager'
+  const isAccountantRole = role === 'accountant'
 
   const uploadCategories = useMemo<DocumentCategory[]>(() => {
     if (isEmployeeRole) return ['medical_leave']
+    if (isAccountantRole) return ['payslip']
     if (isManagerRole) return MANAGER_UPLOAD_CATEGORIES
     return ALL_CATEGORIES
-  }, [isEmployeeRole, isManagerRole])
+  }, [isEmployeeRole, isAccountantRole, isManagerRole])
 
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [signatureFilter, setSignatureFilter] = useState<string>('all')
+  const [periodMonthFilter, setPeriodMonthFilter] = useState<string>('')
 
   const [items, setItems] = useState<DocumentListItemResponse[]>([])
   const [employees, setEmployees] = useState<EmployeeResponse[]>([])
@@ -169,6 +173,7 @@ export function DocumentsPage() {
                 : signatureFilter === 'not_required'
                   ? false
                   : undefined,
+            period_month: periodMonthFilter.trim() || undefined,
           },
         },
       })
@@ -180,11 +185,12 @@ export function DocumentsPage() {
     } finally {
       setLoading(false)
     }
-  }, [categoryFilter, signatureFilter, t])
+  }, [categoryFilter, signatureFilter, periodMonthFilter, t])
 
   useEffect(() => {
     setCategoryFilter('all')
     setSignatureFilter('all')
+    setPeriodMonthFilter('')
     setDetailOpen(false)
     setDetail(null)
     void loadMetadata()
@@ -302,21 +308,14 @@ export function DocumentsPage() {
       })
 
       if (!response.ok) {
-        let message = t('common.error')
-        try {
-          const payload = (await response.json()) as { detail?: unknown }
-          if (typeof payload.detail === 'string' && payload.detail.trim()) {
-            message = payload.detail
-          }
-        } catch {
-          // ignore non-json error body
-        }
-        setUploadError(message)
+        setUploadError(await extractFetchError(response, t('errors.GENERIC')))
         return
       }
 
       setUploadOpen(false)
       await loadDocuments()
+    } catch (err) {
+      setUploadError(extractApiError(err, t('errors.GENERIC')))
     } finally {
       setUploading(false)
     }
@@ -546,6 +545,14 @@ export function DocumentsPage() {
               </SelectItem>
             </SelectContent>
           </Select>
+
+          <Input
+            type="month"
+            aria-label={t('documents.uploadDrawer.periodMonth')}
+            value={periodMonthFilter}
+            onChange={(e) => setPeriodMonthFilter(e.target.value)}
+            className="h-9 w-40 bg-white text-xs tabular-nums"
+          />
 
           <span className="px-1 text-xs text-slate-500 tabular-nums">
             {t('documents.count', { count: items.length })}
@@ -908,7 +915,7 @@ export function DocumentsPage() {
                         : t('documents.detailDrawer.downloadButton')}
                     </Button>
                     {signedUrlCountdown !== null && signedUrlCountdown > 0 && (
-                      <p className="text-xs text-teal-700 tabular-nums">
+                      <p className="text-xs text-[#2563EB] tabular-nums">
                         {t('documents.detailDrawer.signedUrlActive', {
                           seconds: signedUrlCountdown,
                         })}
@@ -926,12 +933,12 @@ export function DocumentsPage() {
                   {/* Electronic Receipt Section */}
                   <div className="space-y-3">
                     <div className="flex items-center gap-2 text-xs font-semibold tracking-wide text-slate-700 uppercase">
-                      <FileCheck2 className="h-4 w-4 text-teal-700" aria-hidden="true" />
+                      <FileCheck2 className="h-4 w-4 text-[#2563EB]" aria-hidden="true" />
                       <span>{t('documents.detailDrawer.receiptSectionTitle')}</span>
                     </div>
 
                     {canSignSelected && (
-                      <div className="space-y-3 rounded-md border border-teal-200 bg-teal-50/40 p-3">
+                      <div className="space-y-3 rounded-md border border-blue-200 bg-blue-50/40 p-3">
                         <p className="text-xs leading-relaxed text-slate-700">
                           {t('documents.detailDrawer.legalStatement')}
                         </p>

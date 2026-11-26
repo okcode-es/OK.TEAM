@@ -6,7 +6,9 @@ Pure Python standard library only (enforced by scripts/check_domain_purity.py).
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
+from typing import Protocol
 from uuid import UUID
 
 
@@ -60,6 +62,25 @@ class VerifiedIdentity:
     email: str | None = None
 
 
+class EmployeeScopeTarget(Protocol):
+    """Minimal employee projection needed for store + department scope checks."""
+
+    @property
+    def primary_store_id(self) -> UUID: ...
+
+    @property
+    def department(self) -> str: ...
+
+    @property
+    def employment_status(self) -> str: ...
+
+    @property
+    def deleted_at(self) -> datetime | None: ...
+
+    @property
+    def user_id(self) -> UUID | None: ...
+
+
 @dataclass(frozen=True, slots=True)
 class AuthenticatedPrincipal:
     """Verified identity bound to a live DB-backed tenant membership and store scope."""
@@ -69,6 +90,32 @@ class AuthenticatedPrincipal:
     role: UserRole
     store_ids: frozenset[UUID]
     email: str | None = None
+    department_scope: str | None = None
+
+    def can_manage_employee(self, employee: EmployeeScopeTarget) -> bool:
+        """Unified store + department + legal_hold scope check for operational access."""
+        if self.role in TENANT_WIDE_ROLES:
+            return True
+        if self.role == UserRole.STORE_MANAGER:
+            if employee.deleted_at is not None:
+                return False
+            if str(employee.employment_status) in ("legal_hold", "anonymized"):
+                return False
+            if employee.primary_store_id not in self.store_ids:
+                return False
+            if self.department_scope and self.department_scope.strip():
+                return (
+                    employee.department.strip().casefold()
+                    == self.department_scope.strip().casefold()
+                )
+            return True
+        return employee.user_id is not None and employee.user_id == self.user_id
+
+    def require_employee_in_scope(self, employee: EmployeeScopeTarget) -> None:
+        if not self.can_manage_employee(employee):
+            raise ForbiddenScopeError(
+                "Employee is outside your authorized store, department, or legal_hold scope"
+            )
 
     def can_access_tenant(self, tenant_id: UUID) -> bool:
         return self.tenant_id == tenant_id

@@ -1,5 +1,6 @@
 import createClient, { type Middleware } from 'openapi-fetch'
 import type { paths } from '@/api/generated/schema'
+import { extractFetchError, translateApiError } from '@/lib/errorTranslator'
 import { getAccessToken } from '@/lib/supabase'
 
 let _devToken: string | null = null
@@ -48,12 +49,8 @@ export const apiClient = createClient<paths>({
 
 apiClient.use(authAndTenantMiddleware)
 
-export function extractApiError(error: unknown, fallback: string): string {
-  if (error && typeof error === 'object' && 'detail' in error) {
-    const detail = (error as { detail?: unknown }).detail
-    if (typeof detail === 'string' && detail.trim()) {
-      return detail
-    }
-  }
-  return fallback
+export function extractApiError(error: unknown, fallback?: string): string {
+  return translateApiError(error, fallback)
 }
+
+export { extractFetchError }

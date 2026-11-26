@@ -13,6 +13,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 from app.application.attendance import _sanitize_csv_cell
+from app.application.break_policies import build_break_policy_lookup, resolve_policy_for_employee
 from app.domain.attendance import AttendanceEvent, resolve_timezone
 from app.domain.documents import (
     ComplianceDocument,
@@ -48,6 +49,7 @@ from app.domain.payroll import (
 )
 from app.domain.repositories import (
     AttendanceRepository,
+    BreakPolicyRepository,
     DocumentRepository,
     EmployeeRepository,
     LeaveRepository,
@@ -129,6 +131,7 @@ async def _evaluate_store_month_readiness(
     leave_repo: LeaveRepository,
     payroll_repo: PayrollClosingRepository,
     hide_legal_hold_for_manager: bool,
+    policy_repo: BreakPolicyRepository | None = None,
 ) -> tuple[MonthlyReadinessReport, list[ClosingBlocker]]:
     month_start, month_end = month_date_bounds(period_month)
     existing = await payroll_repo.get_by_store_month(tenant_id, store.id, period_month)
@@ -136,6 +139,11 @@ async def _evaluate_store_month_readiness(
     store_employees = await employee_repo.list_by_tenant(tenant_id, store_id=store.id)
     store_events = await attendance_repo.list_by_tenant(tenant_id, store_id=store.id)
     store_leaves = await leave_repo.list_by_tenant(tenant_id, store_id=store.id)
+    policy_lookup = (
+        build_break_policy_lookup(await policy_repo.list_by_tenant(tenant_id))
+        if policy_repo is not None
+        else None
+    )
 
     events_by_emp: dict[UUID, list[AttendanceEvent]] = defaultdict(list)
     has_events_in_month: set[UUID] = set()
@@ -190,6 +198,11 @@ async def _evaluate_store_month_readiness(
             month_start=month_start,
             month_end=month_end,
             store_timezone=store.timezone,
+            break_policy=(
+                resolve_policy_for_employee(emp, policy_lookup)
+                if policy_lookup is not None
+                else None
+            ),
         )
         all_blockers.extend(emp_blockers)
 
@@ -326,12 +339,14 @@ class PreviewMonthlyClosingUseCase:
         employee_repo: EmployeeRepository,
         attendance_repo: AttendanceRepository,
         leave_repo: LeaveRepository,
+        policy_repo: BreakPolicyRepository | None = None,
     ) -> None:
         self._payroll_repo = payroll_repo
         self._store_repo = store_repo
         self._employee_repo = employee_repo
         self._attendance_repo = attendance_repo
         self._leave_repo = leave_repo
+        self._policy_repo = policy_repo
 
     async def execute(
         self,
@@ -359,6 +374,7 @@ class PreviewMonthlyClosingUseCase:
             leave_repo=self._leave_repo,
             payroll_repo=self._payroll_repo,
             hide_legal_hold_for_manager=principal.role == UserRole.STORE_MANAGER,
+            policy_repo=self._policy_repo,
         )
         return report
 
@@ -375,6 +391,7 @@ class CloseMonthlyPayrollUseCase:
         doc_repo: DocumentRepository,
         storage: DocumentStoragePort,
         pdf_renderer: AttendancePdfRendererPort,
+        policy_repo: BreakPolicyRepository | None = None,
     ) -> None:
         self._payroll_repo = payroll_repo
         self._tenant_repo = tenant_repo
@@ -385,6 +402,7 @@ class CloseMonthlyPayrollUseCase:
         self._doc_repo = doc_repo
         self._storage = storage
         self._pdf_renderer = pdf_renderer
+        self._policy_repo = policy_repo
 
     async def execute(
         self,
@@ -415,6 +433,7 @@ class CloseMonthlyPayrollUseCase:
             leave_repo=self._leave_repo,
             payroll_repo=self._payroll_repo,
             hide_legal_hold_for_manager=False,
+            policy_repo=self._policy_repo,
         )
         if all_blockers:
             raise ConflictError(

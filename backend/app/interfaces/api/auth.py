@@ -27,7 +27,9 @@ class TenantMembershipSummaryResponse(BaseModel):
     default_locale: str
     role: UserRole
     status: MembershipStatus
+    display_name: str
     store_ids: list[UUID]
+    department_scope: str | None = None
 
 
 class AuthMeResponse(BaseModel):
@@ -63,7 +65,9 @@ async def get_auth_me(
                 default_locale=item.default_locale,
                 role=item.role,
                 status=item.status,
+                display_name=item.display_name,
                 store_ids=sorted(item.store_ids),
+                department_scope=item.department_scope,
             )
             for item in summaries
         ],

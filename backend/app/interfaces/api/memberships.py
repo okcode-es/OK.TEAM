@@ -36,6 +36,7 @@ class MembershipCreateRequest(BaseModel):
     role: UserRole
     status: MembershipStatus = MembershipStatus.ACTIVE
     store_ids: list[UUID] = Field(default_factory=list)
+    department_scope: str | None = Field(default=None, max_length=100)
 
 
 class MembershipUpdateRequest(BaseModel):
@@ -43,6 +44,7 @@ class MembershipUpdateRequest(BaseModel):
     role: UserRole
     status: MembershipStatus
     store_ids: list[UUID] = Field(default_factory=list)
+    department_scope: str | None = Field(default=None, max_length=100)
 
 
 class MembershipResponse(BaseModel):
@@ -54,6 +56,7 @@ class MembershipResponse(BaseModel):
     role: UserRole
     status: MembershipStatus
     store_ids: list[UUID]
+    department_scope: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -68,6 +71,7 @@ class MembershipResponse(BaseModel):
             role=membership.role,
             status=membership.status,
             store_ids=sorted(membership.store_ids),
+            department_scope=membership.department_scope,
             created_at=membership.created_at,
             updated_at=membership.updated_at,
         )
@@ -120,6 +124,7 @@ async def create_membership(
             role=payload.role,
             status=payload.status,
             store_ids=frozenset(payload.store_ids),
+            department_scope=payload.department_scope,
         ),
     )
     await commit()
@@ -149,6 +154,7 @@ async def update_membership(
             role=payload.role,
             status=payload.status,
             store_ids=frozenset(payload.store_ids),
+            department_scope=payload.department_scope,
         ),
     )
     await commit()

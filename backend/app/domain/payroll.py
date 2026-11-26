@@ -20,6 +20,7 @@ from app.domain.attendance import (
     evaluate_attendance_ledger,
     resolve_timezone,
 )
+from app.domain.break_policies import EffectiveBreakPolicy
 from app.domain.employees import (
     STATUTORY_RETENTION_YEARS,
     ContractType,
@@ -27,7 +28,7 @@ from app.domain.employees import (
     EmploymentStatus,
     WorkScheduleType,
 )
-from app.domain.leaves import LeaveRequest, LeaveStatus, LeaveType
+from app.domain.leaves import PENDING_LEAVE_STATUSES, LeaveRequest, LeaveStatus, LeaveType
 from app.domain.organization import ValidationDomainError
 
 _PERIOD_MONTH_PATTERN = re.compile(r"^([0-9]{4})-(0[1-9]|1[0-2])$")
@@ -280,6 +281,7 @@ def evaluate_employee_monthly_summary(
     month_start: date,
     month_end: date,
     store_timezone: str,
+    break_policy: EffectiveBreakPolicy | None = None,
 ) -> tuple[MonthlyEmployeeSummary, tuple[ClosingBlocker, ...]]:
     """Compute an employee's monthly attendance & leave summary plus hard blockers."""
     report = evaluate_attendance_ledger(
@@ -290,6 +292,7 @@ def evaluate_employee_monthly_summary(
         birth_date=employee.birth_date,
         date_from=month_start,
         date_to=month_end,
+        break_policy=break_policy,
     )
 
     blockers: list[ClosingBlocker] = []
@@ -345,7 +348,7 @@ def evaluate_employee_monthly_summary(
         overlap = count_overlap_days(lv.start_date, lv.end_date, month_start, month_end)
         if overlap <= 0:
             continue
-        if lv.status == LeaveStatus.PENDING:
+        if lv.status in PENDING_LEAVE_STATUSES:
             blockers.append(
                 ClosingBlocker(
                     code=ClosingBlockerCode.PENDING_LEAVE,
@@ -363,9 +366,9 @@ def evaluate_employee_monthly_summary(
         elif lv.status == LeaveStatus.APPROVED:
             if lv.leave_type == LeaveType.VACATION:
                 vacation_days += overlap
-            elif lv.leave_type == LeaveType.SICK_LEAVE:
+            elif lv.leave_type in (LeaveType.SICK_LEAVE, LeaveType.MEDICAL_APPOINTMENT):
                 sick_leave_days += overlap
-            elif lv.leave_type == LeaveType.PAID_LEAVE:
+            elif lv.leave_type in (LeaveType.PAID_LEAVE, LeaveType.DAY_OFF):
                 paid_leave_days += overlap
             elif lv.leave_type == LeaveType.UNPAID_LEAVE:
                 unpaid_leave_days += overlap

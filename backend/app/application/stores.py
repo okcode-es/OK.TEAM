@@ -24,6 +24,7 @@ class CreateStoreCommand:
     address: str = ""
     city: str = ""
     postal_code: str = ""
+    region_code: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +35,7 @@ class UpdateStoreCommand:
     address: str = ""
     city: str = ""
     postal_code: str = ""
+    region_code: str = ""
     is_active: bool = True
 
 
@@ -97,6 +99,7 @@ class CreateStoreUseCase:
             address=cmd.address.strip()[:300],
             city=cmd.city.strip()[:100],
             postal_code=cmd.postal_code.strip()[:16],
+            region_code=cmd.region_code.strip().upper()[:16],
             is_active=True,
             created_at=now,
             updated_at=now,
@@ -136,6 +139,7 @@ class UpdateStoreUseCase:
             address=cmd.address.strip()[:300],
             city=cmd.city.strip()[:100],
             postal_code=cmd.postal_code.strip()[:16],
+            region_code=cmd.region_code.strip().upper()[:16],
             is_active=cmd.is_active,
             updated_at=datetime.now(UTC),
         )

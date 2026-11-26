@@ -18,6 +18,14 @@ from app.domain.organization import OrganizationDomainError, ValidationDomainErr
 STATUTORY_MAX_WEEKLY_HOURS = Decimal("40.00")
 STATUTORY_MIN_VACATION_DAYS = 30
 STATUTORY_RETENTION_YEARS = 4
+MAX_AVATAR_SIZE_BYTES = 2 * 1024 * 1024  # 2 MiB
+ALLOWED_AVATAR_MIME_TYPES: frozenset[str] = frozenset(
+    {
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+    }
+)
 
 _EMPLOYEE_CODE_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9_-]{0,31}$")
 _DNI_PATTERN = re.compile(r"^[0-9]{8}[A-Z]$")
@@ -179,6 +187,16 @@ def validate_annual_vacation_days(days: int) -> int:
     return days
 
 
+def validate_default_break_minutes(minutes: int | None) -> int | None:
+    if minutes is None:
+        return None
+    if minutes < 5 or minutes > 180:
+        raise ValidationDomainError(
+            "default_break_minutes must be between 5 and 180 minutes (or null)"
+        )
+    return minutes
+
+
 def compute_retention_until(termination_date: date, now_utc: datetime) -> datetime:
     """Compute statutory >= 4-year legal hold expiry in UTC (handling leap days safely)."""
     term_eod = datetime(
@@ -229,12 +247,52 @@ class Employee:
     anonymized_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    department: str = ""
+    job_title: str = ""
+    emergency_contact_name: str = ""
+    emergency_contact_phone: str = ""
+    avatar_storage_backend: str | None = None
+    avatar_storage_key: str | None = None
+    avatar_mime_type: str | None = None
+    avatar_updated_at: datetime | None = None
+    default_break_minutes: int | None = None
     deleted_at: datetime | None = None
 
     @property
     def is_overtime_prohibited(self) -> bool:
         """Art. 12.4.c ET: part-time employees are prohibited from regular overtime."""
         return self.work_schedule_type == WorkScheduleType.PART_TIME
+
+
+def validate_avatar_upload(mime_type: str, content: bytes) -> None:
+    """Validate avatar image MIME whitelist (NO SVG) and magic bytes (<= 2 MiB)."""
+    if mime_type not in ALLOWED_AVATAR_MIME_TYPES:
+        raise ValidationDomainError(
+            f"Unsupported avatar mime_type '{mime_type}'. "
+            f"Allowed: {sorted(ALLOWED_AVATAR_MIME_TYPES)}"
+        )
+    if not content:
+        raise ValidationDomainError("Uploaded avatar file cannot be empty")
+    if len(content) > MAX_AVATAR_SIZE_BYTES:
+        raise ValidationDomainError(
+            f"Avatar exceeds maximum size of {MAX_AVATAR_SIZE_BYTES} bytes (2 MiB)"
+        )
+    valid = False
+    if mime_type == "image/jpeg":
+        valid = content.startswith(b"\xff\xd8\xff")
+    elif mime_type == "image/png":
+        valid = content.startswith(b"\x89PNG\r\n\x1a\n")
+    elif mime_type == "image/webp":
+        valid = len(content) >= 12 and content[:4] == b"RIFF" and content[8:12] == b"WEBP"
+    if not valid:
+        raise ValidationDomainError(
+            f"Avatar content magic bytes do not match declared MIME type '{mime_type}'"
+        )
+
+
+def build_avatar_storage_key(tenant_id: UUID, employee_id: UUID, avatar_id: UUID) -> str:
+    """UUID-only avatar storage key immune to path traversal."""
+    return f"avatars/{tenant_id}/{employee_id}/{avatar_id}"
 
 
 @dataclass(frozen=True, slots=True)

@@ -28,6 +28,7 @@ import { useTranslation } from 'react-i18next'
 import {
   apiClient,
   extractApiError,
+  extractFetchError,
   getApiBaseUrl,
   getAuthHeaders,
 } from '@/api/client'
@@ -413,16 +414,7 @@ export function PayrollPage({ onNavigate }: PayrollPageProps) {
         },
       )
       if (!response.ok) {
-        let msg = t('common.error')
-        try {
-          const payload = (await response.json()) as { detail?: unknown }
-          if (typeof payload.detail === 'string' && payload.detail.trim()) {
-            msg = payload.detail
-          }
-        } catch {
-          // ignore non-json body
-        }
-        setErrorBanner(msg)
+        setErrorBanner(await extractFetchError(response, t('errors.GENERIC')))
         return
       }
 
@@ -440,6 +432,8 @@ export function PayrollPage({ onNavigate }: PayrollPageProps) {
       link.click()
       link.remove()
       URL.revokeObjectURL(url)
+    } catch (err) {
+      setErrorBanner(extractApiError(err, t('errors.GENERIC')))
     } finally {
       setExportingCsv(false)
     }
@@ -730,7 +724,7 @@ export function PayrollPage({ onNavigate }: PayrollPageProps) {
             <Button
               type="button"
               size="sm"
-              className="bg-teal-700 text-white hover:bg-teal-800"
+              className="bg-[#2563EB] text-white hover:bg-blue-700"
               disabled={
                 loading ||
                 closingSubmitting ||
@@ -798,9 +792,9 @@ export function PayrollPage({ onNavigate }: PayrollPageProps) {
                   setPeriodMonth(item.closing.period_month)
                   setSelectedRow(null)
                 }}
-                className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition-colors tabular-nums focus-visible:ring-2 focus-visible:ring-teal-700 focus-visible:outline-none ${
+                className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs transition-colors tabular-nums focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:outline-none ${
                   isSelected
-                    ? 'border-teal-700 bg-white font-medium text-slate-900'
+                    ? 'border-[#2563EB] bg-white font-medium text-slate-900'
                     : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                 }`}
               >

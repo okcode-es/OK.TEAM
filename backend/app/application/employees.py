@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
 
+from app.domain.documents import DocumentStoragePort
 from app.domain.employees import (
     ContractType,
     Employee,
@@ -16,6 +18,7 @@ from app.domain.employees import (
     PiiCipher,
     RetentionLockError,
     WorkScheduleType,
+    build_avatar_storage_key,
     compute_retention_until,
     mask_iban,
     mask_naf,
@@ -25,7 +28,9 @@ from app.domain.employees import (
     normalize_naf,
     normalize_nie_dni,
     validate_annual_vacation_days,
+    validate_avatar_upload,
     validate_contracted_weekly_hours,
+    validate_default_break_minutes,
 )
 from app.domain.organization import (
     ConflictError,
@@ -52,6 +57,10 @@ class CreateEmployeeCommand:
     employee_code: str
     full_name: str
     preferred_name: str = ""
+    department: str = ""
+    job_title: str = ""
+    emergency_contact_name: str = ""
+    emergency_contact_phone: str = ""
     email: str = ""
     phone: str = ""
     user_id: UUID | None = None
@@ -60,6 +69,7 @@ class CreateEmployeeCommand:
     work_schedule_type: WorkScheduleType = WorkScheduleType.FULL_TIME
     contracted_weekly_hours: Decimal = Decimal("40.00")
     annual_vacation_days: int = 30
+    default_break_minutes: int | None = None
     hire_date: date = date(2026, 1, 1)
     nie_dni: str | None = field(default=None, repr=False)
     iban: str | None = field(default=None, repr=False)
@@ -72,6 +82,10 @@ class UpdateEmployeeCommand:
     employee_code: str
     full_name: str
     preferred_name: str = ""
+    department: str = ""
+    job_title: str = ""
+    emergency_contact_name: str = ""
+    emergency_contact_phone: str = ""
     email: str = ""
     phone: str = ""
     user_id: UUID | None = None
@@ -80,6 +94,7 @@ class UpdateEmployeeCommand:
     work_schedule_type: WorkScheduleType = WorkScheduleType.FULL_TIME
     contracted_weekly_hours: Decimal = Decimal("40.00")
     annual_vacation_days: int = 30
+    default_break_minutes: int | None = None
     hire_date: date = date(2026, 1, 1)
     employment_status: EmploymentStatus = EmploymentStatus.ACTIVE
     # None => keep existing encrypted value; "" => clear; non-empty => re-encrypt new value
@@ -114,13 +129,14 @@ class ListEmployeesUseCase:
                     "Frozen or anonymized employee records are blocked from operational access "
                     "(Art. 32 LOPDGDD)"
                 )
-            return await self._employee_repo.list_by_tenant(
+            emps = await self._employee_repo.list_by_tenant(
                 principal.tenant_id,
                 allowed_store_ids=principal.store_ids,
                 allowed_statuses=MUTABLE_STATUSES,
                 store_id=store_id,
                 status=status,
             )
+            return [e for e in emps if principal.can_manage_employee(e)]
 
         return await self._employee_repo.list_by_tenant(
             principal.tenant_id,
@@ -241,6 +257,7 @@ class CreateEmployeeUseCase:
             cmd.work_schedule_type,
         )
         vacation_days = validate_annual_vacation_days(cmd.annual_vacation_days)
+        default_break_minutes = validate_default_break_minutes(cmd.default_break_minutes)
 
         if await self._employee_repo.exists_active_code(principal.tenant_id, employee_code):
             raise ConflictError(f"Employee code '{employee_code}' already exists in this company")
@@ -280,6 +297,10 @@ class CreateEmployeeUseCase:
             employee_code=employee_code,
             full_name=full_name,
             preferred_name=cmd.preferred_name.strip()[:120],
+            department=cmd.department.strip()[:100],
+            job_title=cmd.job_title.strip()[:120],
+            emergency_contact_name=cmd.emergency_contact_name.strip()[:120],
+            emergency_contact_phone=cmd.emergency_contact_phone.strip()[:40],
             email=cmd.email.strip().lower()[:255],
             phone=cmd.phone.strip()[:40],
             birth_date=cmd.birth_date,
@@ -287,6 +308,7 @@ class CreateEmployeeUseCase:
             work_schedule_type=cmd.work_schedule_type,
             contracted_weekly_hours=weekly_hours,
             annual_vacation_days=vacation_days,
+            default_break_minutes=default_break_minutes,
             hire_date=cmd.hire_date,
             termination_date=None,
             nie_dni_enc=nie_enc,
@@ -352,6 +374,7 @@ class UpdateEmployeeUseCase:
             cmd.work_schedule_type,
         )
         vacation_days = validate_annual_vacation_days(cmd.annual_vacation_days)
+        default_break_minutes = validate_default_break_minutes(cmd.default_break_minutes)
 
         if await self._employee_repo.exists_active_code(
             principal.tenant_id,
@@ -406,6 +429,10 @@ class UpdateEmployeeUseCase:
             employee_code=employee_code,
             full_name=full_name,
             preferred_name=cmd.preferred_name.strip()[:120],
+            department=cmd.department.strip()[:100],
+            job_title=cmd.job_title.strip()[:120],
+            emergency_contact_name=cmd.emergency_contact_name.strip()[:120],
+            emergency_contact_phone=cmd.emergency_contact_phone.strip()[:40],
             email=cmd.email.strip().lower()[:255],
             phone=cmd.phone.strip()[:40],
             birth_date=cmd.birth_date,
@@ -413,6 +440,7 @@ class UpdateEmployeeUseCase:
             work_schedule_type=cmd.work_schedule_type,
             contracted_weekly_hours=weekly_hours,
             annual_vacation_days=vacation_days,
+            default_break_minutes=default_break_minutes,
             hire_date=cmd.hire_date,
             employment_status=cmd.employment_status,
             nie_dni_enc=nie_enc,
@@ -472,8 +500,13 @@ class TerminateEmployeeUseCase:
 
 
 class AnonymizeEmployeeUseCase:
-    def __init__(self, employee_repo: EmployeeRepository) -> None:
+    def __init__(
+        self,
+        employee_repo: EmployeeRepository,
+        storage: DocumentStoragePort | None = None,
+    ) -> None:
         self._employee_repo = employee_repo
+        self._storage = storage
 
     async def execute(
         self,
@@ -506,6 +539,7 @@ class AnonymizeEmployeeUseCase:
                 f"(retention_until={existing.retention_until})"
             )
 
+        old_avatar_key = existing.avatar_storage_key
         updated = await self._employee_repo.anonymize(
             principal.tenant_id,
             employee_id,
@@ -514,19 +548,160 @@ class AnonymizeEmployeeUseCase:
         )
         if updated is None:
             raise EntityNotFoundError("Employee not found")
+        if old_avatar_key and self._storage is not None:
+            with contextlib.suppress(Exception):
+                await self._storage.delete_object(storage_key=old_avatar_key)
         return updated
+
+
+class UploadEmployeeAvatarUseCase:
+    def __init__(
+        self,
+        employee_repo: EmployeeRepository,
+        storage: DocumentStoragePort,
+    ) -> None:
+        self._employee_repo = employee_repo
+        self._storage = storage
+
+    async def execute(
+        self,
+        principal: AuthenticatedPrincipal,
+        employee_id: UUID,
+        *,
+        mime_type: str,
+        content: bytes,
+        now_utc: datetime,
+    ) -> Employee:
+        if principal.role == UserRole.ACCOUNTANT:
+            raise ForbiddenScopeError("Accountants cannot modify employee avatars")
+
+        emp = await self._employee_repo.get_by_id(principal.tenant_id, employee_id)
+        if emp is None or emp.deleted_at is not None:
+            raise EntityNotFoundError("Employee not found")
+
+        _require_avatar_write_scope(principal, emp)
+
+        if emp.employment_status in (EmploymentStatus.LEGAL_HOLD, EmploymentStatus.ANONYMIZED):
+            raise FrozenRecordError("Cannot update avatar for legal_hold or anonymized employee")
+
+        validate_avatar_upload(mime_type, content)
+        new_key = build_avatar_storage_key(principal.tenant_id, emp.id, uuid4())
+        old_key = emp.avatar_storage_key
+        now = now_utc.astimezone(UTC)
+
+        await self._storage.put_object(
+            storage_key=new_key,
+            content=content,
+            mime_type=mime_type,
+        )
+        try:
+            updated = await self._employee_repo.update_avatar(
+                principal.tenant_id,
+                emp.id,
+                avatar_storage_backend=self._storage.backend_name.value,
+                avatar_storage_key=new_key,
+                avatar_mime_type=mime_type,
+                avatar_updated_at=now,
+                updated_at=now,
+            )
+            if updated is None:
+                raise EntityNotFoundError("Employee not found")
+        except Exception:
+            with contextlib.suppress(Exception):
+                await self._storage.delete_object(storage_key=new_key)
+            raise
+
+        if old_key and old_key != new_key:
+            with contextlib.suppress(Exception):
+                await self._storage.delete_object(storage_key=old_key)
+        return updated
+
+
+class DeleteEmployeeAvatarUseCase:
+    def __init__(
+        self,
+        employee_repo: EmployeeRepository,
+        storage: DocumentStoragePort,
+    ) -> None:
+        self._employee_repo = employee_repo
+        self._storage = storage
+
+    async def execute(
+        self,
+        principal: AuthenticatedPrincipal,
+        employee_id: UUID,
+        *,
+        now_utc: datetime,
+    ) -> None:
+        if principal.role == UserRole.ACCOUNTANT:
+            raise ForbiddenScopeError("Accountants cannot modify employee avatars")
+
+        emp = await self._employee_repo.get_by_id(principal.tenant_id, employee_id)
+        if emp is None or emp.deleted_at is not None:
+            raise EntityNotFoundError("Employee not found")
+
+        _require_avatar_write_scope(principal, emp)
+
+        if emp.employment_status in (EmploymentStatus.LEGAL_HOLD, EmploymentStatus.ANONYMIZED):
+            raise FrozenRecordError("Cannot delete avatar for legal_hold or anonymized employee")
+
+        old_key = emp.avatar_storage_key
+        now = now_utc.astimezone(UTC)
+        await self._employee_repo.update_avatar(
+            principal.tenant_id,
+            emp.id,
+            avatar_storage_backend=None,
+            avatar_storage_key=None,
+            avatar_mime_type=None,
+            avatar_updated_at=None,
+            updated_at=now,
+        )
+        if old_key:
+            with contextlib.suppress(Exception):
+                await self._storage.delete_object(storage_key=old_key)
+
+
+def _require_avatar_write_scope(principal: AuthenticatedPrincipal, employee: Employee) -> None:
+    if principal.role in (UserRole.OWNER, UserRole.HR):
+        return
+    if principal.role == UserRole.STORE_MANAGER:
+        principal.require_employee_in_scope(employee)
+        return
+    if employee.user_id != principal.user_id:
+        raise ForbiddenScopeError("Employees may only manage their own avatar")
+
+
+async def mint_avatar_url(storage: DocumentStoragePort, employee: Employee) -> str | None:
+    """Mint a <= 60s signed URL for an employee's avatar if present."""
+    if not employee.avatar_storage_key or not employee.avatar_mime_type:
+        return None
+    local_fn = getattr(storage, "create_avatar_signed_url", None)
+    if callable(local_fn):
+        res = local_fn(
+            storage_key=employee.avatar_storage_key,
+            mime_type=employee.avatar_mime_type,
+            ttl_seconds=60,
+        )
+        return str(res.url)
+    signed = await storage.create_signed_url(
+        storage_key=employee.avatar_storage_key,
+        ttl_seconds=60,
+        download_filename="avatar",
+        mime_type=employee.avatar_mime_type,
+    )
+    return signed.url
 
 
 def _require_employee_read_scope(principal: AuthenticatedPrincipal, employee: Employee) -> None:
     if principal.role in TENANT_WIDE_ROLES:
         return
     if principal.role == UserRole.STORE_MANAGER:
-        principal.require_store_access(principal.tenant_id, employee.primary_store_id)
         if employee.employment_status not in MUTABLE_STATUSES or employee.deleted_at is not None:
             raise ForbiddenScopeError(
                 "Frozen or anonymized employee records are blocked from operational access "
                 "(Art. 32 LOPDGDD)"
             )
+        principal.require_employee_in_scope(employee)
         return
     if employee.user_id != principal.user_id:
         raise ForbiddenScopeError("Employees may only view their own HR record")

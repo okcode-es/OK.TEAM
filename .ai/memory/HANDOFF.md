@@ -1,15 +1,16 @@
-# Handoff Snapshot — End of Phase 5
+# okTeam Handoff Snapshot (2026-11-26)
 
-- **Date**: 2026-11-25
-- **Completed**: Phase 1 (Org/Stores/RBAC) + Phase 2 (Employees/AES-256-GCM PII/Legal Hold) + Phase 3 (Append-Only Attendance/Spanish Labor Engine/3s Kiosk) + Phase 4 (Shift Scheduling Calendar Template 3, Art. 38 ET Leave Management, Private Documents <=60s Signed URLs & Immutable SHA-256 Receipt Ledger, Full-Stack Docker Delivery) + **Phase 5 (Monthly Payroll Closing, Immutable Snapshots, Zero-Dependency `es-ES` A4 RDL 8/2019 PDF Generation + Batch SHA-256 Receipt Tracking, Gestoría CSV Pack, Cross-Module Closed-Month Locks, `PayrollPage.tsx`, and All 5 Phase 1–4 P2 Fixes)**.
-- **Live Local Stack (Running in Docker)**:
-  - Frontend: `http://localhost:5173` (`okteam-frontend`, Nginx serving production Vite build with Dev Auth enabled via local gitignored `.env`)
-  - Backend: `http://localhost:8001` (`okteam-backend`, FastAPI + Swagger `/api/v1/docs`, local storage mounted to `okteam_docs_data`)
-  - Database: `localhost:5433` (`okteam-local-db`, PostgreSQL 16 with migrations `0001`–`0005` applied)
-- **Red Team Gatekeeper**: Phase 5 Round 2/2 **PASS** (`P0: None`, `P1: None`).
-- **Non-blocking P2 Backlog for Future Polish**:
-  1. Add `.with_for_update()` (or atomic `UPDATE ... WHERE status = ... AND revision_number = ... RETURNING`) to `SqlAlchemyPayrollClosingRepository.update_closing` for sub-millisecond PostgreSQL `READ COMMITTED` serialization on 0-employee closings / double-reopen races.
-  2. Multi-store transferred employee support & company-wide cross-store annual overtime (Art. 35.2 ET 80h cap) aggregation in `application/payroll.py`.
-  3. Align ORM `CheckConstraint` names in `models.py` with migration `0005` naming convention to avoid spurious Alembic autogenerate diffs.
-  4. Include `s.has_corrections` in `_session_sig` (`application/attendance.py`) and clean up uploaded storage objects if post-`execute()` `await commit()` raises in `interfaces/api/payroll.py`.
-- **Next Suggested Milestone (Phase 6)**: Production Readiness — GitHub Actions CI/CD quality-gate & Postgres migration pipeline + EU Supabase Production Integration (Auth JWT, Postgres, Private Storage Bucket `STORAGE_BACKEND=supabase`, deployment & runbook).
+## Completed & Live Locally (Uncommitted on `main`)
+1. **Phases 5A–5D**: Workspace Ops, Private Avatars, Dual-View Personio-Grade Light Enterprise UI, Employee 360° Profile, GDPR Art. 9 Team Calendar Gantt, Zero-Leak Error Control, UX & i18n Polish.
+2. **Phase 5E + Enterprise Login**: 5 Demo Accounts (`owner@dragon.es`, `hr@dragon.es`, `manager@dragon.es`, `zhou@dragon.es`, `gestoria@asesoria.es`), Self-Selectable Clock Times + `ManualDayClockSheet`, Two-Stage Leave Approval (`0008`), Management Reports (CSV/PDF), Employee RBAC Nav Guards, Dark Sidebar Scrollbar, Fluid Split-Screen Login (`LoginFluidBackdrop.tsx`).
+3. **Phase 5F & 5G (HR Workbench Polish + Dashboard Upgrade + HR Leave Entitlements/Direct Assign + 3-Tier Break Policies — Red Team Round 2/2 APPROVE)**:
+   - **P0 Fixes**: Fixed sidebar sticky flex layout (zero bottom clipping), single Sign Out in sidebar only, accurate `hr@dragon.es` (`Elena Chen / 林娜`, `人事主管 / RR. HH.`), `organization` restricted to `owner`, `ManualDayClockSheet` error visibility + open-shift banner.
+   - **HR Dashboard**: 4 clickable KPI alert cards (`pending_leaves_count`, `attendance_alerts_count`, `pending_justificantes_count` neutral `0` for `accountant`, scoped `unacknowledged_announcements_count`), 3-group sidebar, Department `<Select>`, announcements empty CTA, compact `Celebraciones`, clean `Who's in`, 2-tier holiday tiles.
+   - **HR Leaves (`0010`)**: Custom annual entitlements (`>= 30` natural days Art. 38 ET floor, immutable adjustment audit triggers) + `LeaveEntitlementDialog`, HR/Manager direct leave assignment (`POST /api/v1/leaves/assign`, published shift & balance & closed-month guarded) + `AssignLeaveSheet`.
+   - **3-Tier Break Policies (`0009` + `0010`)**: `employee > store > tenant` precedence, `fixed_duration` & `fixed_window` (*jornada partida*), `is_paid`, `manual_punch` (with server-authoritative auto-end & live countdown) vs `auto_deduct`, integrated across ledger, dashboard, payroll, and reports + `BreakPolicyForm` in `StoresPage` & `ProfileAttendanceTab`.
+   - **Verified Gates**: Red Team Round 2/2 APPROVE, `quality-gate.ps1 -Scope all` PASS (16 domain files pure, ruff 0, mypy 64 files 0, **80/80 pytest**, `tsc` 0, `eslint` 0, `vite build` PASS), **893/893 i18n keys (0 missing)**, Chrome DevTools `1440×900` `zh-CN`/`es-ES` screenshots (`0` console errors/warnings).
+
+## Live Local Endpoints
+- Frontend: `http://localhost:5173`
+- Backend: `http://localhost:8001` (`/api/v1/health` 200 OK)
+- Local Postgres 16: `localhost:5433` (migrated to `0010_hr_leave_break_policies`)

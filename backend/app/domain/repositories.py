@@ -11,7 +11,9 @@ from decimal import Decimal
 from typing import Protocol
 from uuid import UUID
 
+from app.domain.announcements import Announcement, AnnouncementAcknowledgement, AnnouncementCategory
 from app.domain.attendance import AttendanceEvent
+from app.domain.break_policies import BreakPolicy, BreakScopeType
 from app.domain.documents import ComplianceDocument, DocumentCategory, DocumentReceipt
 from app.domain.employees import (
     ContractType,
@@ -19,7 +21,12 @@ from app.domain.employees import (
     EmploymentStatus,
     WorkScheduleType,
 )
-from app.domain.leaves import LeaveRequest, LeaveStatus
+from app.domain.leaves import (
+    LeaveEntitlement,
+    LeaveEntitlementAdjustment,
+    LeaveRequest,
+    LeaveStatus,
+)
 from app.domain.organization import Membership, Store, Tenant, TenantMembershipSummary
 from app.domain.payroll import MonthlyClosing, MonthlyClosingItem, MonthlyClosingStatus
 from app.domain.scheduling import Shift
@@ -89,6 +96,7 @@ class StoreRepository(Protocol):
         address: str,
         city: str,
         postal_code: str,
+        region_code: str,
         is_active: bool,
         updated_at: datetime,
     ) -> Store | None: ...
@@ -136,6 +144,7 @@ class MembershipRepository(Protocol):
         role: UserRole,
         status: MembershipStatus,
         store_ids: frozenset[UUID],
+        department_scope: str | None,
         updated_at: datetime,
     ) -> Membership | None: ...
 
@@ -190,6 +199,7 @@ class EmployeeRepository(Protocol):
         employee_code: str,
         full_name: str,
         preferred_name: str,
+        department: str,
         email: str,
         phone: str,
         birth_date: date | None,
@@ -206,6 +216,22 @@ class EmployeeRepository(Protocol):
         iban_masked: str | None,
         naf_enc: str | None,
         naf_masked: str | None,
+        updated_at: datetime,
+        job_title: str = "",
+        emergency_contact_name: str = "",
+        emergency_contact_phone: str = "",
+        default_break_minutes: int | None = None,
+    ) -> Employee | None: ...
+
+    async def update_avatar(
+        self,
+        tenant_id: UUID,
+        employee_id: UUID,
+        *,
+        avatar_storage_backend: str | None,
+        avatar_storage_key: str | None,
+        avatar_mime_type: str | None,
+        avatar_updated_at: datetime | None,
         updated_at: datetime,
     ) -> Employee | None: ...
 
@@ -326,6 +352,7 @@ class DocumentRepository(Protocol):
         category: DocumentCategory | None = None,
         employee_id: UUID | None = None,
         store_id: UUID | None = None,
+        period_month: str | None = None,
         requires_signature: bool | None = None,
         exclude_categories: frozenset[DocumentCategory] | None = None,
     ) -> list[ComplianceDocument]: ...
@@ -427,3 +454,102 @@ class PayrollClosingRepository(Protocol):
         tenant_id: UUID,
         closing_ids: Sequence[UUID],
     ) -> list[MonthlyClosingItem]: ...
+
+
+class AnnouncementRepository(Protocol):
+    async def get_by_id(
+        self,
+        tenant_id: UUID,
+        announcement_id: UUID,
+    ) -> Announcement | None: ...
+
+    async def list_by_tenant(
+        self,
+        tenant_id: UUID,
+        *,
+        category: AnnouncementCategory | None = None,
+    ) -> list[Announcement]: ...
+
+    async def create(self, announcement: Announcement) -> Announcement: ...
+
+    async def list_acknowledgements_for_announcement(
+        self,
+        tenant_id: UUID,
+        announcement_id: UUID,
+    ) -> list[AnnouncementAcknowledgement]: ...
+
+    async def list_acknowledgements_for_announcements(
+        self,
+        tenant_id: UUID,
+        announcement_ids: Sequence[UUID],
+    ) -> list[AnnouncementAcknowledgement]: ...
+
+    async def get_acknowledgement(
+        self,
+        tenant_id: UUID,
+        announcement_id: UUID,
+        employee_id: UUID,
+    ) -> AnnouncementAcknowledgement | None: ...
+
+    async def append_acknowledgement(
+        self,
+        ack: AnnouncementAcknowledgement,
+    ) -> AnnouncementAcknowledgement: ...
+
+
+class LeaveEntitlementRepository(Protocol):
+    async def get_by_employee_year(
+        self,
+        tenant_id: UUID,
+        employee_id: UUID,
+        year: int,
+    ) -> LeaveEntitlement | None: ...
+
+    async def list_by_tenant(
+        self,
+        tenant_id: UUID,
+        *,
+        year: int | None = None,
+        employee_id: UUID | None = None,
+    ) -> list[LeaveEntitlement]: ...
+
+    async def upsert(self, entitlement: LeaveEntitlement) -> LeaveEntitlement: ...
+
+    async def list_adjustments(
+        self,
+        tenant_id: UUID,
+        *,
+        year: int | None = None,
+        employee_id: UUID | None = None,
+    ) -> list[LeaveEntitlementAdjustment]: ...
+
+    async def append_adjustment(
+        self,
+        adjustment: LeaveEntitlementAdjustment,
+    ) -> LeaveEntitlementAdjustment: ...
+
+
+class BreakPolicyRepository(Protocol):
+    async def get_by_id(self, tenant_id: UUID, policy_id: UUID) -> BreakPolicy | None: ...
+
+    async def get_by_scope(
+        self,
+        tenant_id: UUID,
+        *,
+        scope_type: BreakScopeType,
+        store_id: UUID | None = None,
+        employee_id: UUID | None = None,
+    ) -> BreakPolicy | None: ...
+
+    async def list_by_tenant(self, tenant_id: UUID) -> list[BreakPolicy]: ...
+
+    async def upsert(self, policy: BreakPolicy) -> BreakPolicy: ...
+
+    async def soft_delete(
+        self,
+        tenant_id: UUID,
+        policy_id: UUID,
+        *,
+        deleted_at: datetime,
+        updated_by_user_id: UUID,
+    ) -> BreakPolicy | None: ...

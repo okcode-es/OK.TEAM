@@ -16,6 +16,8 @@ from app.application.attendance import (
     EmployeeAttendanceLedgerItem,
     ExportAttendanceCsvUseCase,
     GetAttendanceLedgerUseCase,
+    RecordManualDayCommand,
+    RecordManualDayUseCase,
 )
 from app.domain.attendance import (
     AlertCode,
@@ -26,10 +28,12 @@ from app.domain.attendance import (
     ComplianceAlert,
     CorrectedEventType,
     DailyAttendanceSummary,
+    WorkMode,
     WorkSession,
 )
 from app.domain.repositories import (
     AttendanceRepository,
+    BreakPolicyRepository,
     EmployeeRepository,
     PayrollClosingRepository,
     StoreRepository,
@@ -39,6 +43,7 @@ from app.domain.security import AuthenticatedPrincipal
 from app.interfaces.api.deps import (
     CommitFn,
     get_attendance_repository,
+    get_break_policy_repository,
     get_commit_fn,
     get_current_principal,
     get_employee_repository,
@@ -56,6 +61,28 @@ class ClockAttendanceRequest(BaseModel):
     source: AttendanceSource = AttendanceSource.WEB
     store_id: UUID | None = None
     employee_code: str | None = Field(default=None, max_length=32)
+    work_mode: WorkMode = WorkMode.ONSITE
+    occurred_at_utc: datetime | None = None
+
+
+class RecordManualDayRequest(BaseModel):
+    employee_id: UUID | None = None
+    local_date: date
+    clock_in_time: str = Field(min_length=5, max_length=5)
+    break_start_time: str | None = Field(default=None, min_length=5, max_length=5)
+    break_end_time: str | None = Field(default=None, min_length=5, max_length=5)
+    clock_out_time: str | None = Field(default=None, min_length=5, max_length=5)
+    work_mode: WorkMode = WorkMode.ONSITE
+    note: str = Field(default="", max_length=300)
+
+
+class RecordManualDayResponse(BaseModel):
+    events: list[AttendanceEventResponse]
+    employee_id: UUID
+    employee_code: str
+    employee_name: str
+    store_id: UUID
+    store_name: str
 
 
 class AppendCorrectionRequest(BaseModel):
@@ -82,6 +109,7 @@ class AttendanceEventResponse(BaseModel):
     supersedes_event_id: UUID | None
     corrected_event_type: CorrectedEventType | None
     correction_reason: str
+    work_mode: WorkMode = WorkMode.ONSITE
 
 
 class ClockAttendanceResponse(BaseModel):
@@ -170,6 +198,7 @@ def _to_event_response(ev: AttendanceEvent) -> AttendanceEventResponse:
         supersedes_event_id=ev.supersedes_event_id,
         corrected_event_type=ev.corrected_event_type,
         correction_reason=ev.correction_reason,
+        work_mode=ev.work_mode,
     )
 
 
@@ -255,6 +284,7 @@ async def clock_attendance(
     employee_repo: Annotated[EmployeeRepository, Depends(get_employee_repository)],
     store_repo: Annotated[StoreRepository, Depends(get_store_repository)],
     payroll_repo: Annotated[PayrollClosingRepository, Depends(get_payroll_closing_repository)],
+    policy_repo: Annotated[BreakPolicyRepository, Depends(get_break_policy_repository)],
     commit: Annotated[CommitFn, Depends(get_commit_fn)],
     now_utc: Annotated[datetime, Depends(get_utc_now)],
 ) -> ClockAttendanceResponse:
@@ -264,6 +294,7 @@ async def clock_attendance(
         store_repo,
         utc_now=lambda: now_utc,
         payroll_repo=payroll_repo,
+        policy_repo=policy_repo,
     ).execute(
         principal,
         ClockAttendanceCommand(
@@ -271,11 +302,61 @@ async def clock_attendance(
             source=payload.source,
             store_id=payload.store_id,
             employee_code=payload.employee_code,
+            work_mode=payload.work_mode,
+            occurred_at_utc=payload.occurred_at_utc,
         ),
     )
     await commit()
     return ClockAttendanceResponse(
         event=_to_event_response(result.event),
+        employee_id=result.employee.id,
+        employee_code=result.employee.employee_code,
+        employee_name=result.employee.preferred_name or result.employee.full_name,
+        store_id=result.store.id,
+        store_name=result.store.name,
+    )
+
+
+@router.post(
+    "/manual-day",
+    response_model=RecordManualDayResponse,
+    status_code=status.HTTP_201_CREATED,
+    operation_id="recordManualAttendanceDay",
+)
+async def record_manual_attendance_day(
+    payload: RecordManualDayRequest,
+    principal: Annotated[AuthenticatedPrincipal, Depends(get_current_principal)],
+    attendance_repo: Annotated[AttendanceRepository, Depends(get_attendance_repository)],
+    employee_repo: Annotated[EmployeeRepository, Depends(get_employee_repository)],
+    store_repo: Annotated[StoreRepository, Depends(get_store_repository)],
+    payroll_repo: Annotated[PayrollClosingRepository, Depends(get_payroll_closing_repository)],
+    policy_repo: Annotated[BreakPolicyRepository, Depends(get_break_policy_repository)],
+    commit: Annotated[CommitFn, Depends(get_commit_fn)],
+    now_utc: Annotated[datetime, Depends(get_utc_now)],
+) -> RecordManualDayResponse:
+    result = await RecordManualDayUseCase(
+        attendance_repo,
+        employee_repo,
+        store_repo,
+        utc_now=lambda: now_utc,
+        payroll_repo=payroll_repo,
+        policy_repo=policy_repo,
+    ).execute(
+        principal,
+        RecordManualDayCommand(
+            employee_id=payload.employee_id,
+            local_date=payload.local_date,
+            clock_in_time=payload.clock_in_time,
+            break_start_time=payload.break_start_time,
+            break_end_time=payload.break_end_time,
+            clock_out_time=payload.clock_out_time,
+            work_mode=payload.work_mode,
+            note=payload.note,
+        ),
+    )
+    await commit()
+    return RecordManualDayResponse(
+        events=[_to_event_response(ev) for ev in result.events],
         employee_id=result.employee.id,
         employee_code=result.employee.employee_code,
         employee_name=result.employee.preferred_name or result.employee.full_name,
@@ -327,18 +408,31 @@ async def get_attendance_ledger(
     attendance_repo: Annotated[AttendanceRepository, Depends(get_attendance_repository)],
     employee_repo: Annotated[EmployeeRepository, Depends(get_employee_repository)],
     store_repo: Annotated[StoreRepository, Depends(get_store_repository)],
+    payroll_repo: Annotated[PayrollClosingRepository, Depends(get_payroll_closing_repository)],
+    policy_repo: Annotated[BreakPolicyRepository, Depends(get_break_policy_repository)],
+    commit: Annotated[CommitFn, Depends(get_commit_fn)],
+    now_utc: Annotated[datetime, Depends(get_utc_now)],
     store_id: Annotated[UUID | None, Query()] = None,
     employee_id: Annotated[UUID | None, Query()] = None,
     date_from: Annotated[date | None, Query()] = None,
     date_to: Annotated[date | None, Query()] = None,
 ) -> AttendanceLedgerResponse:
-    result = await GetAttendanceLedgerUseCase(attendance_repo, employee_repo, store_repo).execute(
+    result = await GetAttendanceLedgerUseCase(
+        attendance_repo,
+        employee_repo,
+        store_repo,
+        utc_now=lambda: now_utc,
+        payroll_repo=payroll_repo,
+        policy_repo=policy_repo,
+    ).execute(
         principal,
         store_id=store_id,
         employee_id=employee_id,
         date_from=date_from,
         date_to=date_to,
     )
+    if result.has_mutations:
+        await commit()
     return AttendanceLedgerResponse(
         items=[_to_ledger_item_response(item) for item in result.items]
     )
@@ -361,12 +455,22 @@ async def export_attendance_csv(
     employee_repo: Annotated[EmployeeRepository, Depends(get_employee_repository)],
     store_repo: Annotated[StoreRepository, Depends(get_store_repository)],
     tenant_repo: Annotated[TenantRepository, Depends(get_tenant_repository)],
+    payroll_repo: Annotated[PayrollClosingRepository, Depends(get_payroll_closing_repository)],
+    policy_repo: Annotated[BreakPolicyRepository, Depends(get_break_policy_repository)],
+    now_utc: Annotated[datetime, Depends(get_utc_now)],
     store_id: Annotated[UUID | None, Query()] = None,
     employee_id: Annotated[UUID | None, Query()] = None,
     date_from: Annotated[date | None, Query()] = None,
     date_to: Annotated[date | None, Query()] = None,
 ) -> Response:
-    ledger_uc = GetAttendanceLedgerUseCase(attendance_repo, employee_repo, store_repo)
+    ledger_uc = GetAttendanceLedgerUseCase(
+        attendance_repo,
+        employee_repo,
+        store_repo,
+        utc_now=lambda: now_utc,
+        payroll_repo=payroll_repo,
+        policy_repo=policy_repo,
+    )
     csv_text = await ExportAttendanceCsvUseCase(ledger_uc, tenant_repo).execute(
         principal,
         store_id=store_id,

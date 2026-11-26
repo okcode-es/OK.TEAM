@@ -125,3 +125,100 @@ export type CloseMonthlyPayrollRequest =
   components['schemas']['CloseMonthlyPayrollRequest']
 export type ReopenMonthlyClosingRequest =
   components['schemas']['ReopenMonthlyClosingRequest']
+
+// Phase 5A: Dashboard, Clock State, Announcements, Leave Calendar, Bulk Import
+export type WorkMode = components['schemas']['WorkMode']
+export type WhoIsInStatus = components['schemas']['WhoIsInStatus']
+export type DashboardMemberItemResponse =
+  components['schemas']['DashboardMemberItemResponse']
+export type WhoIsInGroupResponse = components['schemas']['WhoIsInGroupResponse']
+export type UpcomingBirthdayResponse =
+  components['schemas']['UpcomingBirthdayResponse']
+export type UpcomingHolidayResponse =
+  components['schemas']['UpcomingHolidayResponse']
+export type QuickReportEntryResponse =
+  components['schemas']['QuickReportEntryResponse']
+export type DashboardAnnouncementSummaryResponse =
+  components['schemas']['DashboardAnnouncementSummaryResponse']
+export type AdminDashboardResponse =
+  components['schemas']['AdminDashboardResponse']
+export type MyDashboardEmployeeSummaryResponse =
+  components['schemas']['MyDashboardEmployeeSummaryResponse']
+export type EmployeeClockStateResponse =
+  components['schemas']['EmployeeClockStateResponse']
+export type DashboardApproverResponse =
+  components['schemas']['DashboardApproverResponse']
+export type DashboardNotificationResponse =
+  components['schemas']['DashboardNotificationResponse']
+export type MyDashboardResponse = components['schemas']['MyDashboardResponse']
+
+export type AnnouncementCategory =
+  components['schemas']['AnnouncementCategory']
+export type AnnouncementResponse = components['schemas']['AnnouncementResponse']
+export type AnnouncementListResponse =
+  components['schemas']['AnnouncementListResponse']
+export type AnnouncementAcknowledgementResponse =
+  components['schemas']['AnnouncementAcknowledgementResponse']
+export type AcknowledgementStatusEmployeeResponse =
+  components['schemas']['AcknowledgementStatusEmployeeResponse']
+export type AnnouncementAcknowledgementsReportResponse =
+  components['schemas']['AnnouncementAcknowledgementsReportResponse']
+
+export type HolidayScope = components['schemas']['HolidayScope']
+export type CalendarHolidayResponse =
+  components['schemas']['CalendarHolidayResponse']
+export type LeaveCalendarResponse = components['schemas']['LeaveCalendarResponse']
+
+export type BulkImportErrorResponse =
+  components['schemas']['BulkImportErrorResponse']
+export type BulkImportResponse = components['schemas']['BulkImportResponse']
+
+// Phase 5C: Personio Layout + Team Calendar + Clock Segments + Anniversaries
+export type TodayClockSegmentResponse =
+  components['schemas']['TodayClockSegmentResponse']
+export type UpcomingAnniversaryResponse =
+  components['schemas']['UpcomingAnniversaryResponse']
+export type TeamCalendarEntryResponse =
+  components['schemas']['TeamCalendarEntryResponse']
+export type TeamCalendarMemberResponse =
+  components['schemas']['TeamCalendarMemberResponse']
+export type TeamCalendarResponse =
+  components['schemas']['TeamCalendarResponse']
+
+// Phase 5E: Self-Selectable Attendance + Two-Stage Leaves + Reports Center
+export type RecordManualDayRequest =
+  components['schemas']['RecordManualDayRequest']
+export type RecordManualDayResponse =
+  components['schemas']['RecordManualDayResponse']
+export type ExecutiveSummaryResponse =
+  components['schemas']['ExecutiveSummaryResponse']
+export type StoreReportSummaryResponse =
+  components['schemas']['StoreReportSummaryResponse']
+
+// Stage A: Leave Entitlements, Direct Assign, 3-Tier Break Policies
+export type BreakMode = components['schemas']['BreakMode']
+export type BreakScopeType = components['schemas']['BreakScopeType']
+export type BreakTrackingMode = components['schemas']['BreakTrackingMode']
+export type BreakWindowSchema = components['schemas']['BreakWindowSchema']
+export type BreakPolicyResponse = components['schemas']['BreakPolicyResponse']
+export type BreakPolicyListResponse =
+  components['schemas']['BreakPolicyListResponse']
+export type EffectiveBreakPolicyResponse =
+  components['schemas']['EffectiveBreakPolicyResponse']
+export type UpsertBreakPolicyRequest =
+  components['schemas']['UpsertBreakPolicyRequest']
+
+export type EntitlementAdjustmentType =
+  components['schemas']['EntitlementAdjustmentType']
+export type LeaveEntitlementAdjustmentResponse =
+  components['schemas']['LeaveEntitlementAdjustmentResponse']
+export type EmployeeEntitlementResponse =
+  components['schemas']['EmployeeEntitlementResponse']
+export type LeaveEntitlementListResponse =
+  components['schemas']['LeaveEntitlementListResponse']
+export type UpsertLeaveEntitlementBody =
+  components['schemas']['UpsertLeaveEntitlementBody']
+export type BulkUpsertLeaveEntitlementsBody =
+  components['schemas']['BulkUpsertLeaveEntitlementsBody']
+export type DirectAssignLeaveBody =
+  components['schemas']['DirectAssignLeaveBody']

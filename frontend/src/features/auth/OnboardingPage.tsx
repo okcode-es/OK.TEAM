@@ -71,7 +71,7 @@ export function OnboardingPage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <span
-              className="h-2.5 w-2.5 shrink-0 rounded-full bg-teal-700"
+              className="h-2.5 w-2.5 shrink-0 rounded-full bg-[#2563EB]"
               aria-hidden="true"
             />
             <span className="text-sm font-semibold text-slate-900">

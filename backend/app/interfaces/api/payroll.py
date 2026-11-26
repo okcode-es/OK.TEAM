@@ -33,6 +33,7 @@ from app.domain.payroll import (
 )
 from app.domain.repositories import (
     AttendanceRepository,
+    BreakPolicyRepository,
     DocumentRepository,
     EmployeeRepository,
     LeaveRepository,
@@ -44,6 +45,7 @@ from app.domain.security import AuthenticatedPrincipal
 from app.interfaces.api.deps import (
     CommitFn,
     get_attendance_repository,
+    get_break_policy_repository,
     get_commit_fn,
     get_current_principal,
     get_document_repository,
@@ -330,9 +332,15 @@ async def preview_monthly_closing(
     employee_repo: Annotated[EmployeeRepository, Depends(get_employee_repository)],
     attendance_repo: Annotated[AttendanceRepository, Depends(get_attendance_repository)],
     leave_repo: Annotated[LeaveRepository, Depends(get_leave_repository)],
+    policy_repo: Annotated[BreakPolicyRepository, Depends(get_break_policy_repository)],
 ) -> MonthlyReadinessPreviewResponse:
     report = await PreviewMonthlyClosingUseCase(
-        payroll_repo, store_repo, employee_repo, attendance_repo, leave_repo
+        payroll_repo,
+        store_repo,
+        employee_repo,
+        attendance_repo,
+        leave_repo,
+        policy_repo=policy_repo,
     ).execute(principal, store_id=store_id, period_month=period_month)
     return MonthlyReadinessPreviewResponse(
         store_id=report.store_id,
@@ -368,6 +376,7 @@ async def close_monthly_payroll(
     doc_repo: Annotated[DocumentRepository, Depends(get_document_repository)],
     storage: Annotated[DocumentStoragePort, Depends(get_document_storage)],
     pdf_renderer: Annotated[AttendancePdfRendererPort, Depends(get_pdf_renderer)],
+    policy_repo: Annotated[BreakPolicyRepository, Depends(get_break_policy_repository)],
     commit: Annotated[CommitFn, Depends(get_commit_fn)],
     now_utc: Annotated[datetime, Depends(get_utc_now)],
 ) -> MonthlyClosingDetailResponse:
@@ -381,6 +390,7 @@ async def close_monthly_payroll(
         doc_repo,
         storage,
         pdf_renderer,
+        policy_repo=policy_repo,
     ).execute(
         principal,
         store_id=body.store_id,

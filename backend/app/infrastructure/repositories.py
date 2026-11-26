@@ -12,11 +12,24 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.domain.announcements import (
+    Announcement,
+    AnnouncementAcknowledgement,
+    AnnouncementCategory,
+)
 from app.domain.attendance import (
     AttendanceEvent,
     AttendanceEventType,
     AttendanceSource,
     CorrectedEventType,
+    WorkMode,
+)
+from app.domain.break_policies import (
+    BreakMode,
+    BreakPolicy,
+    BreakScopeType,
+    BreakTrackingMode,
+    BreakWindow,
 )
 from app.domain.documents import (
     ComplianceDocument,
@@ -30,7 +43,14 @@ from app.domain.employees import (
     EmploymentStatus,
     WorkScheduleType,
 )
-from app.domain.leaves import LeaveRequest, LeaveStatus, LeaveType
+from app.domain.leaves import (
+    EntitlementAdjustmentType,
+    LeaveEntitlement,
+    LeaveEntitlementAdjustment,
+    LeaveRequest,
+    LeaveStatus,
+    LeaveType,
+)
 from app.domain.organization import (
     ConflictError,
     Membership,
@@ -46,10 +66,15 @@ from app.domain.payroll import (
 from app.domain.scheduling import Shift, ShiftStatus
 from app.domain.security import MembershipStatus, UserRole
 from app.infrastructure.models import (
+    AnnouncementAcknowledgementModel,
+    AnnouncementModel,
     AttendanceEventModel,
+    BreakPolicyModel,
     ComplianceDocumentModel,
     DocumentReceiptModel,
     EmployeeModel,
+    LeaveEntitlementAdjustmentModel,
+    LeaveEntitlementModel,
     LeaveRequestModel,
     MembershipModel,
     MembershipStoreModel,
@@ -85,6 +110,7 @@ def _to_store(model: StoreModel) -> Store:
         address=model.address,
         city=model.city,
         postal_code=model.postal_code,
+        region_code=model.region_code,
         is_active=model.is_active,
         created_at=model.created_at,
         updated_at=model.updated_at,
@@ -102,6 +128,7 @@ def _to_membership(model: MembershipModel) -> Membership:
         role=UserRole(model.role),
         status=MembershipStatus(model.status),
         store_ids=frozenset(link.store_id for link in model.store_links),
+        department_scope=model.department_scope,
         created_at=model.created_at,
         updated_at=model.updated_at,
         deleted_at=model.deleted_at,
@@ -261,6 +288,7 @@ class SqlAlchemyStoreRepository:
             address=store.address,
             city=store.city,
             postal_code=store.postal_code,
+            region_code=store.region_code,
             is_active=store.is_active,
             created_at=store.created_at,
             updated_at=store.updated_at,
@@ -281,6 +309,7 @@ class SqlAlchemyStoreRepository:
         address: str,
         city: str,
         postal_code: str,
+        region_code: str,
         is_active: bool,
         updated_at: datetime,
     ) -> Store | None:
@@ -300,6 +329,7 @@ class SqlAlchemyStoreRepository:
         model.address = address
         model.city = city
         model.postal_code = postal_code
+        model.region_code = region_code
         model.is_active = is_active
         model.updated_at = updated_at
         await self._session.flush()
@@ -359,6 +389,8 @@ class SqlAlchemyMembershipRepository:
                     role=UserRole(membership_model.role),
                     status=MembershipStatus(membership_model.status),
                     store_ids=frozenset(link.store_id for link in membership_model.store_links),
+                    department_scope=membership_model.department_scope,
+                    display_name=membership_model.display_name,
                 )
             )
         return summaries
@@ -468,6 +500,7 @@ class SqlAlchemyMembershipRepository:
             display_name=membership.display_name,
             role=membership.role.value,
             status=membership.status.value,
+            department_scope=membership.department_scope,
             created_at=membership.created_at,
             updated_at=membership.updated_at,
             deleted_at=membership.deleted_at,
@@ -494,6 +527,7 @@ class SqlAlchemyMembershipRepository:
         role: UserRole,
         status: MembershipStatus,
         store_ids: frozenset[UUID],
+        department_scope: str | None,
         updated_at: datetime,
     ) -> Membership | None:
         stmt = (
@@ -513,6 +547,7 @@ class SqlAlchemyMembershipRepository:
         model.display_name = display_name
         model.role = role.value
         model.status = status.value
+        model.department_scope = department_scope
         model.updated_at = updated_at
 
         await self._session.execute(
@@ -572,6 +607,10 @@ def _to_employee(model: EmployeeModel) -> Employee:
         employee_code=model.employee_code,
         full_name=model.full_name,
         preferred_name=model.preferred_name,
+        department=model.department,
+        job_title=model.job_title,
+        emergency_contact_name=model.emergency_contact_name,
+        emergency_contact_phone=model.emergency_contact_phone,
         email=model.email,
         phone=model.phone,
         birth_date=model.birth_date,
@@ -589,6 +628,11 @@ def _to_employee(model: EmployeeModel) -> Employee:
         naf_enc=model.naf_enc,
         naf_masked=model.naf_masked,
         employment_status=EmploymentStatus(model.employment_status),
+        avatar_storage_backend=model.avatar_storage_backend,
+        avatar_storage_key=model.avatar_storage_key,
+        avatar_mime_type=model.avatar_mime_type,
+        avatar_updated_at=model.avatar_updated_at,
+        default_break_minutes=model.default_break_minutes,
         retention_until=model.retention_until,
         anonymized_at=model.anonymized_at,
         created_at=model.created_at,
@@ -687,6 +731,10 @@ class SqlAlchemyEmployeeRepository:
             employee_code=employee.employee_code,
             full_name=employee.full_name,
             preferred_name=employee.preferred_name,
+            department=employee.department,
+            job_title=employee.job_title,
+            emergency_contact_name=employee.emergency_contact_name,
+            emergency_contact_phone=employee.emergency_contact_phone,
             email=employee.email,
             phone=employee.phone,
             birth_date=employee.birth_date,
@@ -694,6 +742,7 @@ class SqlAlchemyEmployeeRepository:
             work_schedule_type=employee.work_schedule_type.value,
             contracted_weekly_hours=employee.contracted_weekly_hours,
             annual_vacation_days=employee.annual_vacation_days,
+            default_break_minutes=employee.default_break_minutes,
             hire_date=employee.hire_date,
             termination_date=employee.termination_date,
             nie_dni_enc=employee.nie_dni_enc,
@@ -704,6 +753,10 @@ class SqlAlchemyEmployeeRepository:
             naf_enc=employee.naf_enc,
             naf_masked=employee.naf_masked,
             employment_status=employee.employment_status.value,
+            avatar_storage_backend=employee.avatar_storage_backend,
+            avatar_storage_key=employee.avatar_storage_key,
+            avatar_mime_type=employee.avatar_mime_type,
+            avatar_updated_at=employee.avatar_updated_at,
             retention_until=employee.retention_until,
             anonymized_at=employee.anonymized_at,
             created_at=employee.created_at,
@@ -729,6 +782,7 @@ class SqlAlchemyEmployeeRepository:
         employee_code: str,
         full_name: str,
         preferred_name: str,
+        department: str,
         email: str,
         phone: str,
         birth_date: date | None,
@@ -746,6 +800,10 @@ class SqlAlchemyEmployeeRepository:
         naf_enc: str | None,
         naf_masked: str | None,
         updated_at: datetime,
+        job_title: str = "",
+        emergency_contact_name: str = "",
+        emergency_contact_phone: str = "",
+        default_break_minutes: int | None = None,
     ) -> Employee | None:
         stmt = select(EmployeeModel).where(
             EmployeeModel.tenant_id == tenant_id,
@@ -765,6 +823,10 @@ class SqlAlchemyEmployeeRepository:
         model.employee_code = employee_code
         model.full_name = full_name
         model.preferred_name = preferred_name
+        model.department = department
+        model.job_title = job_title
+        model.emergency_contact_name = emergency_contact_name
+        model.emergency_contact_phone = emergency_contact_phone
         model.email = email
         model.phone = phone
         model.birth_date = birth_date
@@ -772,6 +834,7 @@ class SqlAlchemyEmployeeRepository:
         model.work_schedule_type = work_schedule_type.value
         model.contracted_weekly_hours = contracted_weekly_hours
         model.annual_vacation_days = annual_vacation_days
+        model.default_break_minutes = default_break_minutes
         model.hire_date = hire_date
         model.employment_status = employment_status.value
         model.nie_dni_enc = nie_dni_enc
@@ -788,6 +851,34 @@ class SqlAlchemyEmployeeRepository:
             raise ConflictError(
                 "Employee conflict: duplicate employee_code, NIE/DNI, or user_id"
             ) from exc
+        return _to_employee(model)
+
+    async def update_avatar(
+        self,
+        tenant_id: UUID,
+        employee_id: UUID,
+        *,
+        avatar_storage_backend: str | None,
+        avatar_storage_key: str | None,
+        avatar_mime_type: str | None,
+        avatar_updated_at: datetime | None,
+        updated_at: datetime,
+    ) -> Employee | None:
+        stmt = select(EmployeeModel).where(
+            EmployeeModel.tenant_id == tenant_id,
+            EmployeeModel.id == employee_id,
+            EmployeeModel.deleted_at.is_(None),
+        )
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+        if model is None:
+            return None
+        model.avatar_storage_backend = avatar_storage_backend
+        model.avatar_storage_key = avatar_storage_key
+        model.avatar_mime_type = avatar_mime_type
+        model.avatar_updated_at = avatar_updated_at
+        model.updated_at = updated_at
+        await self._session.flush()
         return _to_employee(model)
 
     async def terminate_and_hold(
@@ -839,6 +930,9 @@ class SqlAlchemyEmployeeRepository:
         model.user_id = None
         model.full_name = anonymized_full_name
         model.preferred_name = ""
+        model.job_title = ""
+        model.emergency_contact_name = ""
+        model.emergency_contact_phone = ""
         model.email = ""
         model.phone = ""
         model.birth_date = None
@@ -849,6 +943,10 @@ class SqlAlchemyEmployeeRepository:
         model.iban_masked = None
         model.naf_enc = None
         model.naf_masked = None
+        model.avatar_storage_backend = None
+        model.avatar_storage_key = None
+        model.avatar_mime_type = None
+        model.avatar_updated_at = None
         model.employment_status = EmploymentStatus.ANONYMIZED.value
         model.anonymized_at = anonymized_at
         model.deleted_at = anonymized_at
@@ -877,6 +975,7 @@ def _to_attendance_event(model: AttendanceEventModel) -> AttendanceEvent:
             else None
         ),
         correction_reason=model.correction_reason,
+        work_mode=WorkMode(model.work_mode),
     )
 
 
@@ -905,6 +1004,7 @@ class SqlAlchemyAttendanceRepository:
                 else None
             ),
             correction_reason=event.correction_reason,
+            work_mode=event.work_mode.value,
             retention_until=event.retention_until,
         )
         self._session.add(model)
@@ -1122,6 +1222,14 @@ def _to_leave_request(model: LeaveRequestModel) -> LeaveRequest:
         reviewed_by_user_id=model.reviewed_by_user_id,
         reviewed_at_utc=model.reviewed_at_utc,
         review_note=model.review_note,
+        manager_reviewed_by_user_id=model.manager_reviewed_by_user_id,
+        manager_reviewed_at_utc=model.manager_reviewed_at_utc,
+        manager_review_note=model.manager_review_note,
+        hr_reviewed_by_user_id=model.hr_reviewed_by_user_id,
+        hr_reviewed_at_utc=model.hr_reviewed_at_utc,
+        hr_review_note=model.hr_review_note,
+        assigned_directly=model.assigned_directly,
+        assigned_by_user_id=model.assigned_by_user_id,
         medical_document_id=model.medical_document_id,
         retention_until=model.retention_until,
         created_at=model.created_at,
@@ -1214,6 +1322,14 @@ class SqlAlchemyLeaveRepository:
             reviewed_by_user_id=leave.reviewed_by_user_id,
             reviewed_at_utc=leave.reviewed_at_utc,
             review_note=leave.review_note,
+            manager_reviewed_by_user_id=leave.manager_reviewed_by_user_id,
+            manager_reviewed_at_utc=leave.manager_reviewed_at_utc,
+            manager_review_note=leave.manager_review_note,
+            hr_reviewed_by_user_id=leave.hr_reviewed_by_user_id,
+            hr_reviewed_at_utc=leave.hr_reviewed_at_utc,
+            hr_review_note=leave.hr_review_note,
+            assigned_directly=leave.assigned_directly,
+            assigned_by_user_id=leave.assigned_by_user_id,
             medical_document_id=leave.medical_document_id,
             retention_until=leave.retention_until,
             created_at=leave.created_at,
@@ -1239,6 +1355,13 @@ class SqlAlchemyLeaveRepository:
         model.reviewed_by_user_id = leave.reviewed_by_user_id
         model.reviewed_at_utc = leave.reviewed_at_utc
         model.review_note = leave.review_note
+        model.manager_reviewed_by_user_id = leave.manager_reviewed_by_user_id
+        model.manager_reviewed_at_utc = leave.manager_reviewed_at_utc
+        model.manager_review_note = leave.manager_review_note
+        model.hr_reviewed_by_user_id = leave.hr_reviewed_by_user_id
+        model.hr_reviewed_at_utc = leave.hr_reviewed_at_utc
+        model.hr_review_note = leave.hr_review_note
+        model.medical_document_id = leave.medical_document_id
         model.updated_at = leave.updated_at
         await self._session.flush()
         return _to_leave_request(model)
@@ -1313,6 +1436,7 @@ class SqlAlchemyDocumentRepository:
         category: DocumentCategory | None = None,
         employee_id: UUID | None = None,
         store_id: UUID | None = None,
+        period_month: str | None = None,
         requires_signature: bool | None = None,
         exclude_categories: frozenset[DocumentCategory] | None = None,
     ) -> list[ComplianceDocument]:
@@ -1357,6 +1481,8 @@ class SqlAlchemyDocumentRepository:
             stmt = stmt.where(ComplianceDocumentModel.employee_id == employee_id)
         if store_id is not None:
             stmt = stmt.where(ComplianceDocumentModel.store_id == store_id)
+        if period_month is not None:
+            stmt = stmt.where(ComplianceDocumentModel.period_month == period_month)
         if requires_signature is not None:
             stmt = stmt.where(ComplianceDocumentModel.requires_signature == requires_signature)
 
@@ -1766,6 +1892,7 @@ class SqlAlchemyPayrollClosingRepository:
         result = await self._session.execute(stmt)
         return [_to_monthly_closing_item(row) for row in result.scalars().all()]
 
+
     async def list_items_for_closings(
         self,
         tenant_id: UUID,
@@ -1786,3 +1913,464 @@ class SqlAlchemyPayrollClosingRepository:
         )
         result = await self._session.execute(stmt)
         return [_to_monthly_closing_item(row) for row in result.scalars().all()]
+
+
+def _to_announcement(model: AnnouncementModel) -> Announcement:
+    return Announcement(
+        id=model.id,
+        tenant_id=model.tenant_id,
+        store_id=model.store_id,
+        department_scope=model.department_scope,
+        category=AnnouncementCategory(model.category),
+        title=model.title,
+        body=model.body,
+        attachment_document_id=model.attachment_document_id,
+        content_sha256_hex=model.content_sha256_hex,
+        requires_acknowledgement=model.requires_acknowledgement,
+        is_pinned=model.is_pinned,
+        published_by_user_id=model.published_by_user_id,
+        published_at_utc=model.published_at_utc,
+        retention_until=model.retention_until,
+        created_at=model.created_at,
+        updated_at=model.updated_at,
+        deleted_at=model.deleted_at,
+    )
+
+
+def _to_announcement_ack(model: AnnouncementAcknowledgementModel) -> AnnouncementAcknowledgement:
+    return AnnouncementAcknowledgement(
+        id=model.id,
+        tenant_id=model.tenant_id,
+        announcement_id=model.announcement_id,
+        employee_id=model.employee_id,
+        acknowledged_by_user_id=model.acknowledged_by_user_id,
+        content_sha256_hex=model.content_sha256_hex,
+        acknowledged_at_utc=model.acknowledged_at_utc,
+        ip_address=model.ip_address,
+        user_agent=model.user_agent,
+        statement=model.statement,
+        retention_until=model.retention_until,
+    )
+
+
+class SqlAlchemyAnnouncementRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get_by_id(
+        self,
+        tenant_id: UUID,
+        announcement_id: UUID,
+    ) -> Announcement | None:
+        stmt = select(AnnouncementModel).where(
+            AnnouncementModel.tenant_id == tenant_id,
+            AnnouncementModel.id == announcement_id,
+            AnnouncementModel.deleted_at.is_(None),
+        )
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+        return _to_announcement(model) if model is not None else None
+
+    async def list_by_tenant(
+        self,
+        tenant_id: UUID,
+        *,
+        category: AnnouncementCategory | None = None,
+    ) -> list[Announcement]:
+        stmt = select(AnnouncementModel).where(
+            AnnouncementModel.tenant_id == tenant_id,
+            AnnouncementModel.deleted_at.is_(None),
+        )
+        if category is not None:
+            stmt = stmt.where(AnnouncementModel.category == category.value)
+        stmt = stmt.order_by(
+            AnnouncementModel.is_pinned.desc(),
+            AnnouncementModel.published_at_utc.desc(),
+            AnnouncementModel.id.asc(),
+        )
+        result = await self._session.execute(stmt)
+        return [_to_announcement(row) for row in result.scalars().all()]
+
+    async def create(self, announcement: Announcement) -> Announcement:
+        model = AnnouncementModel(
+            id=announcement.id,
+            tenant_id=announcement.tenant_id,
+            store_id=announcement.store_id,
+            department_scope=announcement.department_scope,
+            category=announcement.category.value,
+            title=announcement.title,
+            body=announcement.body,
+            attachment_document_id=announcement.attachment_document_id,
+            content_sha256_hex=announcement.content_sha256_hex,
+            requires_acknowledgement=announcement.requires_acknowledgement,
+            is_pinned=announcement.is_pinned,
+            published_by_user_id=announcement.published_by_user_id,
+            published_at_utc=announcement.published_at_utc,
+            retention_until=announcement.retention_until,
+            created_at=announcement.created_at,
+            updated_at=announcement.updated_at,
+            deleted_at=announcement.deleted_at,
+        )
+        self._session.add(model)
+        await self._session.flush()
+        return _to_announcement(model)
+
+    async def list_acknowledgements_for_announcement(
+        self,
+        tenant_id: UUID,
+        announcement_id: UUID,
+    ) -> list[AnnouncementAcknowledgement]:
+        stmt = (
+            select(AnnouncementAcknowledgementModel)
+            .where(
+                AnnouncementAcknowledgementModel.tenant_id == tenant_id,
+                AnnouncementAcknowledgementModel.announcement_id == announcement_id,
+            )
+            .order_by(AnnouncementAcknowledgementModel.acknowledged_at_utc.asc())
+        )
+        result = await self._session.execute(stmt)
+        return [_to_announcement_ack(row) for row in result.scalars().all()]
+
+    async def list_acknowledgements_for_announcements(
+        self,
+        tenant_id: UUID,
+        announcement_ids: Sequence[UUID],
+    ) -> list[AnnouncementAcknowledgement]:
+        if not announcement_ids:
+            return []
+        stmt = (
+            select(AnnouncementAcknowledgementModel)
+            .where(
+                AnnouncementAcknowledgementModel.tenant_id == tenant_id,
+                AnnouncementAcknowledgementModel.announcement_id.in_(list(announcement_ids)),
+            )
+            .order_by(AnnouncementAcknowledgementModel.acknowledged_at_utc.asc())
+        )
+        result = await self._session.execute(stmt)
+        return [_to_announcement_ack(row) for row in result.scalars().all()]
+
+    async def get_acknowledgement(
+        self,
+        tenant_id: UUID,
+        announcement_id: UUID,
+        employee_id: UUID,
+    ) -> AnnouncementAcknowledgement | None:
+        stmt = select(AnnouncementAcknowledgementModel).where(
+            AnnouncementAcknowledgementModel.tenant_id == tenant_id,
+            AnnouncementAcknowledgementModel.announcement_id == announcement_id,
+            AnnouncementAcknowledgementModel.employee_id == employee_id,
+        )
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+        return _to_announcement_ack(model) if model is not None else None
+
+    async def append_acknowledgement(
+        self,
+        ack: AnnouncementAcknowledgement,
+    ) -> AnnouncementAcknowledgement:
+        model = AnnouncementAcknowledgementModel(
+            id=ack.id,
+            tenant_id=ack.tenant_id,
+            announcement_id=ack.announcement_id,
+            employee_id=ack.employee_id,
+            acknowledged_by_user_id=ack.acknowledged_by_user_id,
+            content_sha256_hex=ack.content_sha256_hex,
+            acknowledged_at_utc=ack.acknowledged_at_utc,
+            ip_address=ack.ip_address,
+            user_agent=ack.user_agent,
+            statement=ack.statement,
+            retention_until=ack.retention_until,
+        )
+        self._session.add(model)
+        try:
+            await self._session.flush()
+        except IntegrityError as exc:
+            raise ConflictError("Announcement already acknowledged by this employee") from exc
+        return _to_announcement_ack(model)
+
+
+def _to_leave_entitlement(model: LeaveEntitlementModel) -> LeaveEntitlement:
+    return LeaveEntitlement(
+        id=model.id,
+        tenant_id=model.tenant_id,
+        employee_id=model.employee_id,
+        year=model.year,
+        base_vacation_days=model.base_vacation_days,
+        carryover_days=model.carryover_days,
+        comp_off_days=model.comp_off_days,
+        updated_by_user_id=model.updated_by_user_id,
+        created_at=model.created_at,
+        updated_at=model.updated_at,
+    )
+
+
+def _to_leave_entitlement_adjustment(
+    model: LeaveEntitlementAdjustmentModel,
+) -> LeaveEntitlementAdjustment:
+    return LeaveEntitlementAdjustment(
+        id=model.id,
+        tenant_id=model.tenant_id,
+        employee_id=model.employee_id,
+        year=model.year,
+        adjustment_type=EntitlementAdjustmentType(model.adjustment_type),
+        delta_days=model.delta_days,
+        previous_total_days=model.previous_total_days,
+        new_total_days=model.new_total_days,
+        reason=model.reason,
+        adjusted_by_user_id=model.adjusted_by_user_id,
+        created_at=model.created_at,
+    )
+
+
+class SqlAlchemyLeaveEntitlementRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get_by_employee_year(
+        self,
+        tenant_id: UUID,
+        employee_id: UUID,
+        year: int,
+    ) -> LeaveEntitlement | None:
+        stmt = select(LeaveEntitlementModel).where(
+            LeaveEntitlementModel.tenant_id == tenant_id,
+            LeaveEntitlementModel.employee_id == employee_id,
+            LeaveEntitlementModel.year == year,
+        )
+        model = (await self._session.execute(stmt)).scalar_one_or_none()
+        return _to_leave_entitlement(model) if model is not None else None
+
+    async def list_by_tenant(
+        self,
+        tenant_id: UUID,
+        *,
+        year: int | None = None,
+        employee_id: UUID | None = None,
+    ) -> list[LeaveEntitlement]:
+        stmt = select(LeaveEntitlementModel).where(LeaveEntitlementModel.tenant_id == tenant_id)
+        if year is not None:
+            stmt = stmt.where(LeaveEntitlementModel.year == year)
+        if employee_id is not None:
+            stmt = stmt.where(LeaveEntitlementModel.employee_id == employee_id)
+        stmt = stmt.order_by(LeaveEntitlementModel.year.desc(), LeaveEntitlementModel.id.asc())
+        result = await self._session.execute(stmt)
+        return [_to_leave_entitlement(row) for row in result.scalars().all()]
+
+    async def upsert(self, entitlement: LeaveEntitlement) -> LeaveEntitlement:
+        stmt = select(LeaveEntitlementModel).where(
+            LeaveEntitlementModel.tenant_id == entitlement.tenant_id,
+            LeaveEntitlementModel.employee_id == entitlement.employee_id,
+            LeaveEntitlementModel.year == entitlement.year,
+        )
+        model = (await self._session.execute(stmt)).scalar_one_or_none()
+        if model is None:
+            model = LeaveEntitlementModel(
+                id=entitlement.id,
+                tenant_id=entitlement.tenant_id,
+                employee_id=entitlement.employee_id,
+                year=entitlement.year,
+                base_vacation_days=entitlement.base_vacation_days,
+                carryover_days=entitlement.carryover_days,
+                comp_off_days=entitlement.comp_off_days,
+                updated_by_user_id=entitlement.updated_by_user_id,
+                created_at=entitlement.created_at,
+                updated_at=entitlement.updated_at,
+            )
+            self._session.add(model)
+        else:
+            model.base_vacation_days = entitlement.base_vacation_days
+            model.carryover_days = entitlement.carryover_days
+            model.comp_off_days = entitlement.comp_off_days
+            model.updated_by_user_id = entitlement.updated_by_user_id
+            model.updated_at = entitlement.updated_at
+        try:
+            await self._session.flush()
+        except IntegrityError as exc:
+            await self._session.rollback()
+            raise ConflictError("Concurrent leave entitlement update conflict") from exc
+        return _to_leave_entitlement(model)
+
+    async def list_adjustments(
+        self,
+        tenant_id: UUID,
+        *,
+        year: int | None = None,
+        employee_id: UUID | None = None,
+    ) -> list[LeaveEntitlementAdjustment]:
+        stmt = select(LeaveEntitlementAdjustmentModel).where(
+            LeaveEntitlementAdjustmentModel.tenant_id == tenant_id
+        )
+        if year is not None:
+            stmt = stmt.where(LeaveEntitlementAdjustmentModel.year == year)
+        if employee_id is not None:
+            stmt = stmt.where(LeaveEntitlementAdjustmentModel.employee_id == employee_id)
+        stmt = stmt.order_by(
+            LeaveEntitlementAdjustmentModel.created_at.desc(),
+            LeaveEntitlementAdjustmentModel.id.asc(),
+        )
+        result = await self._session.execute(stmt)
+        return [_to_leave_entitlement_adjustment(row) for row in result.scalars().all()]
+
+    async def append_adjustment(
+        self,
+        adjustment: LeaveEntitlementAdjustment,
+    ) -> LeaveEntitlementAdjustment:
+        model = LeaveEntitlementAdjustmentModel(
+            id=adjustment.id,
+            tenant_id=adjustment.tenant_id,
+            employee_id=adjustment.employee_id,
+            year=adjustment.year,
+            adjustment_type=adjustment.adjustment_type.value,
+            delta_days=adjustment.delta_days,
+            previous_total_days=adjustment.previous_total_days,
+            new_total_days=adjustment.new_total_days,
+            reason=adjustment.reason,
+            adjusted_by_user_id=adjustment.adjusted_by_user_id,
+            created_at=adjustment.created_at,
+        )
+        self._session.add(model)
+        await self._session.flush()
+        return _to_leave_entitlement_adjustment(model)
+
+
+def _to_break_policy(model: BreakPolicyModel) -> BreakPolicy:
+    return BreakPolicy(
+        id=model.id,
+        tenant_id=model.tenant_id,
+        scope_type=BreakScopeType(model.scope_type),
+        store_id=model.store_id,
+        employee_id=model.employee_id,
+        break_mode=BreakMode(model.break_mode),
+        duration_minutes=model.duration_minutes,
+        windows=tuple(
+            BreakWindow(start=w["start"], end=w["end"]) for w in (model.windows_json or [])
+        ),
+        is_paid=model.is_paid,
+        tracking_mode=BreakTrackingMode(model.tracking_mode),
+        min_shift_minutes_for_auto_deduct=model.min_shift_minutes_for_auto_deduct,
+        auto_end_manual_break=model.auto_end_manual_break,
+        is_active=model.is_active,
+        updated_by_user_id=model.updated_by_user_id,
+        created_at=model.created_at,
+        updated_at=model.updated_at,
+        deleted_at=model.deleted_at,
+    )
+
+
+class SqlAlchemyBreakPolicyRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get_by_id(self, tenant_id: UUID, policy_id: UUID) -> BreakPolicy | None:
+        stmt = select(BreakPolicyModel).where(
+            BreakPolicyModel.tenant_id == tenant_id,
+            BreakPolicyModel.id == policy_id,
+            BreakPolicyModel.deleted_at.is_(None),
+        )
+        model = (await self._session.execute(stmt)).scalar_one_or_none()
+        return _to_break_policy(model) if model is not None else None
+
+    async def get_by_scope(
+        self,
+        tenant_id: UUID,
+        *,
+        scope_type: BreakScopeType,
+        store_id: UUID | None = None,
+        employee_id: UUID | None = None,
+    ) -> BreakPolicy | None:
+        stmt = select(BreakPolicyModel).where(
+            BreakPolicyModel.tenant_id == tenant_id,
+            BreakPolicyModel.scope_type == scope_type.value,
+            BreakPolicyModel.deleted_at.is_(None),
+        )
+        if scope_type == BreakScopeType.STORE:
+            stmt = stmt.where(BreakPolicyModel.store_id == store_id)
+        elif scope_type == BreakScopeType.EMPLOYEE:
+            stmt = stmt.where(BreakPolicyModel.employee_id == employee_id)
+        model = (await self._session.execute(stmt)).scalar_one_or_none()
+        return _to_break_policy(model) if model is not None else None
+
+    async def list_by_tenant(self, tenant_id: UUID) -> list[BreakPolicy]:
+        stmt = (
+            select(BreakPolicyModel)
+            .where(
+                BreakPolicyModel.tenant_id == tenant_id,
+                BreakPolicyModel.deleted_at.is_(None),
+            )
+            .order_by(BreakPolicyModel.scope_type.asc(), BreakPolicyModel.id.asc())
+        )
+        result = await self._session.execute(stmt)
+        return [_to_break_policy(row) for row in result.scalars().all()]
+
+    async def upsert(self, policy: BreakPolicy) -> BreakPolicy:
+        stmt = select(BreakPolicyModel).where(
+            BreakPolicyModel.tenant_id == policy.tenant_id,
+            BreakPolicyModel.scope_type == policy.scope_type.value,
+            BreakPolicyModel.deleted_at.is_(None),
+        )
+        if policy.scope_type == BreakScopeType.STORE:
+            stmt = stmt.where(BreakPolicyModel.store_id == policy.store_id)
+        elif policy.scope_type == BreakScopeType.EMPLOYEE:
+            stmt = stmt.where(BreakPolicyModel.employee_id == policy.employee_id)
+        model = (await self._session.execute(stmt)).scalar_one_or_none()
+        windows_payload = [{"start": w.start, "end": w.end} for w in policy.windows]
+        if model is None:
+            model = BreakPolicyModel(
+                id=policy.id,
+                tenant_id=policy.tenant_id,
+                scope_type=policy.scope_type.value,
+                store_id=policy.store_id,
+                employee_id=policy.employee_id,
+                break_mode=policy.break_mode.value,
+                duration_minutes=policy.duration_minutes,
+                windows_json=windows_payload,
+                is_paid=policy.is_paid,
+                tracking_mode=policy.tracking_mode.value,
+                min_shift_minutes_for_auto_deduct=policy.min_shift_minutes_for_auto_deduct,
+                auto_end_manual_break=policy.auto_end_manual_break,
+                is_active=policy.is_active,
+                updated_by_user_id=policy.updated_by_user_id,
+                created_at=policy.created_at,
+                updated_at=policy.updated_at,
+                deleted_at=None,
+            )
+            self._session.add(model)
+        else:
+            model.break_mode = policy.break_mode.value
+            model.duration_minutes = policy.duration_minutes
+            model.windows_json = windows_payload
+            model.is_paid = policy.is_paid
+            model.tracking_mode = policy.tracking_mode.value
+            model.min_shift_minutes_for_auto_deduct = policy.min_shift_minutes_for_auto_deduct
+            model.auto_end_manual_break = policy.auto_end_manual_break
+            model.is_active = policy.is_active
+            model.updated_by_user_id = policy.updated_by_user_id
+            model.updated_at = policy.updated_at
+        try:
+            await self._session.flush()
+        except IntegrityError as exc:
+            await self._session.rollback()
+            raise ConflictError("Active break policy already exists for this scope") from exc
+        return _to_break_policy(model)
+
+    async def soft_delete(
+        self,
+        tenant_id: UUID,
+        policy_id: UUID,
+        *,
+        deleted_at: datetime,
+        updated_by_user_id: UUID,
+    ) -> BreakPolicy | None:
+        stmt = select(BreakPolicyModel).where(
+            BreakPolicyModel.tenant_id == tenant_id,
+            BreakPolicyModel.id == policy_id,
+            BreakPolicyModel.deleted_at.is_(None),
+        )
+        model = (await self._session.execute(stmt)).scalar_one_or_none()
+        if model is None:
+            return None
+        model.deleted_at = deleted_at
+        model.updated_at = deleted_at
+        model.updated_by_user_id = updated_by_user_id
+        await self._session.flush()
+        return _to_break_policy(model)

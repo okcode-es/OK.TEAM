@@ -4,8 +4,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.infrastructure.config import Settings, get_settings
+from app.interfaces.api.announcements import router as announcements_router
 from app.interfaces.api.attendance import router as attendance_router
 from app.interfaces.api.auth import router as auth_router
+from app.interfaces.api.break_policies import router as break_policies_router
+from app.interfaces.api.dashboard import router as dashboard_router
 from app.interfaces.api.dev_auth import build_dev_auth_router
 from app.interfaces.api.documents import router as documents_router
 from app.interfaces.api.employees import router as employees_router
@@ -14,6 +17,7 @@ from app.interfaces.api.health import router as health_router
 from app.interfaces.api.leaves import router as leaves_router
 from app.interfaces.api.memberships import router as memberships_router
 from app.interfaces.api.payroll import router as payroll_router
+from app.interfaces.api.reports import router as reports_router
 from app.interfaces.api.shifts import router as shifts_router
 from app.interfaces.api.stores import router as stores_router
 from app.interfaces.api.tenants import router as tenants_router
@@ -51,6 +55,10 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
     application.include_router(leaves_router, prefix=settings.api_v1_prefix)
     application.include_router(documents_router, prefix=settings.api_v1_prefix)
     application.include_router(payroll_router, prefix=settings.api_v1_prefix)
+    application.include_router(announcements_router, prefix=settings.api_v1_prefix)
+    application.include_router(break_policies_router, prefix=settings.api_v1_prefix)
+    application.include_router(dashboard_router, prefix=settings.api_v1_prefix)
+    application.include_router(reports_router, prefix=settings.api_v1_prefix)
 
     if settings.is_dev_auth_active:
         application.include_router(

@@ -16,9 +16,12 @@ from app.domain.documents import DocumentStoragePort
 from app.domain.employees import PiiCipher
 from app.domain.payroll import AttendancePdfRendererPort
 from app.domain.repositories import (
+    AnnouncementRepository,
     AttendanceRepository,
+    BreakPolicyRepository,
     DocumentRepository,
     EmployeeRepository,
+    LeaveEntitlementRepository,
     LeaveRepository,
     MembershipRepository,
     PayrollClosingRepository,
@@ -41,9 +44,12 @@ from app.infrastructure.document_storage import (
 from app.infrastructure.pdf_generator import PurePythonAttendancePdfRenderer
 from app.infrastructure.pii_crypto import AesGcmPiiCipher
 from app.infrastructure.repositories import (
+    SqlAlchemyAnnouncementRepository,
     SqlAlchemyAttendanceRepository,
+    SqlAlchemyBreakPolicyRepository,
     SqlAlchemyDocumentRepository,
     SqlAlchemyEmployeeRepository,
+    SqlAlchemyLeaveEntitlementRepository,
     SqlAlchemyLeaveRepository,
     SqlAlchemyMembershipRepository,
     SqlAlchemyPayrollClosingRepository,
@@ -139,6 +145,24 @@ def get_payroll_closing_repository(
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> PayrollClosingRepository:
     return SqlAlchemyPayrollClosingRepository(session)
+
+
+def get_announcement_repository(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> AnnouncementRepository:
+    return SqlAlchemyAnnouncementRepository(session)
+
+
+def get_leave_entitlement_repository(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> LeaveEntitlementRepository:
+    return SqlAlchemyLeaveEntitlementRepository(session)
+
+
+def get_break_policy_repository(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> BreakPolicyRepository:
+    return SqlAlchemyBreakPolicyRepository(session)
 
 
 def get_pdf_renderer() -> AttendancePdfRendererPort:
@@ -256,4 +280,5 @@ async def get_current_principal(
         role=membership.role,
         store_ids=membership.store_ids,
         email=identity.email or membership.email,
+        department_scope=membership.department_scope,
     )

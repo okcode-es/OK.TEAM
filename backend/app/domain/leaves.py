@@ -22,15 +22,23 @@ MAX_LEAVE_SPAN_DAYS = 365
 class LeaveType(StrEnum):
     VACATION = "vacation"
     SICK_LEAVE = "sick_leave"
+    MEDICAL_APPOINTMENT = "medical_appointment"
+    DAY_OFF = "day_off"
     PAID_LEAVE = "paid_leave"
     UNPAID_LEAVE = "unpaid_leave"
 
 
 class LeaveStatus(StrEnum):
-    PENDING = "pending"
+    PENDING_MANAGER = "pending_manager"
+    PENDING_HR = "pending_hr"
     APPROVED = "approved"
     REJECTED = "rejected"
     CANCELLED = "cancelled"
+
+
+PENDING_LEAVE_STATUSES: frozenset[LeaveStatus] = frozenset(
+    {LeaveStatus.PENDING_MANAGER, LeaveStatus.PENDING_HR}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +62,81 @@ class LeaveRequest:
     created_at: datetime
     updated_at: datetime
     deleted_at: datetime | None = None
+    manager_reviewed_by_user_id: UUID | None = None
+    manager_reviewed_at_utc: datetime | None = None
+    manager_review_note: str = ""
+    hr_reviewed_by_user_id: UUID | None = None
+    hr_reviewed_at_utc: datetime | None = None
+    hr_review_note: str = ""
+    assigned_directly: bool = False
+    assigned_by_user_id: UUID | None = None
+
+
+class EntitlementAdjustmentType(StrEnum):
+    BASE_UPDATE = "base_update"
+    CARRYOVER = "carryover"
+    COMP_OFF = "comp_off"
+    BULK_INIT = "bulk_init"
+
+
+@dataclass(frozen=True, slots=True)
+class LeaveEntitlement:
+    id: UUID
+    tenant_id: UUID
+    employee_id: UUID
+    year: int
+    base_vacation_days: int
+    carryover_days: int
+    comp_off_days: int
+    updated_by_user_id: UUID
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class LeaveEntitlementAdjustment:
+    id: UUID
+    tenant_id: UUID
+    employee_id: UUID
+    year: int
+    adjustment_type: EntitlementAdjustmentType
+    delta_days: int
+    previous_total_days: int
+    new_total_days: int
+    reason: str
+    adjusted_by_user_id: UUID
+    created_at: datetime
+
+
+def validate_entitlement_values(
+    *,
+    year: int,
+    base_vacation_days: int,
+    carryover_days: int,
+    comp_off_days: int,
+    employee_annual_vacation_days: int = STATUTORY_MIN_VACATION_DAYS,
+) -> int:
+    if year < 2020 or year > 2100:
+        raise ValidationDomainError("year must be between 2020 and 2100")
+    if base_vacation_days < STATUTORY_MIN_VACATION_DAYS or base_vacation_days > 90:
+        raise ValidationDomainError(
+            "base_vacation_days must be between 30 and 90 natural days (Art. 38 ET)"
+        )
+    if carryover_days < -30 or carryover_days > 60:
+        raise ValidationDomainError("carryover_days must be between -30 and 60 days")
+    if comp_off_days < 0 or comp_off_days > 90:
+        raise ValidationDomainError("comp_off_days must be between 0 and 90 days")
+    total = (
+        max(base_vacation_days, employee_annual_vacation_days, STATUTORY_MIN_VACATION_DAYS)
+        + carryover_days
+        + comp_off_days
+    )
+    if total < STATUTORY_MIN_VACATION_DAYS:
+        raise ValidationDomainError(
+            "Total annual vacation entitlement cannot be below Spanish statutory minimum "
+            "of 30 natural days (Art. 38 ET)"
+        )
+    return total
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,15 +186,28 @@ def compute_vacation_balance(
     employee: Employee,
     requests: Sequence[LeaveRequest],
     year: int,
+    entitlement: LeaveEntitlement | None = None,
 ) -> VacationBalance:
     """Compute Art. 38 ET annual vacation balance (>= 30 natural days) for a calendar year."""
-    entitled = max(employee.annual_vacation_days, STATUTORY_MIN_VACATION_DAYS)
+    if entitlement is not None:
+        raw_total = (
+            max(
+                entitlement.base_vacation_days,
+                employee.annual_vacation_days,
+                STATUTORY_MIN_VACATION_DAYS,
+            )
+            + entitlement.carryover_days
+            + entitlement.comp_off_days
+        )
+        entitled = max(raw_total, STATUTORY_MIN_VACATION_DAYS)
+    else:
+        entitled = max(employee.annual_vacation_days, STATUTORY_MIN_VACATION_DAYS)
     approved_days = 0
     pending_days = 0
     for req in requests:
         if req.deleted_at is not None or req.leave_type != LeaveType.VACATION:
             continue
-        if req.status not in (LeaveStatus.APPROVED, LeaveStatus.PENDING):
+        if req.status != LeaveStatus.APPROVED and req.status not in PENDING_LEAVE_STATUSES:
             continue
         days_in_year = split_days_by_year(req.start_date, req.end_date).get(year, 0)
         if req.status == LeaveStatus.APPROVED:
@@ -142,7 +238,7 @@ def check_leave_overlap(
             continue
         if exclude_id is not None and req.id == exclude_id:
             continue
-        if req.status not in (LeaveStatus.PENDING, LeaveStatus.APPROVED):
+        if req.status != LeaveStatus.APPROVED and req.status not in PENDING_LEAVE_STATUSES:
             continue
         if start_date <= req.end_date and end_date >= req.start_date:
             raise ConflictError(
@@ -157,11 +253,13 @@ def validate_vacation_balance_for_request(
     start_date: date,
     end_date: date,
     existing_requests: Sequence[LeaveRequest],
+    entitlements_by_year: dict[int, LeaveEntitlement] | None = None,
 ) -> None:
     """Ensure requested vacation days do not exceed remaining Art. 38 ET balance in any year."""
     per_year = split_days_by_year(start_date, end_date)
     for year, requested_days in per_year.items():
-        balance = compute_vacation_balance(employee, existing_requests, year)
+        ent = entitlements_by_year.get(year) if entitlements_by_year else None
+        balance = compute_vacation_balance(employee, existing_requests, year, entitlement=ent)
         if requested_days > balance.remaining_days:
             raise ValidationDomainError(
                 f"Insufficient vacation balance for {year}: requested {requested_days} days, "
@@ -210,10 +308,16 @@ def check_leave_published_shift_conflict(
 
 
 def validate_leave_transition(current: LeaveStatus, target: LeaveStatus) -> None:
-    """Only pending -> approved | rejected | cancelled transitions are permitted."""
-    if current != LeaveStatus.PENDING:
+    """Validate two-stage leave status transitions."""
+    if current == LeaveStatus.PENDING_MANAGER:
+        allowed = (LeaveStatus.PENDING_HR, LeaveStatus.REJECTED, LeaveStatus.CANCELLED)
+    elif current == LeaveStatus.PENDING_HR:
+        allowed = (LeaveStatus.APPROVED, LeaveStatus.REJECTED, LeaveStatus.CANCELLED)
+    else:
         raise ValidationDomainError(
             f"Cannot transition leave request from '{current.value}' to '{target.value}'"
         )
-    if target not in (LeaveStatus.APPROVED, LeaveStatus.REJECTED, LeaveStatus.CANCELLED):
-        raise ValidationDomainError(f"Invalid target leave status '{target.value}'")
+    if target not in allowed:
+        raise ValidationDomainError(
+            f"Cannot transition leave request from '{current.value}' to '{target.value}'"
+        )

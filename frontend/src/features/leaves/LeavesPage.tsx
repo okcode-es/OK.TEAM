@@ -12,16 +12,40 @@ import {
   useReactTable,
   type ColumnDef,
 } from '@tanstack/react-table'
-import { Plus } from 'lucide-react'
+import {
+  AlertCircle,
+  CalendarClock,
+  CalendarCog,
+  CalendarDays,
+  CalendarPlus,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  FileText,
+  Paperclip,
+  Plus,
+  Upload,
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { apiClient, extractApiError } from '@/api/client'
+import { AttendancePage } from '@/features/attendance/AttendancePage'
+import { AssignLeaveSheet } from '@/features/leaves/AssignLeaveSheet'
+import { LeaveEntitlementDialog } from '@/features/leaves/LeaveEntitlementDialog'
+import { TeamCalendarGantt } from '@/features/leaves/TeamCalendarGantt'
+import {
+  apiClient,
+  extractApiError,
+  extractFetchError,
+  getApiBaseUrl,
+  getAuthHeaders,
+} from '@/api/client'
 import type {
+  CalendarHolidayResponse,
   EmployeeResponse,
+  LeaveCalendarResponse,
   LeaveRequestResponse,
   LeaveStatus,
   LeaveType,
   StoreResponse,
-  VacationBalanceResponse,
 } from '@/api/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -54,19 +78,34 @@ import {
 } from '@/components/ui/table'
 import { useAuth } from '@/features/auth/AuthContext'
 import { formatUtcDateTime, isImeComposing } from '@/lib/ime'
+import { cn } from '@/lib/utils'
 
-const LEAVE_TYPES: LeaveType[] = [
+const PRIMARY_LEAVE_TYPES: LeaveType[] = [
   'vacation',
   'sick_leave',
+  'medical_appointment',
+  'day_off',
+]
+
+const ALL_LEAVE_TYPES: LeaveType[] = [
+  'vacation',
+  'sick_leave',
+  'medical_appointment',
+  'day_off',
   'paid_leave',
   'unpaid_leave',
 ]
 
 const STATUS_BADGE_STYLE: Record<LeaveStatus, string> = {
-  pending: 'border-amber-200 bg-amber-50 text-amber-800',
+  pending_manager: 'border-amber-200 bg-amber-50 text-amber-800',
+  pending_hr: 'border-sky-200 bg-sky-50 text-sky-700',
   approved: 'border-emerald-200 bg-emerald-50 text-emerald-700',
   rejected: 'border-rose-200 bg-rose-50 text-rose-700',
   cancelled: 'border-slate-200 bg-slate-100 text-slate-600',
+}
+
+function isPendingLeaveStatus(status: LeaveStatus): boolean {
+  return status === 'pending_manager' || status === 'pending_hr'
 }
 
 function computeNaturalDaysPreview(startDate: string, endDate: string): number {
@@ -78,10 +117,29 @@ function computeNaturalDaysPreview(startDate: string, endDate: string): number {
   return Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1
 }
 
+function toIsoDate(year: number, monthIndex: number, day: number): string {
+  return `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+function getMondayFirstCells(year: number, monthIndex: number): Array<number | null> {
+  const firstDay = new Date(Date.UTC(year, monthIndex, 1)).getUTCDay()
+  const offset = (firstDay + 6) % 7
+  const daysInMonth = new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate()
+  const cells: Array<number | null> = []
+  for (let i = 0; i < offset; i++) cells.push(null)
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d)
+  return cells
+}
+
 export function LeavesPage() {
   const { t, i18n } = useTranslation()
   const { activeTenant, profile } = useAuth()
   const locale = i18n.language || 'zh-CN'
+  const isEs = locale.startsWith('es')
+
+  const [activeTab, setActiveTab] = useState<'team' | 'absences' | 'attendance'>(
+    'team',
+  )
 
   const role = activeTenant?.role
   const canReview =
@@ -90,17 +148,19 @@ export function LeavesPage() {
   const isEmployeeRole = role === 'employee'
 
   const currentYear = new Date().getUTCFullYear()
-  const yearOptions = [currentYear - 1, currentYear, currentYear + 1]
 
   const [year, setYear] = useState<number>(currentYear)
+  const [typeFilter, setTypeFilter] = useState<string>('all')
   const [storeFilter, setStoreFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('all')
-  const [balanceEmployeeId, setBalanceEmployeeId] = useState<string>('')
+  const [calendarEmployeeId, setCalendarEmployeeId] = useState<string>('')
 
   const [stores, setStores] = useState<StoreResponse[]>([])
   const [employees, setEmployees] = useState<EmployeeResponse[]>([])
   const [requests, setRequests] = useState<LeaveRequestResponse[]>([])
-  const [balance, setBalance] = useState<VacationBalanceResponse | null>(null)
+  const [calendarData, setCalendarData] = useState<LeaveCalendarResponse | null>(
+    null,
+  )
   const [loading, setLoading] = useState(true)
   const [errorBanner, setErrorBanner] = useState<string | null>(null)
 
@@ -115,8 +175,11 @@ export function LeavesPage() {
     new Date().toISOString().slice(0, 10),
   )
   const [createReason, setCreateReason] = useState<string>('')
+  const [createJustificanteFile, setCreateJustificanteFile] =
+    useState<File | null>(null)
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
+  const [submitAttempted, setSubmitAttempted] = useState(false)
 
   // Detail & Review Sheet state
   const [selectedRequest, setSelectedRequest] =
@@ -124,19 +187,20 @@ export function LeavesPage() {
   const [reviewNote, setReviewNote] = useState<string>('')
   const [processingAction, setProcessingAction] = useState(false)
   const [detailError, setDetailError] = useState<string | null>(null)
+  const [justificanteUploading, setJustificanteUploading] = useState(false)
+  const [entitlementOpen, setEntitlementOpen] = useState(false)
+  const [assignOpen, setAssignOpen] = useState(false)
 
   const loadMetadata = useCallback(async () => {
     const [storeRes, empRes] = await Promise.all([
       apiClient.GET('/api/v1/stores'),
       apiClient.GET('/api/v1/employees'),
     ])
-    if (storeRes.data) {
-      setStores(storeRes.data.items)
-    }
+    if (storeRes.data) setStores(storeRes.data.items)
     if (empRes.data) {
       setEmployees(empRes.data.items)
       if (!isEmployeeRole && empRes.data.items.length > 0) {
-        setBalanceEmployeeId((prev) =>
+        setCalendarEmployeeId((prev) =>
           prev && empRes.data.items.some((e) => e.id === prev)
             ? prev
             : empRes.data.items[0].id,
@@ -167,39 +231,43 @@ export function LeavesPage() {
         },
       })
 
-      const balancePromise =
-        isEmployeeRole || balanceEmployeeId
-          ? apiClient.GET('/api/v1/leaves/balance', {
+      const calendarPromise =
+        isEmployeeRole || calendarEmployeeId
+          ? apiClient.GET('/api/v1/leaves/calendar', {
               params: {
                 query: {
                   year,
-                  employee_id: isEmployeeRole ? undefined : balanceEmployeeId,
+                  employee_id: isEmployeeRole ? undefined : calendarEmployeeId,
                 },
               },
             })
           : Promise.resolve({ data: undefined, error: undefined })
 
-      const [listRes, balRes] = await Promise.all([listPromise, balancePromise])
+      const [listRes, calRes] = await Promise.all([
+        listPromise,
+        calendarPromise,
+      ])
       if (listRes.error || !listRes.data) {
         setErrorBanner(extractApiError(listRes.error, t('common.error')))
       } else {
         setRequests(listRes.data.items)
       }
 
-      if (balRes.data) {
-        setBalance(balRes.data)
-      } else if (!isEmployeeRole && !balanceEmployeeId) {
-        setBalance(null)
+      if (calRes.data) {
+        setCalendarData(calRes.data)
+      } else {
+        setCalendarData(null)
       }
     } finally {
       setLoading(false)
     }
-  }, [year, storeFilter, statusFilter, isEmployeeRole, balanceEmployeeId, t])
+  }, [year, storeFilter, statusFilter, isEmployeeRole, calendarEmployeeId, t])
 
   useEffect(() => {
     setStoreFilter('all')
     setStatusFilter('all')
-    setBalanceEmployeeId('')
+    setTypeFilter('all')
+    setCalendarEmployeeId('')
     setSelectedRequest(null)
     void loadMetadata()
   }, [loadMetadata, activeTenant?.tenant_id])
@@ -210,22 +278,176 @@ export function LeavesPage() {
 
   const employeeMap = useMemo(() => {
     const map = new Map<string, EmployeeResponse>()
-    for (const emp of employees) {
-      map.set(emp.id, emp)
-    }
+    for (const emp of employees) map.set(emp.id, emp)
     return map
   }, [employees])
+
+  const filteredRequests = useMemo(() => {
+    if (typeFilter === 'all') return requests
+    return requests.filter((r) => r.leave_type === typeFilter)
+  }, [requests, typeFilter])
+
+  const calendarHolidaysMap = useMemo(() => {
+    const map = new Map<string, CalendarHolidayResponse>()
+    for (const h of calendarData?.holidays ?? []) {
+      map.set(h.date, h)
+    }
+    return map
+  }, [calendarData?.holidays])
+
+  const calendarLeavesByDay = useMemo(() => {
+    const map = new Map<
+      string,
+      { status: LeaveStatus; leave_type: LeaveType; label: string }
+    >()
+    const items = calendarData?.leaves ?? []
+    for (const lv of items) {
+      if (lv.status === 'rejected' || lv.status === 'cancelled') continue
+      if (typeFilter !== 'all' && lv.leave_type !== typeFilter) continue
+      const cur = new Date(`${lv.start_date}T00:00:00Z`)
+      const end = new Date(`${lv.end_date}T00:00:00Z`)
+      while (cur <= end) {
+        const key = cur.toISOString().slice(0, 10)
+        map.set(key, {
+          status: lv.status,
+          leave_type: lv.leave_type,
+          label: t(`leaves.types.${lv.leave_type}`),
+        })
+        cur.setUTCDate(cur.getUTCDate() + 1)
+      }
+    }
+    return map
+  }, [calendarData?.leaves, typeFilter, t])
+
+  const weekdayHeaders = useMemo(() => {
+    if (isEs) return ['L', 'M', 'X', 'J', 'V', 'S', 'D']
+    return ['一', '二', '三', '四', '五', '六', '日']
+  }, [isEs])
+
+  const monthNames = useMemo(() => {
+    const fmt = new Intl.DateTimeFormat(locale, {
+      month: 'long',
+      timeZone: 'UTC',
+    })
+    return Array.from({ length: 12 }, (_, m) =>
+      fmt.format(new Date(Date.UTC(year, m, 1))),
+    )
+  }, [locale, year])
 
   const naturalDaysPreview = useMemo(
     () => computeNaturalDaysPreview(createStartDate, createEndDate),
     [createStartDate, createEndDate],
   )
 
+  const matchingBalance = useMemo(() => {
+    if (!calendarData?.vacation_balance) return null
+    if (isEmployeeRole) return calendarData.vacation_balance
+    if (createEmployeeId && calendarData.employee_id === createEmployeeId) {
+      return calendarData.vacation_balance
+    }
+    return null
+  }, [calendarData, isEmployeeRole, createEmployeeId])
+
+  const missingEmployee = !isEmployeeRole && !createEmployeeId
+  const missingType = !createType
+  const missingStartDate = !createStartDate
+  const missingEndDate = !createEndDate
+  const invalidDateOrder = Boolean(
+    createStartDate && createEndDate && createEndDate < createStartDate,
+  )
+  const vacationExceeded = Boolean(
+    createType === 'vacation' &&
+      matchingBalance &&
+      naturalDaysPreview > 0 &&
+      naturalDaysPreview > matchingBalance.remaining_days,
+  )
+
+  const missingFieldLabels = useMemo(() => {
+    const list: string[] = []
+    if (missingEmployee) {
+      list.push(t('leaves.createDrawer.validation.fieldEmployee'))
+    }
+    if (missingType) {
+      list.push(t('leaves.createDrawer.validation.fieldType'))
+    }
+    if (missingStartDate) {
+      list.push(t('leaves.createDrawer.validation.fieldStartDate'))
+    }
+    if (missingEndDate) {
+      list.push(t('leaves.createDrawer.validation.fieldEndDate'))
+    }
+    return list
+  }, [missingEmployee, missingType, missingStartDate, missingEndDate, t])
+
+  const validationErrorItems = useMemo(() => {
+    const items: string[] = []
+    if (missingEmployee) {
+      items.push(
+        t('leaves.createDrawer.validation.requiredItem', {
+          field: t('leaves.createDrawer.validation.fieldEmployee'),
+        }),
+      )
+    }
+    if (missingType) {
+      items.push(
+        t('leaves.createDrawer.validation.requiredItem', {
+          field: t('leaves.createDrawer.validation.fieldType'),
+        }),
+      )
+    }
+    if (missingStartDate) {
+      items.push(
+        t('leaves.createDrawer.validation.requiredItem', {
+          field: t('leaves.createDrawer.validation.fieldStartDate'),
+        }),
+      )
+    }
+    if (missingEndDate) {
+      items.push(
+        t('leaves.createDrawer.validation.requiredItem', {
+          field: t('leaves.createDrawer.validation.fieldEndDate'),
+        }),
+      )
+    }
+    if (invalidDateOrder) {
+      items.push(t('leaves.createDrawer.validation.endBeforeStart'))
+    }
+    return items
+  }, [
+    missingEmployee,
+    missingType,
+    missingStartDate,
+    missingEndDate,
+    invalidDateOrder,
+    t,
+  ])
+
+  const hasValidationErrors = validationErrorItems.length > 0
+
+  const uploadJustificanteFile = async (leaveId: string, file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    const headers = await getAuthHeaders()
+    const response = await fetch(
+      `${getApiBaseUrl()}/api/v1/leaves/${leaveId}/justificante`,
+      {
+        method: 'POST',
+        headers,
+        body: formData,
+      },
+    )
+    if (!response.ok) {
+      throw new Error(await extractFetchError(response, t('errors.GENERIC')))
+    }
+  }
+
   const handleCreateSubmit = async (e?: FormEvent) => {
     if (e) e.preventDefault()
     if (!canCreate) return
-    setCreating(true)
+    setSubmitAttempted(true)
     setCreateError(null)
+    if (hasValidationErrors) return
+    setCreating(true)
     try {
       const res = await apiClient.POST('/api/v1/leaves', {
         body: {
@@ -240,9 +462,19 @@ export function LeavesPage() {
         setCreateError(extractApiError(res.error, t('common.error')))
         return
       }
+      if (
+        createJustificanteFile &&
+        (createType === 'sick_leave' || createType === 'medical_appointment')
+      ) {
+        await uploadJustificanteFile(res.data.id, createJustificanteFile)
+      }
       setCreateOpen(false)
+      setSubmitAttempted(false)
       setCreateReason('')
+      setCreateJustificanteFile(null)
       await loadData()
+    } catch (err) {
+      setCreateError(extractApiError(err, t('errors.GENERIC')))
     } finally {
       setCreating(false)
     }
@@ -290,6 +522,38 @@ export function LeavesPage() {
     }
   }
 
+  const handleDetailJustificanteUpload = async (file: File) => {
+    if (!selectedRequest) return
+    setJustificanteUploading(true)
+    setDetailError(null)
+    try {
+      await uploadJustificanteFile(selectedRequest.id, file)
+      await loadData()
+      setSelectedRequest((prev) =>
+        prev ? { ...prev, medical_document_id: 'uploaded' } : null,
+      )
+    } catch (err) {
+      setDetailError(err instanceof Error ? err.message : t('common.error'))
+    } finally {
+      setJustificanteUploading(false)
+    }
+  }
+
+  const handlePreviewJustificante = async (leaveId: string) => {
+    setDetailError(null)
+    const res = await apiClient.POST(
+      '/api/v1/leaves/{leave_id}/justificante/signed-url',
+      {
+        params: { path: { leave_id: leaveId } },
+      },
+    )
+    if (res.error || !res.data) {
+      setDetailError(extractApiError(res.error, t('common.error')))
+      return
+    }
+    window.open(res.data.url, '_blank', 'noopener,noreferrer')
+  }
+
   const handleCreateKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !isImeComposing(e)) {
       e.preventDefault()
@@ -322,12 +586,20 @@ export function LeavesPage() {
         id: 'type',
         header: t('leaves.columns.type'),
         cell: ({ row }) => (
-          <Badge
-            variant="outline"
-            className="border-slate-200 bg-slate-50 text-slate-700"
-          >
-            {t(`leaves.types.${row.original.leave_type}`)}
-          </Badge>
+          <div className="flex items-center gap-1.5">
+            <Badge
+              variant="outline"
+              className="border-slate-200 bg-slate-50 text-slate-700"
+            >
+              {t(`leaves.types.${row.original.leave_type}`)}
+            </Badge>
+            {row.original.medical_document_id && (
+              <Paperclip
+                className="h-3.5 w-3.5 text-[#2563EB]"
+                aria-label={t('leaves.justificante.attached')}
+              />
+            )}
+          </div>
         ),
       },
       {
@@ -374,131 +646,388 @@ export function LeavesPage() {
   )
 
   const table = useReactTable({
-    data: requests,
+    data: filteredRequests,
     columns,
     getCoreRowModel: getCoreRowModel(),
   })
 
   const canCancelSelected = useMemo(() => {
-    if (!selectedRequest || selectedRequest.status !== 'pending') return false
+    if (!selectedRequest || !isPendingLeaveStatus(selectedRequest.status)) {
+      return false
+    }
     if (canReview) return true
     const emp = employeeMap.get(selectedRequest.employee_id)
     return Boolean(emp && emp.user_id && emp.user_id === profile?.user_id)
   }, [selectedRequest, canReview, employeeMap, profile?.user_id])
+
+  const canActOnSelectedStage = useMemo(() => {
+    if (!selectedRequest) return false
+    if (selectedRequest.status === 'pending_manager') {
+      return role === 'store_manager' || role === 'owner'
+    }
+    if (selectedRequest.status === 'pending_hr') {
+      return role === 'hr' || role === 'owner'
+    }
+    return false
+  }, [selectedRequest, role])
+
+  const balance = calendarData?.vacation_balance ?? null
 
   return (
     <div className="space-y-4">
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
-          <h1 className="text-lg font-semibold tracking-tight text-slate-900">
-            {t('leaves.title')}
+          <h1 className="text-xl font-semibold tracking-tight text-slate-900">
+            {isEs ? 'Gestión del tiempo' : '时间与假期管理'}
           </h1>
           <p className="text-sm text-slate-600">{t('leaves.subtitle')}</p>
         </div>
-        {!canReview && (
-          <Badge
-            variant="outline"
-            className="self-start border-slate-200 bg-white text-slate-600"
-          >
-            {t('leaves.readOnlyHint')}
-          </Badge>
-        )}
-      </div>
 
-      {/* Art. 38 ET Balance Strip */}
-      <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
-          <Select
-            value={String(year)}
-            onValueChange={(v) => setYear(Number(v))}
-          >
-            <SelectTrigger
-              className="min-w-28 bg-white tabular-nums"
-              aria-label={t('leaves.yearLabel')}
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {yearOptions.map((y) => (
-                <SelectItem key={y} value={String(y)}>
-                  {y}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {!isEmployeeRole && employees.length > 0 && (
-            <Select
-              value={balanceEmployeeId}
-              onValueChange={setBalanceEmployeeId}
-            >
-              <SelectTrigger
-                className="min-w-52 bg-white"
-                aria-label={t('leaves.employeeLabel')}
+          {activeTab === 'absences' && (
+            <div className="flex items-center rounded-lg border border-slate-200 bg-white p-0.5">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => setYear((y) => y - 1)}
+                aria-label={t('leaves.prevYear')}
               >
-                <SelectValue placeholder={t('leaves.employeeLabel')} />
-              </SelectTrigger>
-              <SelectContent>
-                {employees.map((emp) => (
-                  <SelectItem key={emp.id} value={emp.id}>
-                    {emp.employee_code} · {emp.full_name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+              </Button>
+              <span className="px-2.5 text-sm font-semibold text-slate-900 tabular-nums">
+                {year}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => setYear((y) => y + 1)}
+                aria-label={t('leaves.nextYear')}
+              >
+                <ChevronRight className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            </div>
+          )}
+
+          {canReview && (
+            <>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setEntitlementOpen(true)}
+                className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+              >
+                <CalendarCog className="h-4 w-4 text-[#2563EB]" aria-hidden="true" />
+                {isEs ? 'Ajustar saldo de vacaciones' : '调整假期额度'}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setAssignOpen(true)}
+                className="border-blue-200 bg-blue-50/70 text-[#2563EB] hover:bg-blue-100/70"
+              >
+                <CalendarPlus className="h-4 w-4" aria-hidden="true" />
+                {isEs ? 'Asignar ausencia' : '为员工安排假期'}
+              </Button>
+            </>
+          )}
+
+          {canCreate && (
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => {
+                setCreateError(null)
+                setSubmitAttempted(false)
+                setCreateJustificanteFile(null)
+                setCreateOpen(true)
+              }}
+              className="bg-[#2563EB] text-white hover:bg-blue-700"
+            >
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              {isEs ? 'Solicitar ausencia' : '申请休假'}
+            </Button>
           )}
         </div>
+      </div>
 
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <div className="rounded-md border border-slate-200 bg-white p-3.5">
-            <div className="text-xs font-medium text-slate-500">
-              {t('leaves.kpi.entitled')}
+      {/* Unified Time Management Tabs */}
+      <div className="flex items-center gap-6 overflow-x-auto border-b border-slate-200">
+        <button
+          type="button"
+          onClick={() => setActiveTab('team')}
+          className={cn(
+            'inline-flex shrink-0 items-center gap-2 border-b-2 px-1 pb-2.5 text-sm font-medium whitespace-nowrap transition-colors',
+            activeTab === 'team'
+              ? 'border-[#2563EB] text-[#2563EB]'
+              : 'border-transparent text-slate-600 hover:text-slate-900',
+          )}
+        >
+          <CalendarDays className="h-4 w-4" aria-hidden="true" />
+          <span>{isEs ? 'Calendario del equipo' : '团队日历'}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('absences')}
+          className={cn(
+            'inline-flex shrink-0 items-center gap-2 border-b-2 px-1 pb-2.5 text-sm font-medium whitespace-nowrap transition-colors',
+            activeTab === 'absences'
+              ? 'border-[#2563EB] text-[#2563EB]'
+              : 'border-transparent text-slate-600 hover:text-slate-900',
+          )}
+        >
+          <CalendarClock className="h-4 w-4" aria-hidden="true" />
+          <span>{isEs ? 'Ausencias' : '假期管理'}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('attendance')}
+          className={cn(
+            'inline-flex shrink-0 items-center gap-2 border-b-2 px-1 pb-2.5 text-sm font-medium whitespace-nowrap transition-colors',
+            activeTab === 'attendance'
+              ? 'border-[#2563EB] text-[#2563EB]'
+              : 'border-transparent text-slate-600 hover:text-slate-900',
+          )}
+        >
+          <Clock className="h-4 w-4" aria-hidden="true" />
+          <span>{isEs ? 'Registro de jornada' : '考勤记录'}</span>
+        </button>
+      </div>
+
+      {activeTab === 'team' && <TeamCalendarGantt stores={stores} />}
+
+      {activeTab === 'attendance' && <AttendancePage />}
+
+      {activeTab === 'absences' && (
+        <>
+          {/* Main Split: Left Vertical Type Switcher + Right KPI & 12-month Calendar */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+        {/* Left Type Switcher */}
+        <aside className="space-y-2 lg:col-span-3">
+          <div className="rounded-md border border-slate-200 bg-white p-2">
+            <div className="mb-1.5 px-2 text-[11px] font-medium tracking-wide text-slate-500 uppercase">
+              {t('leaves.typeSwitcherTitle')}
             </div>
-            <div className="mt-1 text-2xl font-semibold text-slate-900 tabular-nums">
-              {balance ? balance.entitled_days : '—'}{' '}
-              <span className="text-xs font-normal text-slate-500">
-                {t('leaves.kpi.daysUnit')}
-              </span>
+            <div className="flex flex-col gap-1">
+              <button
+                type="button"
+                onClick={() => setTypeFilter('all')}
+                className={cn(
+                  'flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-2 text-left text-xs font-medium transition-colors',
+                  typeFilter === 'all'
+                    ? 'bg-slate-900 text-white'
+                    : 'text-slate-700 hover:bg-slate-100',
+                )}
+              >
+                <span className="min-w-0 flex-1 truncate">{t('leaves.allTypes')}</span>
+                <span className="shrink-0 text-[11px] opacity-80 tabular-nums">
+                  {requests.length}
+                </span>
+              </button>
+
+              {PRIMARY_LEAVE_TYPES.map((lt) => (
+                <button
+                  key={lt}
+                  type="button"
+                  onClick={() => setTypeFilter(lt)}
+                  className={cn(
+                    'flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-2 text-left text-xs font-medium transition-colors',
+                    typeFilter === lt
+                      ? 'bg-slate-900 text-white'
+                      : 'text-slate-700 hover:bg-slate-100',
+                  )}
+                >
+                  <span className="min-w-0 flex-1 truncate">{t(`leaves.types.${lt}`)}</span>
+                  <span className="shrink-0 text-[11px] opacity-80 tabular-nums">
+                    {calendarData?.type_counts?.[lt] ?? 0}
+                  </span>
+                </button>
+              ))}
+
+              <Separator className="my-1" />
+
+              {(['paid_leave', 'unpaid_leave'] as LeaveType[]).map((lt) => (
+                <button
+                  key={lt}
+                  type="button"
+                  onClick={() => setTypeFilter(lt)}
+                  className={cn(
+                    'flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-xs transition-colors',
+                    typeFilter === lt
+                      ? 'bg-slate-900 text-white'
+                      : 'text-slate-600 hover:bg-slate-100',
+                  )}
+                >
+                  <span className="min-w-0 flex-1 truncate">{t(`leaves.types.${lt}`)}</span>
+                  <span className="shrink-0 text-[11px] opacity-80 tabular-nums">
+                    {calendarData?.type_counts?.[lt] ?? 0}
+                  </span>
+                </button>
+              ))}
             </div>
           </div>
-          <div className="rounded-md border border-slate-200 bg-white p-3.5">
-            <div className="text-xs font-medium text-slate-500">
-              {t('leaves.kpi.approved')}
+
+          {!isEmployeeRole && employees.length > 0 && (
+            <div className="rounded-md border border-slate-200 bg-white p-2.5">
+              <Label className="mb-1.5 block text-[11px] text-slate-500">
+                {t('leaves.employeeLabel')}
+              </Label>
+              <Select
+                value={calendarEmployeeId}
+                onValueChange={setCalendarEmployeeId}
+              >
+                <SelectTrigger className="w-full bg-white text-xs">
+                  <SelectValue placeholder={t('leaves.employeeLabel')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {employees.map((emp) => (
+                    <SelectItem key={emp.id} value={emp.id}>
+                      {emp.employee_code} · {emp.full_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <div className="mt-1 text-2xl font-semibold text-emerald-700 tabular-nums">
-              {balance ? balance.approved_days : '—'}{' '}
-              <span className="text-xs font-normal text-slate-500">
-                {t('leaves.kpi.daysUnit')}
-              </span>
+          )}
+        </aside>
+
+        {/* Right Content: 3 KPIs + 12-month Calendar */}
+        <div className="space-y-4 lg:col-span-9">
+          {/* 3 KPI Cards */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="rounded-md border border-slate-200 bg-white p-3.5">
+              <div className="text-xs font-medium text-slate-500">
+                {t('leaves.kpi.remaining')}
+              </div>
+              <div className="mt-1 text-2xl font-semibold text-[#2563EB] tabular-nums">
+                {balance ? balance.remaining_days : '—'}{' '}
+                <span className="text-xs font-normal text-slate-500">
+                  {t('leaves.kpi.daysUnit')}
+                </span>
+              </div>
+            </div>
+
+            <div className="rounded-md border border-slate-200 bg-white p-3.5">
+              <div className="text-xs font-medium text-slate-500">
+                {t('leaves.kpi.approved')}
+              </div>
+              <div className="mt-1 text-2xl font-semibold text-emerald-700 tabular-nums">
+                {balance ? balance.approved_days : '—'}{' '}
+                <span className="text-xs font-normal text-slate-500">
+                  {t('leaves.kpi.daysUnit')}
+                </span>
+              </div>
+            </div>
+
+            <div className="rounded-md border border-slate-200 bg-white p-3.5">
+              <div className="text-xs font-medium text-slate-500">
+                {t('leaves.kpi.entitled')}
+              </div>
+              <div className="mt-1 text-2xl font-semibold text-slate-900 tabular-nums">
+                {balance ? balance.entitled_days : '—'}{' '}
+                <span className="text-xs font-normal text-slate-500">
+                  {t('leaves.kpi.daysUnit')}
+                </span>
+              </div>
             </div>
           </div>
-          <div className="rounded-md border border-slate-200 bg-white p-3.5">
-            <div className="text-xs font-medium text-slate-500">
-              {t('leaves.kpi.pending')}
+
+          {/* 12-Month Full-Year Calendar */}
+          <div className="rounded-md border border-slate-200 bg-white p-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div className="text-sm font-semibold text-slate-900">
+                {t('leaves.annualCalendarTitle', { year })}
+              </div>
+              <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-sm bg-emerald-600" />
+                  {t('leaves.legend.approved')}
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-sm bg-amber-400" />
+                  {t('leaves.legend.pending')}
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-sm bg-rose-500" />
+                  {t('leaves.legend.holiday')}
+                </span>
+              </div>
             </div>
-            <div className="mt-1 text-2xl font-semibold text-amber-700 tabular-nums">
-              {balance ? balance.pending_days : '—'}{' '}
-              <span className="text-xs font-normal text-slate-500">
-                {t('leaves.kpi.daysUnit')}
-              </span>
-            </div>
-          </div>
-          <div className="rounded-md border border-slate-200 bg-white p-3.5">
-            <div className="text-xs font-medium text-slate-500">
-              {t('leaves.kpi.remaining')}
-            </div>
-            <div className="mt-1 text-2xl font-semibold text-teal-700 tabular-nums">
-              {balance ? balance.remaining_days : '—'}{' '}
-              <span className="text-xs font-normal text-slate-500">
-                {t('leaves.kpi.daysUnit')}
-              </span>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {monthNames.map((monthLabel, monthIdx) => {
+                const cells = getMondayFirstCells(year, monthIdx)
+                return (
+                  <div
+                    key={monthIdx}
+                    className="rounded-md border border-slate-200 bg-slate-50/40 p-2.5"
+                  >
+                    <div className="mb-1.5 text-xs font-semibold capitalize text-slate-900">
+                      {monthLabel}
+                    </div>
+                    <div className="grid grid-cols-7 gap-0.5 text-center text-[10px] font-medium text-slate-400">
+                      {weekdayHeaders.map((wd) => (
+                        <span key={wd} className="py-0.5">
+                          {wd}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="mt-0.5 grid grid-cols-7 gap-0.5 text-center text-[11px] tabular-nums">
+                      {cells.map((day, idx) => {
+                        if (day === null) {
+                          return <span key={`empty-${idx}`} className="h-6" />
+                        }
+                        const iso = toIsoDate(year, monthIdx, day)
+                        const holiday = calendarHolidaysMap.get(iso)
+                        const lv = calendarLeavesByDay.get(iso)
+
+                        const titleParts: string[] = []
+                        if (holiday) {
+                          titleParts.push(
+                            isEs ? holiday.name_es : holiday.name_zh,
+                          )
+                        }
+                        if (lv) {
+                          titleParts.push(
+                            `${lv.label} (${t(`leaves.statuses.${lv.status}`)})`,
+                          )
+                        }
+
+                        return (
+                          <span
+                            key={iso}
+                            title={titleParts.join(' · ') || iso}
+                            className={cn(
+                              'flex h-6 items-center justify-center rounded-sm',
+                              lv?.status === 'approved'
+                                ? 'bg-emerald-600 font-medium text-white'
+                                : lv?.status === 'pending_manager'
+                                  ? 'bg-amber-300 font-medium text-slate-900'
+                                  : lv?.status === 'pending_hr'
+                                    ? 'bg-sky-200 font-medium text-slate-900'
+                                    : holiday
+                                    ? 'bg-rose-100 font-medium text-rose-700'
+                                    : 'text-slate-700',
+                            )}
+                          >
+                            {day}
+                          </span>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Compact Toolbar */}
+      {/* Compact Toolbar for Requests Table */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-200 bg-white p-3">
         <div className="flex flex-wrap items-center gap-2">
           {!isEmployeeRole && stores.length > 0 && (
@@ -523,8 +1052,11 @@ export function LeavesPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{t('leaves.allStatuses')}</SelectItem>
-              <SelectItem value="pending">
-                {t('leaves.statuses.pending')}
+              <SelectItem value="pending_manager">
+                {t('leaves.statuses.pending_manager')}
+              </SelectItem>
+              <SelectItem value="pending_hr">
+                {t('leaves.statuses.pending_hr')}
               </SelectItem>
               <SelectItem value="approved">
                 {t('leaves.statuses.approved')}
@@ -539,23 +1071,9 @@ export function LeavesPage() {
           </Select>
 
           <span className="px-1 text-xs text-slate-500 tabular-nums">
-            {t('leaves.count', { count: requests.length })}
+            {t('leaves.count', { count: filteredRequests.length })}
           </span>
         </div>
-
-        {canCreate && (
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => {
-              setCreateError(null)
-              setCreateOpen(true)
-            }}
-          >
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            {t('leaves.newRequest')}
-          </Button>
-        )}
       </div>
 
       {errorBanner && (
@@ -575,7 +1093,7 @@ export function LeavesPage() {
             <Skeleton className="h-10 w-full" />
             <Skeleton className="h-10 w-full" />
           </div>
-        ) : requests.length === 0 ? (
+        ) : filteredRequests.length === 0 ? (
           <div className="p-8 text-center text-sm text-slate-500">
             {t('leaves.empty')}
           </div>
@@ -620,9 +1138,20 @@ export function LeavesPage() {
           </Table>
         )}
       </div>
+        </>
+      )}
 
       {/* Create Leave Request Sheet */}
-      <Sheet open={createOpen} onOpenChange={setCreateOpen}>
+      <Sheet
+        open={createOpen}
+        onOpenChange={(open) => {
+          setCreateOpen(open)
+          if (!open) {
+            setSubmitAttempted(false)
+            setCreateError(null)
+          }
+        }}
+      >
         <SheetContent side="right" className="w-full overflow-y-auto bg-white sm:max-w-md">
           <SheetHeader>
             <SheetTitle>{t('leaves.createDrawer.title')}</SheetTitle>
@@ -632,9 +1161,26 @@ export function LeavesPage() {
           </SheetHeader>
 
           <form
+            noValidate
             onSubmit={(e) => void handleCreateSubmit(e)}
             className="mt-4 space-y-4 px-4"
           >
+            {submitAttempted && hasValidationErrors && (
+              <div
+                role="alert"
+                className="space-y-1 rounded-md border border-rose-200 bg-rose-50 px-3 py-2.5 text-xs text-rose-700"
+              >
+                <div className="font-semibold">
+                  {t('leaves.createDrawer.validation.summaryTitle')}
+                </div>
+                <ul className="list-inside list-disc space-y-0.5">
+                  {validationErrorItems.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {createError && (
               <div
                 role="alert"
@@ -644,17 +1190,47 @@ export function LeavesPage() {
               </div>
             )}
 
-            {!isEmployeeRole && employees.length > 0 && (
+            {missingFieldLabels.length > 0 && (
+              <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                <AlertCircle
+                  className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600"
+                  aria-hidden="true"
+                />
+                <span>
+                  {t('leaves.createDrawer.validation.missingGuidance', {
+                    fields: missingFieldLabels.join(isEs ? ', ' : '、'),
+                  })}
+                </span>
+              </div>
+            )}
+
+            {!isEmployeeRole && (
               <div className="space-y-1.5">
                 <Label htmlFor="leave-employee">
                   {t('leaves.createDrawer.employee')}
+                  <span className="ml-0.5 text-rose-500" aria-hidden="true">
+                    *
+                  </span>
                 </Label>
                 <Select
                   value={createEmployeeId}
                   onValueChange={setCreateEmployeeId}
                 >
-                  <SelectTrigger id="leave-employee" className="w-full bg-white">
-                    <SelectValue />
+                  <SelectTrigger
+                    id="leave-employee"
+                    aria-invalid={submitAttempted && missingEmployee}
+                    className={cn(
+                      'w-full bg-white',
+                      submitAttempted &&
+                        missingEmployee &&
+                        'border-rose-400 focus-visible:ring-rose-500',
+                    )}
+                  >
+                    <SelectValue
+                      placeholder={t(
+                        'leaves.createDrawer.validation.selectPlaceholder',
+                      )}
+                    />
                   </SelectTrigger>
                   <SelectContent>
                     {employees.map((emp) => (
@@ -664,54 +1240,119 @@ export function LeavesPage() {
                     ))}
                   </SelectContent>
                 </Select>
+                {submitAttempted && missingEmployee && (
+                  <p className="text-xs text-rose-600">
+                    {t('leaves.createDrawer.validation.requiredItem', {
+                      field: t('leaves.createDrawer.validation.fieldEmployee'),
+                    })}
+                  </p>
+                )}
               </div>
             )}
 
             <div className="space-y-1.5">
               <Label htmlFor="leave-type">
                 {t('leaves.createDrawer.leaveType')}
+                <span className="ml-0.5 text-rose-500" aria-hidden="true">
+                  *
+                </span>
               </Label>
               <Select
                 value={createType}
                 onValueChange={(v) => setCreateType(v as LeaveType)}
               >
-                <SelectTrigger id="leave-type" className="w-full bg-white">
+                <SelectTrigger
+                  id="leave-type"
+                  aria-invalid={submitAttempted && missingType}
+                  className={cn(
+                    'w-full bg-white',
+                    submitAttempted &&
+                      missingType &&
+                      'border-rose-400 focus-visible:ring-rose-500',
+                  )}
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {LEAVE_TYPES.map((lt) => (
+                  {ALL_LEAVE_TYPES.map((lt) => (
                     <SelectItem key={lt} value={lt}>
                       {t(`leaves.types.${lt}`)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {submitAttempted && missingType && (
+                <p className="text-xs text-rose-600">
+                  {t('leaves.createDrawer.validation.requiredItem', {
+                    field: t('leaves.createDrawer.validation.fieldType'),
+                  })}
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="leave-start">
                   {t('leaves.createDrawer.startDate')}
+                  <span className="ml-0.5 text-rose-500" aria-hidden="true">
+                    *
+                  </span>
                 </Label>
                 <Input
                   id="leave-start"
                   type="date"
                   value={createStartDate}
                   onChange={(e) => setCreateStartDate(e.target.value)}
-                  required
+                  aria-invalid={submitAttempted && missingStartDate}
+                  className={cn(
+                    submitAttempted &&
+                      missingStartDate &&
+                      'border-rose-400 focus-visible:ring-rose-500',
+                  )}
                 />
+                {submitAttempted && missingStartDate && (
+                  <p className="text-xs text-rose-600">
+                    {t('leaves.createDrawer.validation.requiredItem', {
+                      field: t(
+                        'leaves.createDrawer.validation.fieldStartDate',
+                      ),
+                    })}
+                  </p>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="leave-end">
                   {t('leaves.createDrawer.endDate')}
+                  <span className="ml-0.5 text-rose-500" aria-hidden="true">
+                    *
+                  </span>
                 </Label>
                 <Input
                   id="leave-end"
                   type="date"
                   value={createEndDate}
                   onChange={(e) => setCreateEndDate(e.target.value)}
-                  required
+                  aria-invalid={
+                    submitAttempted && (missingEndDate || invalidDateOrder)
+                  }
+                  className={cn(
+                    submitAttempted &&
+                      (missingEndDate || invalidDateOrder) &&
+                      'border-rose-400 focus-visible:ring-rose-500',
+                  )}
                 />
+                {submitAttempted && missingEndDate && (
+                  <p className="text-xs text-rose-600">
+                    {t('leaves.createDrawer.validation.requiredItem', {
+                      field: t('leaves.createDrawer.validation.fieldEndDate'),
+                    })}
+                  </p>
+                )}
+                {submitAttempted && !missingEndDate && invalidDateOrder && (
+                  <p className="text-xs text-rose-600">
+                    {t('leaves.createDrawer.validation.endBeforeStart')}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -720,6 +1361,21 @@ export function LeavesPage() {
                 days: naturalDaysPreview,
               })}
             </div>
+
+            {vacationExceeded && matchingBalance && (
+              <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 tabular-nums">
+                <AlertCircle
+                  className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600"
+                  aria-hidden="true"
+                />
+                <span>
+                  {t('leaves.createDrawer.validation.vacationExceeded', {
+                    requested: naturalDaysPreview,
+                    remaining: matchingBalance.remaining_days,
+                  })}
+                </span>
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <Label htmlFor="leave-reason">
@@ -734,6 +1390,26 @@ export function LeavesPage() {
               />
             </div>
 
+            {(createType === 'sick_leave' ||
+              createType === 'medical_appointment') && (
+              <div className="space-y-1.5 rounded-md border border-slate-200 bg-slate-50 p-3">
+                <Label htmlFor="leave-justificante" className="text-xs">
+                  {t('leaves.justificante.uploadLabel')}
+                </Label>
+                <Input
+                  id="leave-justificante"
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
+                  onChange={(e) =>
+                    setCreateJustificanteFile(e.target.files?.[0] ?? null)
+                  }
+                />
+                <p className="text-[11px] text-slate-500">
+                  {t('leaves.justificante.hint')}
+                </p>
+              </div>
+            )}
+
             <Separator />
 
             <SheetFooter className="flex gap-2 px-0">
@@ -746,7 +1422,7 @@ export function LeavesPage() {
               </Button>
               <Button
                 type="submit"
-                disabled={creating || naturalDaysPreview <= 0}
+                disabled={creating}
               >
                 {creating
                   ? t('leaves.createDrawer.submitting')
@@ -852,7 +1528,162 @@ export function LeavesPage() {
                 </p>
               </div>
 
-              {selectedRequest.status === 'pending' && canReview ? (
+              {/* Justificante Section */}
+              {(selectedRequest.leave_type === 'sick_leave' ||
+                selectedRequest.leave_type === 'medical_appointment' ||
+                selectedRequest.medical_document_id) && (
+                <div className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3">
+                  <div className="flex items-center justify-between text-xs font-medium text-slate-700">
+                    <span className="flex items-center gap-1.5">
+                      <FileText className="h-3.5 w-3.5" aria-hidden="true" />
+                      {t('leaves.justificante.title')}
+                    </span>
+                  </div>
+                  {selectedRequest.medical_document_id && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        void handlePreviewJustificante(selectedRequest.id)
+                      }
+                      className="w-full justify-center bg-white text-xs"
+                    >
+                      <Paperclip className="h-3.5 w-3.5" aria-hidden="true" />
+                      {t('leaves.justificante.preview60s')}
+                    </Button>
+                  )}
+                  <label className="flex cursor-pointer items-center justify-center gap-1.5 rounded-md border border-dashed border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50">
+                    <Upload className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span>
+                      {justificanteUploading
+                        ? t('common.loading')
+                        : t('leaves.justificante.uploadNew')}
+                    </span>
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
+                      disabled={justificanteUploading}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) void handleDetailJustificanteUpload(file)
+                      }}
+                    />
+                  </label>
+                </div>
+              )}
+
+              {/* 2-Step Approval Timeline */}
+              <div className="space-y-2 rounded-md border border-slate-200 bg-slate-50/70 p-3 text-xs">
+                <div className="font-semibold text-slate-700">
+                  {t('leaves.detailDrawer.timeline.title')}
+                </div>
+                <div className="space-y-2">
+                  {/* Step 1: Store Manager */}
+                  <div className="rounded-md border border-slate-200 bg-white p-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium text-slate-900">
+                        {t('leaves.detailDrawer.timeline.step1')}
+                      </span>
+                      <Badge
+                        variant="outline"
+                        className={
+                          selectedRequest.status === 'pending_manager'
+                            ? 'border-amber-200 bg-amber-50 text-amber-800'
+                            : selectedRequest.status === 'rejected' &&
+                                !selectedRequest.hr_reviewed_at_utc
+                              ? 'border-rose-200 bg-rose-50 text-rose-700'
+                              : selectedRequest.manager_reviewed_at_utc
+                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                : 'border-slate-200 bg-slate-100 text-slate-600'
+                        }
+                      >
+                        {selectedRequest.status === 'pending_manager'
+                          ? t('leaves.detailDrawer.timeline.waiting')
+                          : selectedRequest.status === 'rejected' &&
+                              !selectedRequest.hr_reviewed_at_utc
+                            ? t('leaves.statuses.rejected')
+                            : selectedRequest.manager_reviewed_at_utc
+                              ? t('leaves.detailDrawer.timeline.passed')
+                              : t('leaves.detailDrawer.timeline.skipped')}
+                      </Badge>
+                    </div>
+                    {selectedRequest.manager_reviewed_at_utc && (
+                      <div className="mt-1 text-[11px] text-slate-500 tabular-nums">
+                        {formatUtcDateTime(
+                          selectedRequest.manager_reviewed_at_utc,
+                          locale,
+                        )}
+                      </div>
+                    )}
+                    {selectedRequest.manager_review_note && (
+                      <p className="mt-1 text-[11px] text-slate-700">
+                        {selectedRequest.manager_review_note}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Step 2: HR Final Review */}
+                  <div className="rounded-md border border-slate-200 bg-white p-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium text-slate-900">
+                        {t('leaves.detailDrawer.timeline.step2')}
+                      </span>
+                      <Badge
+                        variant="outline"
+                        className={
+                          selectedRequest.status === 'pending_hr'
+                            ? 'border-sky-200 bg-sky-50 text-sky-700'
+                            : selectedRequest.status === 'approved'
+                              ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                              : selectedRequest.status === 'rejected' &&
+                                  selectedRequest.hr_reviewed_at_utc
+                                ? 'border-rose-200 bg-rose-50 text-rose-700'
+                                : 'border-slate-200 bg-slate-100 text-slate-600'
+                        }
+                      >
+                        {selectedRequest.status === 'pending_hr'
+                          ? t('leaves.detailDrawer.timeline.waiting')
+                          : selectedRequest.status === 'approved'
+                            ? t('leaves.statuses.approved')
+                            : selectedRequest.status === 'rejected' &&
+                                selectedRequest.hr_reviewed_at_utc
+                              ? t('leaves.statuses.rejected')
+                              : t('leaves.detailDrawer.timeline.pendingPrev')}
+                      </Badge>
+                    </div>
+                    {selectedRequest.hr_reviewed_at_utc && (
+                      <div className="mt-1 text-[11px] text-slate-500 tabular-nums">
+                        {formatUtcDateTime(
+                          selectedRequest.hr_reviewed_at_utc,
+                          locale,
+                        )}
+                      </div>
+                    )}
+                    {selectedRequest.hr_review_note && (
+                      <p className="mt-1 text-[11px] text-slate-700">
+                        {selectedRequest.hr_review_note}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {selectedRequest.status === 'pending_manager' && role === 'hr' && (
+                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  {t('leaves.detailDrawer.hrWaitingManagerBanner')}
+                </div>
+              )}
+
+              {selectedRequest.status === 'pending_hr' &&
+                role === 'store_manager' && (
+                  <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800">
+                    {t('leaves.detailDrawer.managerWaitingHrBanner')}
+                  </div>
+                )}
+
+              {canActOnSelectedStage ? (
                 <div className="space-y-1.5">
                   <Label htmlFor="review-note">
                     {t('leaves.detailDrawer.reviewNote')}
@@ -883,7 +1714,7 @@ export function LeavesPage() {
               <Separator />
 
               <SheetFooter className="flex flex-wrap gap-2 px-0">
-                {selectedRequest.status === 'pending' && canReview && (
+                {canActOnSelectedStage && (
                   <>
                     <Button
                       type="button"
@@ -901,7 +1732,9 @@ export function LeavesPage() {
                     >
                       {processingAction
                         ? t('leaves.detailDrawer.processing')
-                        : t('leaves.detailDrawer.approve')}
+                        : selectedRequest.status === 'pending_hr'
+                          ? t('leaves.detailDrawer.finalApprove')
+                          : t('leaves.detailDrawer.approve')}
                     </Button>
                   </>
                 )}
@@ -929,6 +1762,22 @@ export function LeavesPage() {
           )}
         </SheetContent>
       </Sheet>
+
+      <LeaveEntitlementDialog
+        open={entitlementOpen}
+        onOpenChange={setEntitlementOpen}
+        employees={employees}
+        stores={stores}
+        defaultYear={year}
+        onSuccess={loadData}
+      />
+
+      <AssignLeaveSheet
+        open={assignOpen}
+        onOpenChange={setAssignOpen}
+        employees={employees}
+        onSuccess={loadData}
+      />
     </div>
   )
 }

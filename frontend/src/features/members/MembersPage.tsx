@@ -66,7 +66,7 @@ const ALL_ROLES: UserRole[] = [
 
 const ROLE_BADGE_CLASS: Record<UserRole, string> = {
   owner: 'border-slate-300 bg-slate-900 text-white',
-  hr: 'border-teal-200 bg-teal-50 text-teal-800',
+  hr: 'border-blue-200 bg-blue-50 text-blue-700',
   store_manager: 'border-amber-200 bg-amber-50 text-amber-800',
   accountant: 'border-slate-200 bg-slate-100 text-slate-700',
   employee: 'border-slate-200 bg-white text-slate-600',
@@ -79,6 +79,7 @@ interface MemberFormState {
   role: UserRole
   status: MembershipStatus
   store_ids: string[]
+  department_scope: string
 }
 
 const EMPTY_FORM: MemberFormState = {
@@ -88,6 +89,7 @@ const EMPTY_FORM: MemberFormState = {
   role: 'store_manager',
   status: 'active',
   store_ids: [],
+  department_scope: '',
 }
 
 export function MembersPage() {
@@ -178,6 +180,7 @@ export function MembersPage() {
       role: member.role,
       status: member.status,
       store_ids: [...member.store_ids],
+      department_scope: member.department_scope ?? '',
     })
     setDrawerError(null)
     setDrawerOpen(true)
@@ -211,6 +214,7 @@ export function MembersPage() {
               role: form.role,
               status: form.status,
               store_ids: form.store_ids,
+              department_scope: form.department_scope.trim() || null,
             },
           },
         )
@@ -220,7 +224,10 @@ export function MembersPage() {
         }
       } else {
         const { error } = await apiClient.POST('/api/v1/memberships', {
-          body: form,
+          body: {
+            ...form,
+            department_scope: form.department_scope.trim() || null,
+          },
         })
         if (error) {
           setDrawerError(extractApiError(error, t('common.error')))
@@ -308,6 +315,14 @@ export function MembersPage() {
                   </Badge>
                 )
               })}
+              {row.original.department_scope && (
+                <Badge
+                  variant="outline"
+                  className="border-blue-200 bg-blue-50 text-blue-700"
+                >
+                  {row.original.department_scope}
+                </Badge>
+              )}
             </div>
           )
         },
@@ -420,7 +435,7 @@ export function MembersPage() {
           tabIndex={0}
           role="region"
           aria-labelledby="members-table-heading"
-          className="overflow-x-auto focus-visible:ring-2 focus-visible:ring-teal-700 focus-visible:outline-none"
+          className="overflow-x-auto focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:outline-none"
         >
           <Table>
             <TableHeader className="sticky top-0 bg-slate-50">
@@ -585,6 +600,21 @@ export function MembersPage() {
                 onChange={(e) =>
                   setForm({ ...form, display_name: e.target.value })
                 }
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="member-dept">
+                {t('members.drawer.departmentScope')}
+              </Label>
+              <Input
+                id="member-dept"
+                disabled={!canEditTarget}
+                value={form.department_scope}
+                onChange={(e) =>
+                  setForm({ ...form, department_scope: e.target.value })
+                }
+                placeholder={t('members.drawer.departmentScopePlaceholder')}
               />
             </div>
 

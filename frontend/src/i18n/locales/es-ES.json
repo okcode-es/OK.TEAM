@@ -19,13 +19,16 @@
     "inactive": "Archivado"
   },
   "nav": {
+    "dashboard": "Inicio",
     "employees": "Empleados",
     "attendance": "Registro de jornada",
     "kiosk": "Terminal Kiosk",
     "schedule": "Turnos",
     "leaves": "Vacaciones y bajas",
     "documents": "Documentos",
+    "announcements": "Comunicados",
     "payroll": "Cierre Mensual",
+    "reports": "Informes",
     "stores": "Centros de trabajo",
     "members": "Miembros y permisos",
     "organization": "Empresa",
@@ -36,18 +39,41 @@
   "auth": {
     "title": "Iniciar sesión en okTeam HR",
     "subtitle": "Gestión laboral y cumplimiento normativo en España",
+    "brandHeadline": "Plataforma de RRHH y registro horario para empresas en España",
+    "brandSubtitle": "Gestione turnos, control horario, vacaciones y cierre mensual multi-tienda con total seguridad jurídica.",
+    "trustBullets": {
+      "rdl": "100% conforme con el registro horario obligatorio y conservación de 4 años (RDL 8/2019)",
+      "gdpr": "Almacenamiento cifrado en la UE con estricto cumplimiento del RGPD / LOPDGDD",
+      "bilingual": "Interfaz bilingüe chino-español para coordinar encargados de tienda y gestoría"
+    },
+    "euResidency": "© 2026 okTeam HR · EU Data Residency",
+    "localeShort": {
+      "zh-CN": "中文",
+      "es-ES": "ES"
+    },
     "email": "Correo corporativo",
     "password": "Contraseña",
+    "forgotPassword": "¿Olvidaste tu contraseña?",
+    "forgotPasswordHelp": "Contacta con el administrador de tu empresa o con RR. HH. para restablecer tu contraseña.",
     "showPassword": "Mostrar contraseña",
     "hidePassword": "Ocultar contraseña",
     "signIn": "Iniciar sesión",
     "signingIn": "Iniciando sesión...",
-    "supabaseNotConfigured": "Supabase Auth no está configurado en este entorno. Utilice el acceso de desarrollo local o configure VITE_SUPABASE_URL.",
-    "devSectionTitle": "Acceso rápido de desarrollo local",
+    "termsNotice": "Al iniciar sesión aceptas los términos de servicio y la política de privacidad UE",
+    "supabaseNotConfigured": "El servicio de autenticación en línea (Supabase Auth) no está configurado. En desarrollo local, usa Dev Login en la esquina inferior derecha.",
+    "devTrigger": "Dev Login",
+    "devSectionTitle": "Acceso rápido de desarrollo",
     "devEmailPlaceholder": "Correo de prueba, ej. owner@dragon.es",
     "devSignIn": "Entrar con token de desarrollo",
     "devHint": "Solo disponible en desarrollo local; desactivado físicamente en producción.",
-    "errorGeneric": "No se pudo iniciar sesión. Verifique sus credenciales o el servidor."
+    "errorGeneric": "No se pudo iniciar sesión. Verifique sus credenciales o el servidor.",
+    "devPresets": {
+      "owner": "Propietario (Owner)",
+      "hr": "RR. HH. (HR)",
+      "manager": "Encargado de tienda",
+      "employee": "Empleado (Ming Zhou)",
+      "accountant": "Gestoría"
+    }
   },
   "onboarding": {
     "badge": "Alta de empresa",
@@ -92,6 +118,7 @@
       "address": "Dirección",
       "city": "Ciudad",
       "postalCode": "Código postal",
+      "regionCode": "Comunidad Autónoma",
       "save": "Guardar centro",
       "saving": "Guardando...",
       "archive": "Archivar centro",
@@ -129,6 +156,8 @@
       "generateUuid": "Generar UUID de prueba",
       "email": "Correo electrónico",
       "displayName": "Nombre visible",
+      "departmentScope": "Departamento (opcional)",
+      "departmentScopePlaceholder": "Ej.: Cocina / Sala",
       "role": "Rol",
       "status": "Estado",
       "assignedStores": "Centros autorizados (restringe a encargados y empleados)",
@@ -194,6 +223,7 @@
       "code": "Código de empleado",
       "fullName": "Nombre legal completo",
       "preferredName": "Nombre habitual / chino",
+      "department": "Departamento",
       "email": "Correo de contacto",
       "phone": "Teléfono",
       "primaryStore": "Centro principal",
@@ -205,7 +235,8 @@
       "vacationDays": "Vacaciones anuales (>= 30 días nat.)",
       "nieDni": "NIE / DNI (cifrado AES-256-GCM)",
       "iban": "IBAN nómina (cifrado)",
-      "naf": "NAF Seguridad Social 12 dígitos (cifrado)"
+      "naf": "NAF Seguridad Social 12 dígitos (cifrado)",
+      "status": "Estado laboral"
     },
     "drawer": {
       "createTitle": "Nuevo empleado",
@@ -214,6 +245,66 @@
       "saving": "Guardando…",
       "cancel": "Cancelar"
     },
+    "avatar": {
+      "editBtn": "Cambiar foto",
+      "title": "Subir y recortar avatar",
+      "description": "Arrastre o ajuste el zoom para encuadrar la foto cuadrada.",
+      "selectImage": "Seleccionar imagen (JPG / PNG / WebP)",
+      "zoom": "Zoom",
+      "upload": "Guardar avatar",
+      "remove": "Eliminar avatar",
+      "tooLarge": "La imagen supera el límite de 2 MB."
+    },
+    "bulkImport": {
+      "button": "Importación masiva",
+      "title": "Importación masiva de empleados",
+      "description": "Descargue la plantilla, valide con Dry-Run y confirme la importación atómica.",
+      "downloadCsv": "Plantilla CSV",
+      "downloadXlsx": "Plantilla Excel",
+      "selectFile": "Subir archivo CSV / XLSX",
+      "dryRun": "Validar (Dry-Run)",
+      "commit": "Confirmar importación",
+      "totalRows": "Total {{count}}",
+      "validRows": "Válidas {{count}}",
+      "errorRows": "Errores {{count}}",
+      "committed": "{{count}} empleados importados",
+      "colRow": "Fila",
+      "colField": "Campo",
+      "colMessage": "Detalle del error",
+      "fields": {
+        "employee_code": "Código de empleado",
+        "full_name": "Nombre completo",
+        "store_code": "Código de centro",
+        "contract_type": "Tipo de contrato",
+        "work_schedule_type": "Tipo de jornada",
+        "contracted_weekly_hours": "Horas semanales",
+        "annual_vacation_days": "Días de vacaciones",
+        "hire_date": "Fecha de alta",
+        "birth_date": "Fecha de nacimiento",
+        "nie_dni": "NIE / DNI",
+        "iban": "IBAN",
+        "naf": "NAF",
+        "email": "Correo electrónico"
+      },
+      "errorCodes": {
+        "REQUIRED": "Este campo es obligatorio.",
+        "INVALID_FORMAT": "El formato no es válido.",
+        "TOO_LONG": "El texto supera la longitud máxima permitida.",
+        "INVALID_ENUM": "Valor no permitido; consulta los valores de la plantilla.",
+        "INVALID_HOURS": "Las horas semanales no cumplen la normativa laboral.",
+        "INVALID_VACATION_DAYS": "Días de vacaciones no válidos (mínimo legal 30 días naturales).",
+        "INVALID_DATE": "Formato de fecha no válido (usa YYYY-MM-DD).",
+        "INVALID_NIE_DNI": "DNI / NIE no válido o dígito de control incorrecto.",
+        "INVALID_IBAN": "IBAN español no válido (debe empezar por ES y tener 24 caracteres).",
+        "INVALID_NAF": "El NAF español debe tener exactamente 12 dígitos.",
+        "INVALID_EMAIL": "El formato del correo electrónico no es válido.",
+        "STORE_NOT_FOUND": "No se encontró ningún centro activo con ese código.",
+        "DUPLICATE_CODE": "El código de empleado ya existe en la empresa o en el archivo.",
+        "DUPLICATE_EMAIL": "El correo electrónico ya existe en la empresa o en el archivo.",
+        "DUPLICATE_NIE_DNI": "El NIE / DNI ya existe en la empresa o en el archivo.",
+        "GENERIC": "Error de validación en esta fila."
+      }
+    },
     "profile": {
       "backToList": "Volver al directorio",
       "navBasic": "Datos personales",
@@ -221,6 +312,13 @@
       "navPii": "Datos sensibles cifrados",
       "navRetention": "Baja y bloqueo 4 años",
       "savedNotice": "Ficha de empleado guardada.",
+      "savedSuccess": "Cambios en la ficha guardados correctamente.",
+      "hrSections": {
+        "contract": "Contrato y jornada",
+        "payrollSs": "Salario, nóminas y Seg. Social",
+        "bank": "Datos bancarios (IBAN)",
+        "emergency": "Contacto de emergencia"
+      },
       "frozenBanner": "Esta ficha está bloqueada por conservación legal de 4 años o anonimizada (solo lectura).",
       "piiSubtitle": "Enmascarado por defecto. Los roles autorizados pueden descifrar temporalmente durante 15 segundos.",
       "storeManagerNoPii": "Por minimización de datos RGPD, el encargado de tienda no puede descifrar NIE / IBAN / NAF.",
@@ -247,6 +345,24 @@
         "confirm": "Confirmar anonimización",
         "cancel": "Cancelar"
       }
+    },
+    "pii": {
+      "description": "Enmascarado por defecto. Los roles autorizados pueden descifrar temporalmente durante 15 segundos.",
+      "revealButton": "Ver texto claro (15 s)",
+      "hideButton": "Ocultar ahora",
+      "rotatePlaceholder": "Déjelo vacío para conservar el valor actual; escriba uno nuevo para rotarlo"
+    },
+    "lifecycle": {
+      "title": "Baja y conservación legal (4 años)",
+      "activeRetentionHint": "La ficha activa está protegida por el Estatuto de los Trabajadores; al tramitar la baja se bloqueará durante 4 años.",
+      "terminationDate": "Fecha de baja",
+      "terminateBtn": "Tramitar baja y bloqueo",
+      "terminateConfirmTitle": "¿Tramitar baja y bloqueo legal de 4 años?",
+      "terminateConfirmDesc": "La ficha quedará bloqueada en solo lectura sin borrado físico durante los 4 años exigidos por ley.",
+      "retentionUntil": "Bloqueo legal hasta",
+      "anonymizeBtn": "Anonimizar datos (RGPD)",
+      "anonymizeConfirmTitle": "¿Confirmar anonimización irreversible RGPD?",
+      "anonymizeConfirmDesc": "Se eliminarán permanentemente nombre, contacto y datos cifrados (NIE/IBAN/NAF)."
     }
   },
   "attendance": {
@@ -272,7 +388,34 @@
     "selfClock": {
       "title": "Mi fichaje web",
       "subtitle": "Registro en tiempo real en el libro inmutable",
-      "success": "Fichaje registrado: {{action}} · {{time}}"
+      "success": "Fichaje registrado: {{action}} · {{time}}",
+      "customTimeToggle": "Hora personalizada"
+    },
+    "manualDay": {
+      "trigger": "Registrar horario manual",
+      "title": "Registrar jornada con hora manual",
+      "description": "Seleccione entrada, pausa y salida según la zona horaria IANA del centro.",
+      "employee": "Empleado",
+      "date": "Fecha",
+      "clockInTime": "Hora de entrada",
+      "clockOutTime": "Hora de salida",
+      "breakStartTime": "Inicio de pausa (opc.)",
+      "breakEndTime": "Fin de pausa (opc.)",
+      "note": "Nota (opcional)",
+      "notePlaceholder": "Indique motivo o detalle del turno…",
+      "submit": "Guardar jornada",
+      "submitting": "Guardando…",
+      "validation": {
+        "summaryTitle": "Corrija los siguientes campos obligatorios o inválidos:",
+        "missingGuidance": "Faltan los siguientes datos: {{fields}}",
+        "requiredItem": "Complete el campo «{{field}}»",
+        "clockOutPastRequired": "En fechas pasadas la hora de salida es obligatoria",
+        "breakPairRequired": "Debe indicar tanto el inicio como el fin de la pausa",
+        "breakAfterIn": "El inicio de pausa debe ser posterior a la entrada",
+        "breakEndAfterStart": "El fin de pausa debe ser posterior al inicio de pausa",
+        "outAfterBreak": "La salida debe ser posterior al fin de pausa",
+        "outAfterIn": "La salida debe ser posterior a la entrada"
+      }
     },
     "actions": {
       "clock_in": "Entrada",
@@ -436,12 +579,34 @@
     },
     "types": {
       "vacation": "Vacaciones",
-      "sick_leave": "Baja médica",
+      "sick_leave": "Baja IT",
+      "medical_appointment": "Consulta médica",
+      "day_off": "Día libre",
       "paid_leave": "Permiso retribuido (Art. 37.3 ET)",
       "unpaid_leave": "Permiso sin sueldo"
     },
+    "prevYear": "Año anterior",
+    "nextYear": "Año siguiente",
+    "typeSwitcherTitle": "Tipos de ausencia",
+    "allTypes": "Todos",
+    "annualCalendarTitle": "Calendario anual {{year}} y festivos en España",
+    "legend": {
+      "approved": "Aprobada",
+      "pending": "Pendiente",
+      "holiday": "Festivo oficial"
+    },
+    "justificante": {
+      "title": "Justificante médico",
+      "uploadLabel": "Adjuntar justificante (opcional)",
+      "hint": "PDF / JPG / PNG / WebP hasta 10 MB",
+      "attached": "Justificante adjunto",
+      "preview60s": "Ver justificante (enlace 60 s)",
+      "uploadNew": "Subir / reemplazar justificante"
+    },
     "statuses": {
       "pending": "Pendiente",
+      "pending_manager": "Pendiente de gerente",
+      "pending_hr": "Pendiente de RR. HH.",
       "approved": "Aprobada",
       "rejected": "Rechazada",
       "cancelled": "Anulada"
@@ -466,7 +631,25 @@
       "reasonPlaceholder": "Indique el motivo o referencia de baja médica…",
       "submit": "Enviar solicitud",
       "submitting": "Enviando…",
-      "cancel": "Cancelar"
+      "cancel": "Cancelar",
+      "validation": {
+        "summaryTitle": "Revise los siguientes campos obligatorios o inválidos:",
+        "missingGuidance": "Faltan campos obligatorios: {{fields}}",
+        "fieldEmployee": "Empleado",
+        "fieldType": "Tipo de ausencia",
+        "fieldStartDate": "Fecha de inicio",
+        "fieldEndDate": "Fecha de fin",
+        "requiredItem": "Complete o seleccione «{{field}}»",
+        "endBeforeStart": "La fecha de fin no puede ser anterior a la fecha de inicio",
+        "vacationExceeded": "Está solicitando {{requested}} días, pero solo quedan {{remaining}} días de vacaciones disponibles.",
+        "selectPlaceholder": "Seleccione un empleado…"
+      }
+    },
+    "balance": {
+      "entitled": "Días anuales",
+      "used": "Disfrutados",
+      "pending": "Pendientes",
+      "remaining": "Disponibles"
     },
     "detailDrawer": {
       "title": "Detalle de la solicitud",
@@ -481,10 +664,22 @@
       "reviewNotePlaceholder": "Opcional: comentario de aprobación o rechazo…",
       "reviewedAt": "Revisado el",
       "approve": "Aprobar",
+      "finalApprove": "Aprobación final RR. HH.",
       "reject": "Rechazar",
       "cancelRequest": "Anular solicitud",
       "processing": "Procesando…",
-      "close": "Cerrar"
+      "close": "Cerrar",
+      "hrWaitingManagerBanner": "Requiere aprobación previa del encargado de tienda antes de pasar a RR. HH.",
+      "managerWaitingHrBanner": "Aprobada por el encargado; pendiente de aprobación final por RR. HH.",
+      "timeline": {
+        "title": "Flujo de aprobación (2 pasos)",
+        "step1": "① Revisión encargado de tienda",
+        "step2": "② Aprobación final RR. HH.",
+        "waiting": "Pendiente",
+        "passed": "Aprobado",
+        "skipped": "Omitido",
+        "pendingPrev": "Esperando paso 1"
+      }
     }
   },
   "documents": {
@@ -677,6 +872,256 @@
   },
   "common": {
     "loading": "Cargando…",
-    "error": "No se pudo completar la operación."
+    "error": "No se pudo completar la operación.",
+    "cancel": "Cancelar",
+    "close": "Cerrar"
+  },
+  "clock": {
+    "workModeLabel": "Modalidad",
+    "workMode": {
+      "onsite": "Presencial",
+      "remote": "Remoto"
+    },
+    "status": {
+      "working": "Trabajando",
+      "onBreak": "En pausa",
+      "clockedOut": "Fuera de turno"
+    },
+    "actions": {
+      "clockIn": "Entrar",
+      "pause": "Pausar",
+      "resume": "Reanudar",
+      "clockOut": "Salir"
+    }
+  },
+  "mobile": {
+    "nav": {
+      "ariaLabel": "Navegación inferior móvil",
+      "home": "Inicio",
+      "apps": "Apps",
+      "profile": "Perfil"
+    },
+    "apps": {
+      "title": "Todas las aplicaciones",
+      "subtitle": "Acceso rápido a fichajes, turnos, ausencias, documentos y centros."
+    }
+  },
+  "dashboard": {
+    "adminTitle": "Panel de administración",
+    "adminSubtitle": "Control en tiempo real de presencia, cumpleaños, festivos y comunicados.",
+    "employeeTitle": "Mi espacio de trabajo",
+    "employeeSubtitle": "Jornada diaria, saldo horario, equipo, vacaciones y documentos pendientes.",
+    "viewSwitchLabel": "Cambiar vista del panel",
+    "views": {
+      "admin": "Vista administrador",
+      "employee": "Vista empleado"
+    },
+    "allStores": "Todos los centros",
+    "departmentPlaceholder": "Filtrar departamento…",
+    "pendingLeavesBadge": "Solicitudes pendientes ({{count}})",
+    "noEmployeeProfileTitle": "Tu cuenta aún no tiene ficha de empleado vinculada",
+    "noEmployeeProfileDesc": "Puedes consultar festivos y comunicados. Para fichar o solicitar vacaciones, pide a RR. HH. que vincule tu usuario.",
+    "employeeSearch": {
+      "placeholder": "Buscar empleado por nombre, código, puesto, dpto. o email...",
+      "clear": "Limpiar búsqueda",
+      "noResults": "No se encontraron empleados coincidentes."
+    },
+    "whoIsIn": {
+      "title": "Who's in",
+      "drawerDescription": "Detalle en tiempo real de empleados en este estado.",
+      "emptyGroup": "No hay empleados en este estado.",
+      "statuses": {
+        "working": "Trabajando",
+        "remote": "Remoto",
+        "on_break": "Descanso",
+        "vacation": "Vacaciones",
+        "absence": "Ausencias",
+        "absenteeism": "Absentismo"
+      }
+    },
+    "birthdays": {
+      "title": "Próximos cumpleaños",
+      "empty": "Sin cumpleaños en los próximos 30 días."
+    },
+    "holidays": {
+      "title": "Próximos festivos",
+      "empty": "Sin festivos próximos registrados."
+    },
+    "quickReports": {
+      "title": "Últimos informes"
+    },
+    "announcements": {
+      "title": "Comunicados",
+      "viewAll": "Ver todos",
+      "empty": "No hay comunicados publicados."
+    },
+    "emptyProfile": {
+      "title": "Tu cuenta aún no tiene ficha de empleado vinculada",
+      "description": "Puedes consultar festivos y comunicados. Para fichar o solicitar vacaciones, pide a RR. HH. que vincule tu usuario."
+    },
+    "myWorkTime": {
+      "title": "Tiempo de trabajo",
+      "saldo": "Saldo horario",
+      "viewLedger": "Ver registro de jornada"
+    },
+    "myVacations": {
+      "title": "Vacaciones",
+      "entitled": "{{days}} días anuales",
+      "requestCta": "Solicitar / Ver calendario"
+    },
+    "notifications": {
+      "title": "Notificaciones",
+      "empty": "Sin incidencias ni alertas pendientes."
+    },
+    "team": {
+      "title": "Tu equipo y responsables",
+      "empty": "No hay otros compañeros en este centro.",
+      "approvers": "Responsables"
+    },
+    "pendingAnnouncements": {
+      "title": "Comunicados pendientes",
+      "empty": "Has confirmado todos los comunicados."
+    },
+    "myDocuments": {
+      "title": "Mis documentos",
+      "empty": "No tienes documentos recientes.",
+      "sign": "Firmar"
+    }
+  },
+  "announcements": {
+    "title": "Comunicados y normativas",
+    "subtitle": "Publica avisos y políticas por centro o departamento con acuse de recibo SHA-256.",
+    "publishButton": "Publicar comunicado",
+    "count": "{{count}} comunicados",
+    "empty": "No hay comunicados en esta categoría.",
+    "allStoresScope": "Todos los centros",
+    "acknowledgedBadge": "Confirmado",
+    "pendingAckBadge": "Pendiente",
+    "acknowledgeBtn": "Confirmar lectura",
+    "alreadyAcknowledged": "Ya has firmado el acuse SHA-256 de este comunicado.",
+    "acknowledgedSuccess": "Acuse de lectura registrado.",
+    "publishSuccess": "Comunicado publicado.",
+    "downloadAttachment": "Descargar adjunto PDF (enlace 60 s)",
+    "ackReportTitle": "Estado de confirmaciones",
+    "pendingListTitle": "Pendientes ({{count}})",
+    "acknowledgedListTitle": "Confirmados ({{count}})",
+    "categories": {
+      "all": "Todos",
+      "notice": "Avisos",
+      "policy": "Normativas"
+    },
+    "publishDrawer": {
+      "title": "Nuevo comunicado",
+      "description": "Segmenta por centro o departamento y adjunta documentación opcional.",
+      "category": "Categoría",
+      "storeScope": "Centro aplicable",
+      "departmentScope": "Departamento (opcional)",
+      "departmentPlaceholder": "Vacío para toda la empresa",
+      "docTitle": "Título",
+      "body": "Contenido",
+      "attachment": "Adjunto PDF / Imagen (opcional)",
+      "requiresAck": "Requiere confirmación de lectura SHA-256",
+      "isPinned": "Fijar arriba",
+      "requiredFields": "Complete título y contenido.",
+      "submit": "Publicar",
+      "publishing": "Publicando…",
+      "cancel": "Cancelar"
+    }
+  },
+  "reports": {
+    "title": "Centro de informes",
+    "subtitle": "KPIs ejecutivos de plantilla, horas trabajadas, horas extra, alertas legales y exportación directa a CSV y PDF A4.",
+    "exportCsv": "Exportar CSV (Excel)",
+    "exportPdf": "Exportar PDF A4",
+    "filters": {
+      "fromDate": "Desde",
+      "toDate": "Hasta",
+      "leaveYear": "Ejercicio de ausencias",
+      "store": "Centro de trabajo",
+      "department": "Departamento"
+    },
+    "kpi": {
+      "headcount": "Plantilla activa",
+      "workedHours": "Horas trabajadas",
+      "overtimeHours": "Horas extra",
+      "alerts": "Alertas de cumplimiento",
+      "alertsHint": "Cálculo automático según límites legales",
+      "pendingLeaves": "Ausencias pendientes",
+      "pendingManager": "Pend. gerente",
+      "pendingHr": "Pend. RR. HH.",
+      "approvedVacations": "Días de vacaciones aprobados",
+      "approvedSickDays": "Días de baja médica aprobados",
+      "pendingAck": "Acuses pendientes",
+      "pendingAckHint": "Comunicados obligatorios sin confirmar"
+    },
+    "cards": {
+      "attendance": {
+        "title": "Resumen de jornada y horas extra",
+        "description": "Horas ordinarias, horas extra y alertas legales por empleado y centro en el rango seleccionado."
+      },
+      "leaves": {
+        "title": "Estadísticas de vacaciones y ausencias",
+        "description": "Resumen anual de vacaciones, bajas y ausencias pendientes (datos médicos redactados para Gestoría)."
+      },
+      "roster": {
+        "title": "Plantilla activa y contratos",
+        "description": "Listado de empleados en ámbito, tipo de contrato y jornada semanal (sin datos sensibles PII)."
+      }
+    },
+    "storeBreakdown": {
+      "title": "Desglose operativo por centro",
+      "empty": "No hay datos de centros para los filtros seleccionados.",
+      "store": "Centro",
+      "employees": "Empleados",
+      "workedHours": "Horas trabajadas",
+      "overtimeHours": "Horas extra",
+      "alerts": "Alertas",
+      "pendingLeaves": "Pendientes"
+    }
+  },
+  "errors": {
+    "ATTENDANCE_SHIFT_ALREADY_OPEN": "Ya tienes una jornada abierta. Registra una pausa o la salida antes de volver a fichar.",
+    "ATTENDANCE_NO_OPEN_SHIFT": "No tienes ninguna jornada abierta. Ficha primero la entrada.",
+    "ATTENDANCE_BREAK_ALREADY_OPEN": "Ya tienes una pausa en curso. No hace falta volver a iniciarla.",
+    "ATTENDANCE_NO_OPEN_BREAK": "No hay ninguna pausa abierta para reanudar.",
+    "ATTENDANCE_BREAK_NOT_ENDED": "Finaliza la pausa actual antes de registrar la salida.",
+    "ATTENDANCE_CHRONOLOGY_ERROR": "La hora del fichaje o corrección no es cronológicamente válida respecto a la jornada actual.",
+    "ATTENDANCE_INVALID_TIME_RANGE": "El orden horario no es válido: entrada < inicio pausa < fin pausa < salida.",
+    "ATTENDANCE_SESSION_OVERLAP": "El tramo horario se solapa con otra jornada ya registrada en esa fecha.",
+    "LEAVE_REQUIRES_MANAGER_FIRST": "La solicitud requiere aprobación previa del encargado de tienda.",
+    "LEAVE_REQUIRES_HR_FINAL": "Ya aprobada por el encargado; solo RR. HH. o Dirección puede emitir la aprobación final.",
+    "PAYROLL_MONTH_CLOSED": "El cierre mensual de nómina de este centro ya está bloqueado y no admite cambios.",
+    "PAYROLL_CONFLICT": "Conflicto en el estado del cierre mensual. Actualiza la página e inténtalo de nuevo.",
+    "RETENTION_LOCK": "El expediente está sujeto al bloqueo legal de conservación de 4 años.",
+    "FROZEN_RECORD": "Este registro está congelado o anonimizado y es de solo lectura.",
+    "LEAVE_OVERLAP": "Las fechas seleccionadas se solapan con otra solicitud de ausencia existente.",
+    "LEAVE_INSUFFICIENT_BALANCE": "No tienes suficientes días de vacaciones disponibles.",
+    "SHIFT_CONFLICT": "El turno se solapa con otro turno ya asignado a este empleado.",
+    "FILE_INVALID_TYPE": "Formato de archivo no compatible. Sube un PDF o una imagen válida.",
+    "FILE_TOO_LARGE": "El archivo supera el tamaño máximo permitido.",
+    "IMPORT_INVALID_FILE": "El archivo de importación no es válido o está dañado. Usa la plantilla CSV / XLSX.",
+    "INVALID_NIE_DNI": "El formato o la letra de control del DNI / NIE no es válido.",
+    "INVALID_IBAN": "El IBAN español no es válido.",
+    "INVALID_NAF": "El número de afiliación (NAF) debe tener 12 dígitos.",
+    "DUPLICATE_RECORD": "Ya existe un registro idéntico.",
+    "AUTH_INVALID_TOKEN": "Tu sesión ha caducado o no es válida. Vuelve a iniciar sesión.",
+    "FORBIDDEN": "No tienes permisos suficientes para realizar esta acción.",
+    "SIGNED_URL_INVALID": "El enlace de descarga ha caducado. Solicita uno nuevo.",
+    "NOT_FOUND": "El registro solicitado no existe o fue eliminado.",
+    "LAST_OWNER_PROTECTED": "Debe permanecer al menos un propietario activo en la empresa.",
+    "CONFLICT": "Conflicto de estado con los datos actuales. Actualiza e inténtalo de nuevo.",
+    "VALIDATION_ERROR": "Los datos enviados no son válidos. Revisa los campos.",
+    "REQUEST_VALIDATION_ERROR": "Algunos parámetros de la solicitud no son válidos.",
+    "PII_SERVICE_ERROR": "El servicio de cifrado de datos sensibles no está disponible temporalmente.",
+    "STORAGE_SERVICE_ERROR": "El servicio de almacenamiento de archivos no está disponible temporalmente.",
+    "INTERNAL_ERROR": "Se produjo un problema en el servidor. Inténtalo de nuevo en unos instantes.",
+    "HTTP_401": "Sesión no válida o caducada. Inicia sesión de nuevo.",
+    "HTTP_403": "No tienes permiso para realizar esta acción.",
+    "HTTP_404": "No se encontró el recurso solicitado.",
+    "HTTP_405": "Operación no permitida.",
+    "HTTP_422": "Revisa el formato de los datos introducidos.",
+    "HTTP_ERROR": "No se pudo completar la solicitud. Inténtalo de nuevo.",
+    "NETWORK_ERROR": "Error de conexión con el servidor. Comprueba tu red e inténtalo de nuevo.",
+    "GENERIC": "No se pudo completar la operación. Inténtalo de nuevo."
   }
 }

@@ -160,6 +160,8 @@ class GetWeeklyScheduleUseCase:
                 store_id=target_store_id,
                 allowed_statuses=allowed_statuses,
             )
+            if principal.role == UserRole.STORE_MANAGER:
+                employees = [e for e in employees if principal.can_manage_employee(e)]
 
         store = await self._store_repo.get_by_id(principal.tenant_id, target_store_id)
         if store is None:
@@ -260,13 +262,8 @@ class CreateShiftUseCase:
             raise EntityNotFoundError(f"Employee {cmd.employee_id} not found")
 
         principal.require_store_access(principal.tenant_id, employee.primary_store_id)
-        if (
-            principal.role == UserRole.STORE_MANAGER
-            and employee.employment_status == EmploymentStatus.LEGAL_HOLD
-        ):
-            from app.domain.security import ForbiddenScopeError
-
-            raise ForbiddenScopeError("Store managers cannot access legal_hold employees")
+        if principal.role == UserRole.STORE_MANAGER:
+            principal.require_employee_in_scope(employee)
 
         ensure_employee_schedulable(employee)
 
@@ -370,13 +367,8 @@ class UpdateShiftUseCase:
         employee = await self._employee_repo.get_by_id(principal.tenant_id, existing.employee_id)
         if employee is None:
             raise EntityNotFoundError(f"Employee {existing.employee_id} not found")
-        if (
-            principal.role == UserRole.STORE_MANAGER
-            and employee.employment_status == EmploymentStatus.LEGAL_HOLD
-        ):
-            from app.domain.security import ForbiddenScopeError
-
-            raise ForbiddenScopeError("Store managers cannot access legal_hold employees")
+        if principal.role == UserRole.STORE_MANAGER:
+            principal.require_employee_in_scope(employee)
         ensure_employee_schedulable(employee)
 
         store = await self._store_repo.get_by_id(principal.tenant_id, existing.store_id)
@@ -503,6 +495,7 @@ class PublishWeeklyShiftsUseCase:
         ]
         emp_cache: dict[UUID, Employee] = {}
         leaves_cache: dict[UUID, list[LeaveRequest]] = {}
+        scoped_drafts: list[Shift] = []
         for shift in draft_shifts:
             emp = emp_cache.get(shift.employee_id)
             if emp is None:
@@ -513,6 +506,9 @@ class PublishWeeklyShiftsUseCase:
                     raise EntityNotFoundError(f"Employee {shift.employee_id} not found")
                 emp = loaded_emp
                 emp_cache[shift.employee_id] = emp
+            if principal.role == UserRole.STORE_MANAGER and not principal.can_manage_employee(emp):
+                continue
+            scoped_drafts.append(shift)
             if emp.employment_status in (EmploymentStatus.LEGAL_HOLD, EmploymentStatus.ANONYMIZED):
                 raise FrozenRecordError(
                     f"Employee {emp.employee_code} is {emp.employment_status.value} "
@@ -535,7 +531,7 @@ class PublishWeeklyShiftsUseCase:
 
         now = now_utc.astimezone(UTC)
         published: list[Shift] = []
-        for shift in draft_shifts:
+        for shift in scoped_drafts:
             updated = Shift(
                 id=shift.id,
                 tenant_id=shift.tenant_id,
@@ -582,19 +578,16 @@ class CancelShiftUseCase:
         principal.require_store_access(principal.tenant_id, existing.store_id)
 
         emp = await self._employee_repo.get_by_id(principal.tenant_id, existing.employee_id)
-        if emp is not None and emp.employment_status in (
-            EmploymentStatus.LEGAL_HOLD,
-            EmploymentStatus.ANONYMIZED,
-        ):
+        if emp is not None:
             if principal.role == UserRole.STORE_MANAGER:
-                from app.domain.security import ForbiddenScopeError
-
-                raise ForbiddenScopeError(
-                    "Store managers cannot access or cancel shifts for legal_hold employees"
+                principal.require_employee_in_scope(emp)
+            elif emp.employment_status in (
+                EmploymentStatus.LEGAL_HOLD,
+                EmploymentStatus.ANONYMIZED,
+            ):
+                raise FrozenRecordError(
+                    f"Cannot cancel shift for frozen/anonymized employee {emp.employee_code}"
                 )
-            raise FrozenRecordError(
-                f"Cannot cancel shift for frozen/anonymized employee {emp.employee_code}"
-            )
 
         if existing.status == ShiftStatus.CANCELLED:
             return existing

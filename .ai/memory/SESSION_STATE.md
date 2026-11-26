@@ -1,21 +1,28 @@
 # okTeam Session State (Hard Limit <= 50 Lines)
 
-- **Current Phase**: Phase 5 — Monthly Payroll Closing, Gestoría Pack, RDL 8/2019 PDF Receipts & P2 Cleanup (Complete, Red Team PASS)
-- **Last Updated**: 2026-11-25
-- **Active Branch**: main (Phase 5 ready / synced with origin/main)
+- **Current Phase**: Phase 5G — HR Workbench Fixes, Dashboard Upgrade, HR Leave Entitlements/Direct Assign & 3-Tier Custom Break Policies (Complete, Red Team Approved, Browser Verified, Docker Live)
+- **Last Updated**: 2026-11-26
+- **Active Branch**: main (Phases 5A–5G + Fluid Split-Screen Login complete locally; awaiting user review/push)
 
-## Phase 5 Delivered (100% Hydrogen Workers — Neon Coordinator Zero Code Edits)
-- **DB & Immutability (`backend-p5`)**: `0005_phase5_payroll_closing` (`monthly_closings`, append-only `monthly_closing_items` with PostgreSQL `BEFORE UPDATE OR DELETE` + `BEFORE TRUNCATE` triggers, plus P2 partial unique index `uq_employees_tenant_user_active`).
-- **Domain, PDF & Locks (`backend-p5`)**: Pure stdlib `domain/payroll.py`, zero-dependency `es-ES` A4 `%PDF-1.4` writer (`infrastructure/pdf_generator.py`), cross-module 409 closed-month locks (including overnight cross-month & cross-store session-diff protection), Owner/HR audited Reopen with optimistic concurrency, `es-ES` UTF-8 BOM + CWE-1236 Gestoría CSV (masked NIE/DNI), plus all 5 Phase 1–4 P2 fixes (DNI/NIE Mod-23, IBAN Mod-97 + `^ES[0-9]{22}$`, `"document.pdf"` fallback, `store_manager` own-doc access, `settings_override` propagation).
-- **Frontend (`frontend-p5`)**: `PayrollPage.tsx` (Template 1 — store/month toolbar, 4-card `tabular-nums` KPI strip, blocker/reopen banners, TanStack Table + right-side `Sheet` with 60s signed PDF download, Reopen `AlertDialog` with IME guard, full `zh-CN` / `es-ES` i18n).
+## Latest Delivered (Stage A Backend + Stage B Frontend + Red Team Round 2/2 APPROVE)
+- **P0 Workbench & RBAC Fixes**:
+  - Fixed Deep Navy `#0B1120` sidebar layout (`h-screen sticky top-0 flex flex-col`, `flex-1 min-h-0 overflow-y-auto sidebar-scroll`, fixed bottom footer — zero clipping); removed duplicate Sign Out from top header.
+  - Fixed `hr@dragon.es` role/name display (`Elena Chen` / `林娜`, `人事主管 / RR. HH.`, `organization` route & nav restricted to `owner` only; zero email-prefix greeting).
+  - Fixed `ManualDayClockSheet` error visibility (above `<SheetFooter>` with `scrollIntoView`), Europe/Madrid local date, proactive open-shift banner, and emerald success feedback.
+- **HR Dashboard 4 Upgrades (`DashboardPage.tsx`, `dashboard.py`)**:
+  - Top 4 clickable KPI alert cards (`pending_leaves_count`, `attendance_alerts_count`, `pending_justificantes_count` forced `0` for `accountant`, `unacknowledged_announcements_count` strictly scoped to `store_ids ∩ department_scope` + filters).
+  - 3-group sidebar (`日常管理 / 合规与行政 / 企业配置`), Department `<Select>` dropdown, announcements empty-state CTA, compact `Celebraciones`, clean `divide-y` `Who's in`, 2-tier mini calendar holiday tiles.
+- **HR Leave Entitlements & Direct Assign (`0010_hr_leave_break_policies`)**:
+  - Annual vacation entitlements (`>= 30` statutory Art. 38 ET floor, carryover, comp-off, append-only `leave_entitlement_adjustments` protected by PostgreSQL triggers) + single/bulk `LeaveEntitlementDialog`.
+  - Direct HR/Owner/scoped Store Manager leave assignment (`POST /api/v1/leaves/assign`, auto-`approved`, checks closed month, overlap, published shifts, balance) + `AssignLeaveSheet` in `LeavesPage` & `ProfileLeavesTab`.
+- **3-Tier Custom Break Policies & Auto-End (`0009`, `0010`)**:
+  - Enterprise / Store / Employee inheritance (`employee > store > tenant > system_default`), supporting `fixed_duration` & `fixed_window` (*jornada partida*), `is_paid`, `manual_punch` (with server-authoritative `auto_end_manual_break` + live 1s countdown) vs `auto_deduct`, integrated across ledger, dashboard, payroll closing, and reports.
 
 ## Verified Gates (All Passed)
-- Backend (`uv` + Py 3.12): `domain-purity` PASS (10 files) | `ruff` PASS | `mypy` PASS (48 files) | `pytest` PASS (49/49)
-- Migration & Triggers: `alembic 0004 -> 0005 -> 0004 -> 0005` + live SQL `UPDATE`/`DELETE`/`TRUNCATE` trigger blocks PASS
-- Contracts & Frontend: `sync-contracts.ps1` PASS | `tsc --noEmit` PASS | `eslint` PASS (0 errors/warnings) | `vite build` PASS
-- Full-Stack Docker: `docker compose --profile local-db up -d --build` RUNNING (`db:5433`, `backend:8001`, `frontend:5173`)
-- Visual Audit: `chrome-devtools` `es-ES` `1440px` & `390px` on `/payroll` (0 overflow)
-- Red Team Gatekeeper: **PASS** (Round 2/2 — P0: None, P1: None)
+- **Red Team Gatekeeper**: Round 2/2 **APPROVE** (0 P0, 0 P1, 0 P2 remaining).
+- **Quality Gate (`quality-gate.ps1 -Scope all`)**: Domain purity (16 files, 0 violations), Ruff 0, Mypy (64 files) 0, **Pytest 80/80**, `tsc --noEmit` 0, ESLint 0, `vite build` PASS, **893/893 i18n keys (0 missing)**.
+- **Chrome DevTools Visual Audit (Round 1 PASS)**: `1440×900` `zh-CN` & `es-ES` for HR Dashboard, `AssignLeaveSheet`, and Employee 360° Custom Break Policy — `0` console errors/warnings, `overflowX=false`, `asideBottomClipped=false`.
+- **Live Docker**: `okteam-local-db:5433` (healthy, rev `0010`), `okteam-backend:8001` (healthy), `okteam-frontend:5173` (running).
 
 ## Next Action
-- Recommend `/compact` at Phase 5 boundary per ADR-009, then align with user on Phase 6 (GitHub Actions CI/CD + EU Supabase Production Integration).
+- User reviews Phase 5G live at `http://localhost:5173` and verified screenshots; await approval to `git commit` & `push` to `origin/main` or begin Phase 6.

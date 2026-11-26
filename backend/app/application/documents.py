@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
+from app.application.announcements import _can_principal_view_announcement
 from app.domain.documents import (
     STORE_MANAGER_RESTRICTED_CATEGORIES,
     STORE_MANAGER_UPLOAD_CATEGORIES,
@@ -32,6 +33,7 @@ from app.domain.organization import (
     validate_non_empty_text,
 )
 from app.domain.repositories import (
+    AnnouncementRepository,
     DocumentRepository,
     EmployeeRepository,
     StoreRepository,
@@ -87,7 +89,14 @@ def _require_document_read_access(
     *,
     self_employee: Employee | None = None,
 ) -> None:
-    if principal.role in (UserRole.OWNER, UserRole.HR, UserRole.ACCOUNTANT):
+    if principal.role == UserRole.ACCOUNTANT:
+        if document.category == DocumentCategory.MEDICAL_LEAVE:
+            raise ForbiddenScopeError(
+                "Accountants are not permitted to access medical_leave documents"
+            )
+        return
+
+    if principal.role in (UserRole.OWNER, UserRole.HR):
         return
 
     if principal.role == UserRole.STORE_MANAGER:
@@ -105,7 +114,9 @@ def _require_document_read_access(
             raise ForbiddenScopeError(
                 f"Store managers cannot access '{document.category.value}' documents"
             )
-        if document.store_id is None or document.store_id not in principal.store_ids:
+        if employee is not None:
+            principal.require_employee_in_scope(employee)
+        elif document.store_id is None or document.store_id not in principal.store_ids:
             raise ForbiddenScopeError("Store manager lacks access to this document's store")
         return
 
@@ -136,9 +147,11 @@ class ListDocumentsUseCase:
         self,
         doc_repo: DocumentRepository,
         employee_repo: EmployeeRepository,
+        ann_repo: AnnouncementRepository | None = None,
     ) -> None:
         self._doc_repo = doc_repo
         self._employee_repo = employee_repo
+        self._ann_repo = ann_repo
 
     async def execute(
         self,
@@ -147,12 +160,15 @@ class ListDocumentsUseCase:
         category: DocumentCategory | None = None,
         employee_id: UUID | None = None,
         store_id: UUID | None = None,
+        period_month: str | None = None,
         requires_signature: bool | None = None,
     ) -> list[DocumentListItem]:
+        validated_period = validate_period_month(period_month)
         self_emp = await _resolve_self_employee(
             self._employee_repo, principal.tenant_id, principal.user_id
         )
 
+        in_scope_ids: set[UUID] | None = None
         if principal.role == UserRole.EMPLOYEE:
             if self_emp is None:
                 return []
@@ -164,9 +180,14 @@ class ListDocumentsUseCase:
                 include_tenant_wide_for_employee=True,
                 employee_store_id=self_emp.primary_store_id,
                 category=category,
+                period_month=validated_period,
                 requires_signature=requires_signature,
             )
         elif principal.role == UserRole.STORE_MANAGER:
+            emps = await self._employee_repo.list_by_tenant(principal.tenant_id)
+            in_scope_ids = {e.id for e in emps if principal.can_manage_employee(e)}
+            if self_emp is not None:
+                in_scope_ids.add(self_emp.id)
             if store_id is not None:
                 principal.require_store_access(principal.tenant_id, store_id)
             if category in STORE_MANAGER_RESTRICTED_CATEGORIES:
@@ -184,6 +205,7 @@ class ListDocumentsUseCase:
                     only_employee_id=self_emp.id,
                     category=category,
                     store_id=store_id,
+                    period_month=validated_period,
                     requires_signature=requires_signature,
                 )
             else:
@@ -193,29 +215,25 @@ class ListDocumentsUseCase:
                     category=category,
                     employee_id=employee_id,
                     store_id=store_id,
+                    period_month=validated_period,
                     requires_signature=requires_signature,
                     exclude_categories=STORE_MANAGER_RESTRICTED_CATEGORIES,
                 )
-                emps = await self._employee_repo.list_by_tenant(principal.tenant_id)
-                blocked_ids = {
-                    e.id
-                    for e in emps
-                    if e.employment_status
-                    in (EmploymentStatus.LEGAL_HOLD, EmploymentStatus.ANONYMIZED)
-                }
                 docs = [
-                    d for d in docs if d.employee_id is None or d.employee_id not in blocked_ids
+                    d for d in docs if d.employee_id is None or d.employee_id in in_scope_ids
                 ]
                 if (
                     category is None
                     and self_emp is not None
-                    and self_emp.id not in blocked_ids
+                    and self_emp.employment_status
+                    not in (EmploymentStatus.LEGAL_HOLD, EmploymentStatus.ANONYMIZED)
                     and (employee_id is None or employee_id == self_emp.id)
                 ):
                     self_docs = await self._doc_repo.list_by_tenant(
                         principal.tenant_id,
                         only_employee_id=self_emp.id,
                         store_id=store_id,
+                        period_month=validated_period,
                         requires_signature=requires_signature,
                     )
                     seen_ids = {d.id for d in docs}
@@ -224,14 +242,44 @@ class ListDocumentsUseCase:
                             docs.append(sd)
                             seen_ids.add(sd.id)
                     docs.sort(key=lambda d: d.created_at, reverse=True)
+        elif principal.role == UserRole.ACCOUNTANT:
+            if category == DocumentCategory.MEDICAL_LEAVE:
+                raise ForbiddenScopeError(
+                    "Accountants are not permitted to list medical_leave documents"
+                )
+            docs = await self._doc_repo.list_by_tenant(
+                principal.tenant_id,
+                category=category,
+                employee_id=employee_id,
+                store_id=store_id,
+                period_month=validated_period,
+                requires_signature=requires_signature,
+                exclude_categories=frozenset({DocumentCategory.MEDICAL_LEAVE}),
+            )
         else:
             docs = await self._doc_repo.list_by_tenant(
                 principal.tenant_id,
                 category=category,
                 employee_id=employee_id,
                 store_id=store_id,
+                period_month=validated_period,
                 requires_signature=requires_signature,
             )
+
+        if self._ann_repo is not None and principal.role not in (UserRole.OWNER, UserRole.HR):
+            anns = await self._ann_repo.list_by_tenant(principal.tenant_id)
+            att_ann_map = {
+                a.attachment_document_id: a
+                for a in anns
+                if a.attachment_document_id is not None
+            }
+            if att_ann_map:
+                docs = [
+                    d
+                    for d in docs
+                    if d.id not in att_ann_map
+                    or _can_principal_view_announcement(principal, att_ann_map[d.id], self_emp)
+                ]
 
         receipts = await self._doc_repo.list_receipts_for_documents(
             principal.tenant_id, [d.id for d in docs]
@@ -245,6 +293,8 @@ class ListDocumentsUseCase:
             doc_receipts = receipts_by_doc.get(doc.id, [])
             if principal.role == UserRole.EMPLOYEE and self_emp is not None:
                 doc_receipts = [r for r in doc_receipts if r.employee_id == self_emp.id]
+            elif principal.role == UserRole.STORE_MANAGER and in_scope_ids is not None:
+                doc_receipts = [r for r in doc_receipts if r.employee_id in in_scope_ids]
             signed_by_self = (
                 any(r.employee_id == self_emp.id for r in doc_receipts)
                 if self_emp is not None
@@ -282,13 +332,27 @@ class UploadDocumentUseCase:
         *,
         now_utc: datetime,
     ) -> ComplianceDocument:
-        if principal.role == UserRole.ACCOUNTANT:
-            raise ForbiddenScopeError("Accountants have read-only access and cannot upload files")
-
         target_employee_id = cmd.employee_id
         target_store_id = cmd.store_id
 
-        if principal.role == UserRole.EMPLOYEE:
+        if principal.role == UserRole.ACCOUNTANT:
+            if cmd.category != DocumentCategory.PAYSLIP:
+                raise ForbiddenScopeError(
+                    "Accountants may only upload 'payslip' documents"
+                )
+            if cmd.mime_type != "application/pdf":
+                raise ValidationDomainError("Payslip uploads must be application/pdf")
+            if target_employee_id is None:
+                raise ValidationDomainError("employee_id is required when uploading a payslip")
+            if validate_period_month(cmd.period_month) is None:
+                raise ValidationDomainError("period_month (YYYY-MM) is required for payslips")
+            emp = await self._employee_repo.get_by_id(principal.tenant_id, target_employee_id)
+            if emp is None:
+                raise EntityNotFoundError(f"Employee {target_employee_id} not found")
+            if target_store_id is None:
+                target_store_id = emp.primary_store_id
+
+        elif principal.role == UserRole.EMPLOYEE:
             if cmd.category != DocumentCategory.MEDICAL_LEAVE:
                 raise ForbiddenScopeError(
                     "Employees may only upload 'medical_leave' (Baja médica) documents"
@@ -314,14 +378,7 @@ class UploadDocumentUseCase:
                 )
                 if emp is None:
                     raise EntityNotFoundError(f"Employee {target_employee_id} not found")
-                principal.require_store_access(principal.tenant_id, emp.primary_store_id)
-                if emp.employment_status in (
-                    EmploymentStatus.LEGAL_HOLD,
-                    EmploymentStatus.ANONYMIZED,
-                ):
-                    raise ForbiddenScopeError(
-                        "Store managers cannot upload documents for legal_hold employees"
-                    )
+                principal.require_employee_in_scope(emp)
                 target_store_id = emp.primary_store_id
             elif target_store_id is not None:
                 principal.require_store_access(principal.tenant_id, target_store_id)
@@ -392,9 +449,11 @@ class GetDocumentUseCase:
         self,
         doc_repo: DocumentRepository,
         employee_repo: EmployeeRepository,
+        ann_repo: AnnouncementRepository | None = None,
     ) -> None:
         self._doc_repo = doc_repo
         self._employee_repo = employee_repo
+        self._ann_repo = ann_repo
 
     async def execute(
         self,
@@ -418,12 +477,30 @@ class GetDocumentUseCase:
             if principal.role in (UserRole.EMPLOYEE, UserRole.STORE_MANAGER)
             else None
         )
+        if self._ann_repo is not None and principal.role not in (UserRole.OWNER, UserRole.HR):
+            anns = await self._ann_repo.list_by_tenant(principal.tenant_id)
+            linked_ann = next(
+                (a for a in anns if a.attachment_document_id == doc.id),
+                None,
+            )
+            if linked_ann is not None and not _can_principal_view_announcement(
+                principal, linked_ann, self_emp
+            ):
+                raise ForbiddenScopeError(
+                    "Announcement attachment is outside your authorized scope"
+                )
         _require_document_read_access(principal, doc, emp, self_employee=self_emp)
         receipts = await self._doc_repo.list_receipts_for_document(principal.tenant_id, doc.id)
         if principal.role == UserRole.EMPLOYEE:
             receipts = [
                 r for r in receipts if self_emp is not None and r.employee_id == self_emp.id
             ]
+        elif principal.role == UserRole.STORE_MANAGER:
+            emps = await self._employee_repo.list_by_tenant(principal.tenant_id)
+            in_scope_ids = {e.id for e in emps if principal.can_manage_employee(e)}
+            if self_emp is not None:
+                in_scope_ids.add(self_emp.id)
+            receipts = [r for r in receipts if r.employee_id in in_scope_ids]
         return DocumentDetailResult(document=doc, receipts=receipts)
 
 
@@ -433,10 +510,12 @@ class CreateSignedUrlUseCase:
         doc_repo: DocumentRepository,
         employee_repo: EmployeeRepository,
         storage: DocumentStoragePort,
+        ann_repo: AnnouncementRepository | None = None,
     ) -> None:
         self._doc_repo = doc_repo
         self._employee_repo = employee_repo
         self._storage = storage
+        self._ann_repo = ann_repo
 
     async def execute(
         self,
@@ -462,6 +541,18 @@ class CreateSignedUrlUseCase:
             if principal.role in (UserRole.EMPLOYEE, UserRole.STORE_MANAGER)
             else None
         )
+        if self._ann_repo is not None and principal.role not in (UserRole.OWNER, UserRole.HR):
+            anns = await self._ann_repo.list_by_tenant(principal.tenant_id)
+            linked_ann = next(
+                (a for a in anns if a.attachment_document_id == doc.id),
+                None,
+            )
+            if linked_ann is not None and not _can_principal_view_announcement(
+                principal, linked_ann, self_emp
+            ):
+                raise ForbiddenScopeError(
+                    "Announcement attachment is outside your authorized scope"
+                )
         _require_document_read_access(principal, doc, emp, self_employee=self_emp)
 
         signed = await self._storage.create_signed_url(

@@ -5,10 +5,11 @@ import {
   useReactTable,
   type ColumnDef,
 } from '@tanstack/react-table'
-import { Plus, Search, Trash2 } from 'lucide-react'
+import { Coffee, Plus, Search, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { apiClient, extractApiError } from '@/api/client'
 import type { StoreResponse } from '@/api/types'
+import { BreakPolicyForm } from '@/features/attendance/BreakPolicyForm'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -53,11 +54,13 @@ import {
   isImeComposing,
   SPAIN_TIMEZONES,
 } from '@/lib/ime'
+import { SPAIN_REGIONS } from '@/lib/spain'
 
 interface StoreFormState {
   name: string
   code: string
   timezone: string
+  region_code: string
   address: string
   city: string
   postal_code: string
@@ -67,6 +70,7 @@ const EMPTY_FORM: StoreFormState = {
   name: '',
   code: '',
   timezone: 'Europe/Madrid',
+  region_code: 'ES-MD',
   address: '',
   city: '',
   postal_code: '',
@@ -89,6 +93,9 @@ export function StoresPage() {
   const [saving, setSaving] = useState(false)
   const [drawerError, setDrawerError] = useState<string | null>(null)
   const [archiveTarget, setArchiveTarget] = useState<StoreResponse | null>(null)
+  const [tenantBreakOpen, setTenantBreakOpen] = useState(false)
+  const [storeDrawerTab, setStoreDrawerTab] = useState<'info' | 'break'>('info')
+  const isEs = (i18n.language || 'zh-CN').startsWith('es')
 
   const loadStores = useCallback(async () => {
     setLoading(true)
@@ -122,6 +129,7 @@ export function StoresPage() {
 
   const openCreateDrawer = () => {
     setEditingStore(null)
+    setStoreDrawerTab('info')
     setForm({
       ...EMPTY_FORM,
       timezone: activeTenant?.default_timezone ?? 'Europe/Madrid',
@@ -132,10 +140,12 @@ export function StoresPage() {
 
   const openEditDrawer = (store: StoreResponse) => {
     setEditingStore(store)
+    setStoreDrawerTab('info')
     setForm({
       name: store.name,
       code: store.code,
       timezone: store.timezone,
+      region_code: store.region_code || 'ES-MD',
       address: store.address,
       city: store.city,
       postal_code: store.postal_code,
@@ -212,9 +222,16 @@ export function StoresPage() {
         accessorKey: 'timezone',
         header: t('stores.columns.timezone'),
         cell: ({ row }) => (
-          <span className="text-xs text-slate-600 tabular-nums">
-            {row.original.timezone}
-          </span>
+          <div className="flex flex-col">
+            <span className="text-xs text-slate-600 tabular-nums">
+              {row.original.timezone}
+            </span>
+            {row.original.region_code && (
+              <span className="text-[11px] text-slate-500 tabular-nums">
+                {row.original.region_code}
+              </span>
+            )}
+          </div>
         ),
       },
       {
@@ -280,10 +297,20 @@ export function StoresPage() {
         </div>
 
         {canManage && (
-          <Button type="button" onClick={openCreateDrawer}>
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            {t('stores.addButton')}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setTenantBreakOpen(true)}
+            >
+              <Coffee className="h-4 w-4 text-[#2563EB]" aria-hidden="true" />
+              {isEs ? 'Regla de descanso empresa' : '企业默认休息规则'}
+            </Button>
+            <Button type="button" onClick={openCreateDrawer}>
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              {t('stores.addButton')}
+            </Button>
+          </div>
         )}
       </div>
 
@@ -334,7 +361,7 @@ export function StoresPage() {
           tabIndex={0}
           role="region"
           aria-labelledby="stores-table-heading"
-          className="overflow-x-auto focus-visible:ring-2 focus-visible:ring-teal-700 focus-visible:outline-none"
+          className="overflow-x-auto focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:outline-none"
         >
           <Table>
             <TableHeader className="sticky top-0 bg-slate-50">
@@ -415,11 +442,47 @@ export function StoresPage() {
             <SheetDescription>
               {t('stores.drawer.description')}
             </SheetDescription>
+            {editingStore && (
+              <div className="mt-3 flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setStoreDrawerTab('info')}
+                  className={
+                    storeDrawerTab === 'info'
+                      ? 'rounded-md bg-[#2563EB] px-3 py-1 text-xs font-medium text-white'
+                      : 'rounded-md bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600 hover:text-slate-900'
+                  }
+                >
+                  {isEs ? 'Datos del centro' : '门店基础信息'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStoreDrawerTab('break')}
+                  className={
+                    storeDrawerTab === 'break'
+                      ? 'rounded-md bg-[#2563EB] px-3 py-1 text-xs font-medium text-white'
+                      : 'rounded-md bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600 hover:text-slate-900'
+                  }
+                >
+                  {isEs ? 'Regla de descanso' : '门店默认休息规则'}
+                </button>
+              </div>
+            )}
           </SheetHeader>
 
-          <form
-            id="store-drawer-form"
-            onSubmit={handleSave}
+          {editingStore && storeDrawerTab === 'break' ? (
+            <div className="flex-1 overflow-y-auto px-6 py-4">
+              <BreakPolicyForm
+                scopeType="store"
+                storeId={editingStore.id}
+                readOnly={!canManage}
+              />
+            </div>
+          ) : (
+            <>
+              <form
+                id="store-drawer-form"
+                onSubmit={handleSave}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && isImeComposing(e)) {
                 e.preventDefault()
@@ -476,6 +539,28 @@ export function StoresPage() {
                   {SPAIN_TIMEZONES.map((tz) => (
                     <SelectItem key={tz} value={tz}>
                       {tz}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="store-region">{t('stores.drawer.regionCode')}</Label>
+              <Select
+                disabled={!canManage}
+                value={form.region_code}
+                onValueChange={(value) =>
+                  setForm({ ...form, region_code: value })
+                }
+              >
+                <SelectTrigger id="store-region" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SPAIN_REGIONS.map((r) => (
+                    <SelectItem key={r.code} value={r.code}>
+                      {r.code} · {i18n.language.startsWith('es') ? r.nameEs : r.nameZh}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -558,6 +643,32 @@ export function StoresPage() {
               )}
             </div>
           </SheetFooter>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      <Sheet open={tenantBreakOpen} onOpenChange={setTenantBreakOpen}>
+        <SheetContent
+          side="right"
+          className="flex w-full flex-col overscroll-contain bg-white sm:max-w-md"
+        >
+          <SheetHeader className="border-b border-slate-200 px-6 py-4">
+            <SheetTitle className="flex items-center gap-2">
+              <Coffee className="h-4 w-4 text-[#2563EB]" aria-hidden="true" />
+              {isEs
+                ? 'Regla de descanso predeterminada de la empresa'
+                : '企业默认休息规则'}
+            </SheetTitle>
+            <SheetDescription>
+              {isEs
+                ? 'Se aplica a todos los centros y empleados sin regla específica.'
+                : '作为全企业兜底规则，未单独配置门店或个人规则的员工将自动继承此配置。'}
+            </SheetDescription>
+          </SheetHeader>
+          <div className="flex-1 overflow-y-auto px-6 py-4">
+            <BreakPolicyForm scopeType="tenant" readOnly={!canManage} />
+          </div>
         </SheetContent>
       </Sheet>
 

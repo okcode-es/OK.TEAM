@@ -6,19 +6,26 @@ Pure Python standard library only (enforced by scripts/check_domain_purity.py).
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta, tzinfo
+from datetime import UTC, date, datetime, time, timedelta, tzinfo
 from decimal import Decimal
 from enum import StrEnum
 from uuid import UUID
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from app.domain.break_policies import (
+    BreakMode,
+    BreakTrackingMode,
+    EffectiveBreakPolicy,
+    parse_hhmm_minutes,
+)
 from app.domain.employees import (
     STATUTORY_MAX_WEEKLY_HOURS,
     STATUTORY_RETENTION_YEARS,
     WorkScheduleType,
 )
-from app.domain.organization import ValidationDomainError
+from app.domain.organization import ConflictError, ValidationDomainError
 
 ADULT_DAILY_MAX_HOURS = Decimal("9.00")
 MINOR_DAILY_MAX_HOURS = Decimal("8.00")
@@ -51,6 +58,11 @@ class AttendanceSource(StrEnum):
     WEB = "web"
     KIOSK = "kiosk"
     MANAGER_CORRECTION = "manager_correction"
+
+
+class WorkMode(StrEnum):
+    ONSITE = "onsite"
+    REMOTE = "remote"
 
 
 class AlertSeverity(StrEnum):
@@ -90,6 +102,7 @@ class AttendanceEvent:
     supersedes_event_id: UUID | None = None
     corrected_event_type: CorrectedEventType | None = None
     correction_reason: str = ""
+    work_mode: WorkMode = WorkMode.ONSITE
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,6 +131,8 @@ class WorkSession:
     is_open: bool
     has_open_break: bool
     source_event_ids: tuple[UUID, ...]
+    paid_break_minutes: int = 0
+    auto_deducted_break_minutes: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,6 +147,8 @@ class DailyAttendanceSummary:
     total_net_hours: Decimal
     has_corrections: bool
     alerts: tuple[ComplianceAlert, ...]
+    total_paid_break_minutes: int = 0
+    total_auto_deducted_break_minutes: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -316,9 +333,48 @@ def _resolve_effective_punches(events: list[AttendanceEvent]) -> list[_Effective
     return effective
 
 
+def _compute_auto_deduct_minutes(
+    clock_in_utc: datetime,
+    clock_out_utc: datetime,
+    store_timezone: str,
+    gross_minutes: int,
+    break_policy: EffectiveBreakPolicy,
+) -> int:
+    if break_policy.break_mode == BreakMode.FIXED_DURATION:
+        return min(gross_minutes, break_policy.duration_minutes or 0)
+
+    if not break_policy.windows:
+        return 0
+
+    tz = resolve_timezone(store_timezone)
+    local_in_date = clock_in_utc.astimezone(tz).date()
+    local_out_date = clock_out_utc.astimezone(tz).date()
+    overlap_mins = 0
+    cursor = local_in_date
+    while cursor <= local_out_date:
+        for window in break_policy.windows:
+            s_min = parse_hhmm_minutes(window.start)
+            e_min = parse_hhmm_minutes(window.end)
+            w_start_utc = datetime(
+                cursor.year, cursor.month, cursor.day, s_min // 60, s_min % 60, tzinfo=tz
+            ).astimezone(UTC)
+            w_end_utc = datetime(
+                cursor.year, cursor.month, cursor.day, e_min // 60, e_min % 60, tzinfo=tz
+            ).astimezone(UTC)
+            ov_start = max(clock_in_utc, w_start_utc)
+            ov_end = min(clock_out_utc, w_end_utc)
+            if ov_end > ov_start:
+                overlap_mins += int((ov_end - ov_start).total_seconds()) // 60
+        cursor += timedelta(days=1)
+
+    return min(gross_minutes, overlap_mins)
+
+
 def fold_attendance_events(
     employee_id: UUID,
     events: list[AttendanceEvent],
+    *,
+    break_policy: EffectiveBreakPolicy | None = None,
 ) -> tuple[WorkSession, ...]:
     """Fold raw and correction events into chronological WorkSessions, enforcing state machine."""
     effective = _resolve_effective_punches(events)
@@ -381,9 +437,34 @@ def fold_attendance_events(
             total_seconds = int(
                 (punch.occurred_at_utc - current_in.occurred_at_utc).total_seconds()
             )
-            net_seconds = max(0, total_seconds - break_seconds)
-            break_mins = break_seconds // 60
-            net_mins = net_seconds // 60
+            gross_mins = max(0, total_seconds // 60)
+            manual_break_mins = break_seconds // 60
+            auto_deducted_mins = 0
+            if (
+                break_policy is not None
+                and break_policy.tracking_mode == BreakTrackingMode.AUTO_DEDUCT
+                and manual_break_mins == 0
+                and gross_mins >= break_policy.min_shift_minutes_for_auto_deduct
+            ):
+                auto_deducted_mins = _compute_auto_deduct_minutes(
+                    current_in.occurred_at_utc,
+                    punch.occurred_at_utc,
+                    current_in.store_timezone,
+                    gross_mins,
+                    break_policy,
+                )
+
+            break_mins = manual_break_mins + auto_deducted_mins
+            if break_policy is not None and break_policy.is_paid:
+                paid_break_mins = break_mins
+                net_mins = gross_mins
+            else:
+                paid_break_mins = 0
+                if auto_deducted_mins > 0:
+                    net_mins = max(0, gross_mins - break_mins)
+                else:
+                    net_mins = max(0, total_seconds - break_seconds) // 60
+
             local_dt = current_in.occurred_at_utc.astimezone(
                 resolve_timezone(current_in.store_timezone)
             )
@@ -405,6 +486,8 @@ def fold_attendance_events(
                     is_open=False,
                     has_open_break=False,
                     source_event_ids=tuple(event_ids),
+                    paid_break_minutes=paid_break_mins,
+                    auto_deducted_break_minutes=auto_deducted_mins,
                 )
             )
             state = _ShiftState.NOT_CLOCKED_IN
@@ -439,6 +522,90 @@ def fold_attendance_events(
     return tuple(sessions)
 
 
+def compute_auto_break_end_utc(
+    events: Sequence[AttendanceEvent],
+    employee_id: UUID,
+    default_break_minutes: int | None,
+    now_utc: datetime,
+    *,
+    effective_policy: EffectiveBreakPolicy | None = None,
+) -> tuple[datetime | None, datetime | None]:
+    """Return (scheduled_end_utc, due_end_utc) for an active open break if fixed break is set."""
+    if effective_policy is not None:
+        if (
+            effective_policy.tracking_mode != BreakTrackingMode.MANUAL_PUNCH
+            or not effective_policy.auto_end_manual_break
+        ):
+            return (None, None)
+        if effective_policy.break_mode == BreakMode.FIXED_DURATION:
+            duration: int | None = (
+                effective_policy.duration_minutes
+                if effective_policy.duration_minutes is not None
+                else default_break_minutes
+            )
+        elif effective_policy.windows:
+            duration = 0  # resolved per matching/nearest window below
+        else:
+            duration = default_break_minutes
+    else:
+        duration = default_break_minutes
+
+    if duration is None:
+        return (None, None)
+
+    event_list = list(events)
+    sessions = fold_attendance_events(employee_id, event_list)
+    open_session = next((s for s in sessions if s.is_open and s.has_open_break), None)
+    if open_session is None:
+        return (None, None)
+
+    source_ids = set(open_session.source_event_ids)
+    effective = _resolve_effective_punches(event_list)
+    active_break_start_utc: datetime | None = None
+    for punch in effective:
+        if punch.event_id in source_ids and punch.punch_type == AttendanceEventType.BREAK_START:
+            active_break_start_utc = punch.occurred_at_utc
+
+    if active_break_start_utc is None:
+        return (None, None)
+
+    if (
+        effective_policy is not None
+        and effective_policy.break_mode == BreakMode.FIXED_WINDOW
+        and effective_policy.windows
+    ):
+        tz = resolve_timezone(open_session.store_timezone)
+        local_start = active_break_start_utc.astimezone(tz)
+        local_mins = local_start.hour * 60 + local_start.minute
+        parsed_wins = sorted(
+            (parse_hhmm_minutes(w.start), parse_hhmm_minutes(w.end))
+            for w in effective_policy.windows
+        )
+        inside = next((w for w in parsed_wins if w[0] <= local_mins < w[1]), None)
+        if inside is not None:
+            scheduled_end_utc = datetime(
+                local_start.year,
+                local_start.month,
+                local_start.day,
+                inside[1] // 60,
+                inside[1] % 60,
+                tzinfo=tz,
+            ).astimezone(UTC)
+        else:
+            nearest = next((w for w in parsed_wins if w[0] >= local_mins), parsed_wins[0])
+            scheduled_end_utc = active_break_start_utc + timedelta(
+                minutes=(nearest[1] - nearest[0])
+            )
+    else:
+        scheduled_end_utc = active_break_start_utc + timedelta(minutes=duration)
+    now_norm = (
+        now_utc.astimezone(UTC) if now_utc.tzinfo is not None else now_utc.replace(tzinfo=UTC)
+    )
+    if scheduled_end_utc <= now_norm:
+        return (scheduled_end_utc, scheduled_end_utc)
+    return (scheduled_end_utc, None)
+
+
 def evaluate_attendance_ledger(
     *,
     employee_id: UUID,
@@ -448,9 +615,10 @@ def evaluate_attendance_ledger(
     contracted_weekly_hours: Decimal,
     date_from: date | None = None,
     date_to: date | None = None,
+    break_policy: EffectiveBreakPolicy | None = None,
 ) -> AttendanceLedgerReport:
     """Fold events and evaluate all 6 Spanish statutory labor law rules."""
-    all_sessions = fold_attendance_events(employee_id, events)
+    all_sessions = fold_attendance_events(employee_id, events, break_policy=break_policy)
     alerts: list[ComplianceAlert] = []
 
     # 1. Group closed sessions by local_date for Daily Max (Art. 34.3 ET)
@@ -648,6 +816,8 @@ def evaluate_attendance_ledger(
     for dt in sorted(sessions_by_date.keys()):
         day_sessions = tuple(sessions_by_date[dt])
         total_break = sum(s.break_minutes for s in day_sessions)
+        total_paid_break = sum(s.paid_break_minutes for s in day_sessions)
+        total_auto_deduct = sum(s.auto_deducted_break_minutes for s in day_sessions)
         total_net = sum(s.net_minutes for s in day_sessions)
         daily_summaries.append(
             DailyAttendanceSummary(
@@ -661,6 +831,8 @@ def evaluate_attendance_ledger(
                 total_net_hours=_minutes_to_hours(total_net),
                 has_corrections=any(s.has_corrections for s in day_sessions),
                 alerts=tuple(alerts_by_date.get(dt, [])),
+                total_paid_break_minutes=total_paid_break,
+                total_auto_deducted_break_minutes=total_auto_deduct,
             )
         )
 
@@ -700,3 +872,109 @@ def evaluate_attendance_ledger(
         annual_overtime_hours=annual_overtime_hours,
         alerts=filtered_alerts,
     )
+
+
+def latest_effective_punch_utc(events: Sequence[AttendanceEvent]) -> datetime | None:
+    """Return the latest effective punch timestamp in UTC, or None if no effective punches."""
+    effective = _resolve_effective_punches(list(events))
+    if not effective:
+        return None
+    return max(p.occurred_at_utc for p in effective)
+
+
+def parse_hhmm_to_utc(local_date: date, hhmm: str, store_timezone: str) -> datetime:
+    """Strictly parse 'HH:MM' in the store's IANA timezone and convert to UTC."""
+    if len(hhmm) != 5 or hhmm[2] != ":":
+        raise ValidationDomainError(f"Invalid HH:MM time format: '{hhmm}'")
+    hh_str, mm_str = hhmm[:2], hhmm[3:]
+    if not (hh_str.isdigit() and mm_str.isdigit()):
+        raise ValidationDomainError(f"Invalid HH:MM time format: '{hhmm}'")
+    hour = int(hh_str)
+    minute = int(mm_str)
+    if not (0 <= hour <= 23 and 0 <= minute <= 59):
+        raise ValidationDomainError(f"Invalid HH:MM time format: '{hhmm}'")
+    tz = resolve_timezone(store_timezone)
+    local_dt = datetime.combine(local_date, time(hour=hour, minute=minute), tzinfo=tz)
+    utc_dt = local_dt.astimezone(UTC)
+    if utc_dt.astimezone(tz).replace(tzinfo=None) != local_dt.replace(tzinfo=None):
+        raise ValidationDomainError(
+            f"Invalid time range: '{local_date.isoformat()} {hhmm}' does not exist "
+            f"in timezone '{store_timezone}' due to DST transition"
+        )
+    return utc_dt
+
+
+def validate_and_build_manual_day_timestamps(
+    *,
+    local_date: date,
+    clock_in_time: str,
+    break_start_time: str | None,
+    break_end_time: str | None,
+    clock_out_time: str | None,
+    store_timezone: str,
+    now_utc: datetime,
+) -> list[tuple[AttendanceEventType, datetime]]:
+    """Validate RDL 8/2019 manual day time inputs and convert them to ordered UTC timestamps."""
+    if (break_start_time is None) != (break_end_time is None):
+        raise ValidationDomainError(
+            "break_start_time and break_end_time must both be set or both omitted"
+        )
+
+    tz = resolve_timezone(store_timezone)
+    store_local_today = now_utc.astimezone(tz).date()
+    if local_date > store_local_today:
+        raise ValidationDomainError("Cannot record manual attendance in the future")
+    if local_date < store_local_today and clock_out_time is None:
+        raise ValidationDomainError("clock_out_time is required for past dates")
+
+    clock_in_utc = parse_hhmm_to_utc(local_date, clock_in_time, store_timezone)
+    sequence: list[tuple[AttendanceEventType, datetime]] = [
+        (AttendanceEventType.CLOCK_IN, clock_in_utc)
+    ]
+
+    if break_start_time is not None and break_end_time is not None:
+        break_start_utc = parse_hhmm_to_utc(local_date, break_start_time, store_timezone)
+        break_end_utc = parse_hhmm_to_utc(local_date, break_end_time, store_timezone)
+        sequence.append((AttendanceEventType.BREAK_START, break_start_utc))
+        sequence.append((AttendanceEventType.BREAK_END, break_end_utc))
+
+    if clock_out_time is not None:
+        clock_out_utc = parse_hhmm_to_utc(local_date, clock_out_time, store_timezone)
+        sequence.append((AttendanceEventType.CLOCK_OUT, clock_out_utc))
+
+    for idx in range(1, len(sequence)):
+        if sequence[idx][1] <= sequence[idx - 1][1]:
+            raise ValidationDomainError(
+                "Invalid time range: timestamps must be in strictly increasing order "
+                "(clock_in < break_start < break_end < clock_out)"
+            )
+
+    max_future = now_utc + timedelta(minutes=5)
+    min_past = now_utc - timedelta(days=31)
+    for _, ts in sequence:
+        if ts > max_future:
+            raise ValidationDomainError("Cannot record attendance in the future")
+        if ts < min_past:
+            raise ValidationDomainError(
+                "Invalid time range: cannot record attendance older than 31 days"
+            )
+
+    return sequence
+
+
+def check_manual_day_session_overlap(
+    existing_sessions: Sequence[WorkSession],
+    new_start_utc: datetime,
+    new_end_utc: datetime | None,
+) -> None:
+    """Raise ConflictError if a manual day interval overlaps existing sessions or an open shift."""
+    for sess in existing_sessions:
+        if sess.is_open:
+            raise ConflictError("Manual attendance conflicts with an existing open shift")
+        if sess.clock_out_utc is None:
+            continue
+        if new_end_utc is None:
+            if new_start_utc < sess.clock_out_utc:
+                raise ConflictError("Manual attendance overlaps existing attendance session")
+        elif new_start_utc < sess.clock_out_utc and new_end_utc > sess.clock_in_utc:
+            raise ConflictError("Manual attendance overlaps existing attendance session")

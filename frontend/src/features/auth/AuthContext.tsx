@@ -10,6 +10,7 @@ import {
 import {
   apiClient,
   extractApiError,
+  extractFetchError,
   getApiBaseUrl,
   setActiveTenantHeader,
   setDevAccessToken,
@@ -141,21 +142,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithDevEmail = useCallback(
     async (email: string) => {
-      const response = await fetch(`${getApiBaseUrl()}/api/v1/dev/token`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
-      })
-      if (!response.ok) {
-        const body = (await response.json().catch(() => null)) as {
-          detail?: string
-        } | null
-        throw new Error(body?.detail ?? `Dev token failed (${response.status})`)
+      try {
+        const response = await fetch(`${getApiBaseUrl()}/api/v1/dev/token`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        })
+        if (!response.ok) {
+          throw new Error(await extractFetchError(response))
+        }
+        const payload = (await response.json()) as { access_token: string }
+        sessionStorage.setItem(STORAGE_DEV_TOKEN, payload.access_token)
+        setDevAccessToken(payload.access_token)
+        await refreshProfile()
+      } catch (err) {
+        throw new Error(extractApiError(err))
       }
-      const payload = (await response.json()) as { access_token: string }
-      sessionStorage.setItem(STORAGE_DEV_TOKEN, payload.access_token)
-      setDevAccessToken(payload.access_token)
-      await refreshProfile()
     },
     [refreshProfile],
   )

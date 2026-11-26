@@ -122,7 +122,7 @@ const ALERT_BADGE_STYLE: Record<AlertSeverity, string> = {
 
 const SHIFT_CHIP_STYLE: Record<ShiftStatus, string> = {
   draft: 'border-amber-200 bg-amber-50/80 text-slate-900 hover:bg-amber-100/70',
-  published: 'border-teal-200 bg-teal-50/70 text-slate-900 hover:bg-teal-100/60',
+  published: 'border-blue-200 bg-blue-50/70 text-slate-900 hover:bg-blue-100/60',
   cancelled: 'border-slate-200 bg-slate-100 text-slate-500 line-through',
 }
 
@@ -635,7 +635,7 @@ export function SchedulePage() {
                                 type="button"
                                 onClick={() => openEditSheet(row, shift)}
                                 className={cn(
-                                  'w-full rounded border px-1.5 py-1 text-left transition-colors focus-visible:ring-2 focus-visible:ring-teal-700 focus-visible:outline-none',
+                                  'w-full rounded border px-1.5 py-1 text-left transition-colors focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:outline-none',
                                   SHIFT_CHIP_STYLE[shift.status],
                                 )}
                               >
@@ -667,7 +667,7 @@ export function SchedulePage() {
                               <button
                                 type="button"
                                 onClick={() => openCreateSheet(row, dayIso)}
-                                className="mt-auto flex items-center justify-center gap-1 rounded border border-dashed border-slate-200 px-1.5 py-1 text-[11px] text-slate-500 transition-colors hover:border-teal-700 hover:bg-slate-50 hover:text-teal-700 focus-visible:ring-2 focus-visible:ring-teal-700 focus-visible:outline-none"
+                                className="mt-auto flex items-center justify-center gap-1 rounded border border-dashed border-slate-200 px-1.5 py-1 text-[11px] text-slate-500 transition-colors hover:border-[#2563EB] hover:bg-slate-50 hover:text-[#2563EB] focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:outline-none"
                               >
                                 <Plus className="h-3 w-3" aria-hidden="true" />
                                 <span>{t('schedule.addShift')}</span>

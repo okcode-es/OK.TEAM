@@ -153,6 +153,7 @@ class InMemoryStoreRepo:
         address: str,
         city: str,
         postal_code: str,
+        region_code: str = "",
         is_active: bool,
         updated_at: datetime,
     ) -> Store | None:
@@ -167,6 +168,7 @@ class InMemoryStoreRepo:
             address=address,
             city=city,
             postal_code=postal_code,
+            region_code=region_code,
             is_active=is_active,
             updated_at=updated_at,
         )
@@ -216,6 +218,7 @@ class InMemoryMembershipRepo:
                     role=m.role,
                     status=m.status,
                     store_ids=m.store_ids,
+                    department_scope=m.department_scope,
                 )
             )
         return summaries
@@ -293,6 +296,7 @@ class InMemoryMembershipRepo:
         role: UserRole,
         status: MembershipStatus,
         store_ids: frozenset[UUID],
+        department_scope: str | None = None,
         updated_at: datetime,
     ) -> Membership | None:
         existing = await self.get_by_id(tenant_id, membership_id)
@@ -304,6 +308,7 @@ class InMemoryMembershipRepo:
             role=role,
             status=status,
             store_ids=store_ids,
+            department_scope=department_scope,
             updated_at=updated_at,
         )
         self._state.memberships[membership_id] = updated

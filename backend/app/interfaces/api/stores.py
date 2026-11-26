@@ -36,6 +36,7 @@ class StoreCreateRequest(BaseModel):
     address: str = Field(default="", max_length=300)
     city: str = Field(default="", max_length=100)
     postal_code: str = Field(default="", max_length=16)
+    region_code: str = Field(default="", max_length=16)
 
 
 class StoreUpdateRequest(BaseModel):
@@ -45,6 +46,7 @@ class StoreUpdateRequest(BaseModel):
     address: str = Field(default="", max_length=300)
     city: str = Field(default="", max_length=100)
     postal_code: str = Field(default="", max_length=16)
+    region_code: str = Field(default="", max_length=16)
     is_active: bool = True
 
 
@@ -57,6 +59,7 @@ class StoreResponse(BaseModel):
     address: str
     city: str
     postal_code: str
+    region_code: str
     is_active: bool
     created_at: datetime
     updated_at: datetime
@@ -72,6 +75,7 @@ class StoreResponse(BaseModel):
             address=store.address,
             city=store.city,
             postal_code=store.postal_code,
+            region_code=store.region_code,
             is_active=store.is_active,
             created_at=store.created_at,
             updated_at=store.updated_at,
@@ -141,6 +145,7 @@ async def create_store(
             address=payload.address,
             city=payload.city,
             postal_code=payload.postal_code,
+            region_code=payload.region_code,
         ),
     )
     await commit()
@@ -171,6 +176,7 @@ async def update_store(
             address=payload.address,
             city=payload.city,
             postal_code=payload.postal_code,
+            region_code=payload.region_code,
             is_active=payload.is_active,
         ),
     )
