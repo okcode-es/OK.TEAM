@@ -1,8 +1,8 @@
 # okTeam Session State (Hard Limit <= 50 Lines)
 
-- **Current Phase**: Phase 5I Complete — Interactive Organization Chart (`Organigrama`) + `employees.manager_id` (plus uncommitted Phase 5H Time Management & Payroll Blockers).
+- **Current Phase**: Phase 5I Complete & Pushed (`a384b7e`) — Interactive Organization Chart (`Organigrama`) + Phase 5H Time Management + `GEMINI.md` / ADR-016 Token-Efficiency Rules.
 - **Last Updated**: 2026-11-27
-- **Active Branch**: `main` (uncommitted working tree over `c7e7f68`).
+- **Active Branch**: `main` (pushed `a384b7e`, plus local rule updates `GEMINI.md` / `DECISIONS.md` / `okteam-ui-craft/SKILL.md`).
 - **Alembic Head**: `0012_employee_manager_id` (applied to local Postgres `localhost:5433`).
 
 ## Verification on 2026-11-27 (Phase 5I Interactive Org Chart)
