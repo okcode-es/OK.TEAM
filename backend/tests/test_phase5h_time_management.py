@@ -29,8 +29,16 @@ from app.domain.break_policies import (
 )
 from app.domain.employees import EmploymentStatus, WorkScheduleType
 from app.domain.leaves import LeaveRequest, LeaveStatus, LeaveType
-from app.domain.payroll import MonthlyClosing, MonthlyClosingStatus
+from app.domain.payroll import (
+    AttendancePdfDocumentInput,
+    MonthlyClosing,
+    MonthlyClosingStatus,
+)
 from app.domain.scheduling import Shift, ShiftStatus
+from app.infrastructure.pdf_generator import (
+    ReportLabAttendancePdfRenderer,
+    _format_absence_line,
+)
 from app.interfaces.api.deps import (
     get_attendance_day_review_repository,
     get_attendance_repository,
@@ -38,6 +46,7 @@ from app.interfaces.api.deps import (
     get_employee_repository,
     get_leave_repository,
     get_membership_repository,
+    get_pdf_renderer,
     get_shift_repository,
 )
 from tests.test_phase5e_workflows_and_reports import _build_env
@@ -714,7 +723,7 @@ def test_export_attendance_pdf_and_rbac_isolation(tmp_path: Path) -> None:
         ]
     )
 
-    # Employee exports self -> valid %PDF-1.4
+    # Employee exports self -> valid PDF
     r_emp_pdf = client.get(
         "/api/v1/attendance/export.pdf?date_from=2026-11-01&date_to=2026-11-30",
         headers=emp1_headers,
@@ -724,7 +733,8 @@ def test_export_attendance_pdf_and_rbac_isolation(tmp_path: Path) -> None:
     assert r_emp_pdf.headers["cache-control"] == "no-store"
     assert r_emp_pdf.headers["x-content-type-options"] == "nosniff"
     assert "filename*=" in r_emp_pdf.headers["content-disposition"]
-    assert r_emp_pdf.content.startswith(b"%PDF-1.4")
+    assert r_emp_pdf.content.startswith(b"%PDF-")
+    assert b"%%EOF" in r_emp_pdf.content
 
     # Employee cannot export another employee -> 403
     assert (
@@ -750,7 +760,8 @@ def test_export_attendance_pdf_and_rbac_isolation(tmp_path: Path) -> None:
         headers=acc_headers,
     )
     assert r_acc_pdf.status_code == 200
-    assert r_acc_pdf.content.startswith(b"%PDF-1.4")
+    assert r_acc_pdf.content.startswith(b"%PDF-")
+    assert b"%%EOF" in r_acc_pdf.content
 
     # Ensure EmploymentStatus import is valid
     assert EmploymentStatus.ACTIVE.value == "active"
@@ -850,14 +861,28 @@ def test_red_team_regressions_gdpr_pdf_rbac_draft_shifts_and_secondary_store_loc
         )
         env["leave_repo"].leaves.append(lv)
 
+    captured_pdf_inputs: list[AttendancePdfDocumentInput] = []
+    real_renderer = ReportLabAttendancePdfRenderer()
+
+    class _SpyRenderer:
+        def render_monthly_attendance_pdf(self, data: AttendancePdfDocumentInput) -> bytes:
+            captured_pdf_inputs.append(data)
+            return real_renderer.render_monthly_attendance_pdf(data)
+
+    client.app.dependency_overrides[get_pdf_renderer] = lambda: _SpyRenderer()
+
     # (a) Accountant PDF export for another employee -> GDPR Art. 9 redacted
     r_acc_other = client.get(
         f"/api/v1/attendance/export.pdf?employee_id={emp1.id}&date_from=2026-11-01&date_to=2026-11-30",
         headers=acc_headers,
     )
     assert r_acc_other.status_code == 200
-    assert b"Baja Medica" not in r_acc_other.content
-    assert b"Otras Ausencias: 2d" in r_acc_other.content
+    assert r_acc_other.content.startswith(b"%PDF-")
+    assert len(captured_pdf_inputs) == 1
+    assert captured_pdf_inputs[0].redact_health is True
+    other_absence_line = _format_absence_line(captured_pdf_inputs[0])
+    assert "Baja" not in other_absence_line
+    assert "Otras Ausencias: 2d" in other_absence_line
 
     # Active self accountant PDF export -> NOT redacted
     r_acc_self = client.get(
@@ -865,7 +890,11 @@ def test_red_team_regressions_gdpr_pdf_rbac_draft_shifts_and_secondary_store_loc
         headers=acc_headers,
     )
     assert r_acc_self.status_code == 200
-    assert b"Baja Medica \\(IT\\): 1d" in r_acc_self.content
+    assert r_acc_self.content.startswith(b"%PDF-")
+    assert len(captured_pdf_inputs) == 2
+    assert captured_pdf_inputs[1].redact_health is False
+    self_absence_line = _format_absence_line(captured_pdf_inputs[1])
+    assert "Baja Médica (IT): 1d" in self_absence_line
 
     # (e) export.pdf without employee_id as HR -> 422
     assert (

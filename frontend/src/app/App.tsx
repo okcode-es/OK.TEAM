@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 import { AppShell, type NavSection } from '@/components/layout/AppShell'
@@ -8,6 +8,11 @@ import { AnnouncementsPage } from '@/features/announcements/AnnouncementsPage'
 import { AuthProvider, useAuth } from '@/features/auth/AuthContext'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { OnboardingPage } from '@/features/auth/OnboardingPage'
+import {
+  canRoleOperateKiosk,
+  KIOSK_LOCK_STORAGE_KEY,
+  readKioskLockForSession,
+} from '@/features/attendance/kioskLock'
 import { KioskPage } from '@/features/attendance/KioskPage'
 import { ClockStateProvider, useClockState } from '@/features/clock/ClockStateContext'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
@@ -93,14 +98,50 @@ const EMPLOYEE_FORBIDDEN_SECTIONS: ReadonlySet<NavSection> = new Set([
 
 function WorkspaceRouter() {
   const { t, i18n } = useTranslation()
-  const { isLoading, isAuthenticated, activeTenant } = useAuth()
+  const { isLoading, isAuthenticated, profile, activeTenant } = useAuth()
   const [section, setSection] = useState<NavSection>('dashboard')
   const [viewedEmployeeId, setViewedEmployeeId] = useState<string | null>(null)
+  const [kioskLockVersion, setKioskLockVersion] = useState(0)
+
+  const canOperateKiosk = canRoleOperateKiosk(activeTenant?.role)
+  const lockedKioskRecord = useMemo(() => {
+    if (kioskLockVersion < 0) return null
+    return readKioskLockForSession(
+      activeTenant?.tenant_id,
+      profile?.user_id,
+      activeTenant?.role,
+    )
+  }, [activeTenant?.tenant_id, activeTenant?.role, profile?.user_id, kioskLockVersion])
+  const isKioskLocked = lockedKioskRecord !== null
+  const effectiveSection: NavSection = isKioskLocked ? 'kiosk' : section
 
   const handleNavigate = (next: NavSection) => {
+    if (isKioskLocked && next !== 'kiosk') {
+      return
+    }
     setViewedEmployeeId(null)
     setSection(next)
   }
+
+  const handleKioskLockStateChange = () => {
+    setKioskLockVersion((v) => v + 1)
+  }
+
+  const handleKioskExit = () => {
+    setKioskLockVersion((v) => v + 1)
+    setViewedEmployeeId(null)
+    setSection('dashboard')
+  }
+
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === KIOSK_LOCK_STORAGE_KEY || e.key === null) {
+        setKioskLockVersion((v) => v + 1)
+      }
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
 
   useEffect(() => {
     document.documentElement.lang = i18n.language || 'zh-CN'
@@ -111,10 +152,18 @@ function WorkspaceRouter() {
   }, [activeTenant?.tenant_id])
 
   useEffect(() => {
+    if (isKioskLocked) {
+      if (section !== 'kiosk') {
+        setSection('kiosk')
+      }
+      return
+    }
     if (
       activeTenant?.role === 'employee' &&
       EMPLOYEE_FORBIDDEN_SECTIONS.has(section)
     ) {
+      setSection('dashboard')
+    } else if (section === 'kiosk' && !canOperateKiosk) {
       setSection('dashboard')
     } else if (
       section === 'organization' &&
@@ -122,7 +171,7 @@ function WorkspaceRouter() {
     ) {
       setSection('dashboard')
     }
-  }, [activeTenant?.role, section])
+  }, [activeTenant?.role, canOperateKiosk, isKioskLocked, section])
 
   if (isLoading) {
     return (
@@ -144,9 +193,20 @@ function WorkspaceRouter() {
     return <OnboardingPage />
   }
 
+  if (effectiveSection === 'kiosk' && canOperateKiosk) {
+    return (
+      <KioskPage
+        key={`${activeTenant.tenant_id}:${profile?.user_id ?? ''}`}
+        lockedRecord={lockedKioskRecord}
+        onLockStateChange={handleKioskLockStateChange}
+        onExit={handleKioskExit}
+      />
+    )
+  }
+
   return (
-    <AppShell activeSection={section} onNavigate={handleNavigate}>
-      {section === 'dashboard' &&
+    <AppShell activeSection={effectiveSection} onNavigate={handleNavigate}>
+      {effectiveSection === 'dashboard' &&
         (viewedEmployeeId ? (
           <EmployeeProfilePage
             employeeId={viewedEmployeeId}
@@ -159,30 +219,37 @@ function WorkspaceRouter() {
             onOpenEmployeeProfile={(empId) => setViewedEmployeeId(empId)}
           />
         ))}
-      {section === 'employees' && <EmployeesPage />}
-      {section === 'attendance' && (
+      {effectiveSection === 'employees' && <EmployeesPage />}
+      {effectiveSection === 'attendance' && (
         <LeavesPage key="time-attendance" initialTab="attendance" />
       )}
-      {section === 'kiosk' && activeTenant.role !== 'employee' && <KioskPage />}
-      {section === 'schedule' && <SchedulePage />}
-      {section === 'leaves' && <LeavesPage key="time-leaves" initialTab="team" />}
-      {section === 'documents' && <DocumentsPage />}
-      {section === 'announcements' && <AnnouncementsPage />}
-      {section === 'payroll' && activeTenant.role !== 'employee' && (
+      {effectiveSection === 'schedule' && <SchedulePage />}
+      {effectiveSection === 'leaves' && (
+        <LeavesPage key="time-leaves" initialTab="team" />
+      )}
+      {effectiveSection === 'documents' && <DocumentsPage />}
+      {effectiveSection === 'announcements' && <AnnouncementsPage />}
+      {effectiveSection === 'payroll' && activeTenant.role !== 'employee' && (
         <PayrollPage onNavigate={handleNavigate} />
       )}
-      {section === 'reports' && activeTenant.role !== 'employee' && (
+      {effectiveSection === 'reports' && activeTenant.role !== 'employee' && (
         <ReportsPage />
       )}
-      {section === 'stores' && activeTenant.role !== 'employee' && <StoresPage />}
-      {section === 'members' && activeTenant.role !== 'employee' && (
+      {effectiveSection === 'stores' && activeTenant.role !== 'employee' && (
+        <StoresPage />
+      )}
+      {effectiveSection === 'members' && activeTenant.role !== 'employee' && (
         <MembersPage />
       )}
-      {section === 'organization' && activeTenant.role === 'owner' && (
+      {effectiveSection === 'organization' && activeTenant.role === 'owner' && (
         <OrganizationSettingsPage />
       )}
-      {section === 'apps' && <MobileAppsHub onNavigate={handleNavigate} />}
-      {section === 'profile' && <ProfileRouteView onNavigate={handleNavigate} />}
+      {effectiveSection === 'apps' && (
+        <MobileAppsHub onNavigate={handleNavigate} />
+      )}
+      {effectiveSection === 'profile' && (
+        <ProfileRouteView onNavigate={handleNavigate} />
+      )}
     </AppShell>
   )
 }

@@ -13,6 +13,7 @@ dependencies = [
     "pydantic-settings>=2.7.0",
     "pyjwt[crypto]>=2.10.0",
     "python-multipart>=0.0.34",
+    "reportlab>=4.2.0",
     "sqlalchemy[asyncio]>=2.0.36",
     "tzdata>=2026.6",
     "uvicorn[standard]>=0.32.0",
@@ -46,7 +47,7 @@ warn_unreachable = true
 exclude = ["alembic/versions"]
 
 [[tool.mypy.overrides]]
-module = ["alembic.*"]
+module = ["alembic.*", "reportlab.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

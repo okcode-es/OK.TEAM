@@ -558,9 +558,7 @@ export function AttendancePage({ embedded = false }: AttendancePageProps) {
             if (entry.status === 'rejected' || entry.status === 'cancelled') {
               continue
             }
-            const isRedacted =
-              entry.display_type === 'absent' ||
-              entry.display_type === 'absence'
+            const isRedacted = entry.display_type === 'absence_redacted'
             const label = isRedacted
               ? t('attendance.redesign.redactedAbsence')
               : t(`leaves.types.${entry.display_type}`, {
@@ -699,9 +697,7 @@ export function AttendancePage({ embedded = false }: AttendancePageProps) {
             : defaultDailyMinutes)
 
       const dailyLimitMinutes = summary?.daily_limit_minutes ?? 540
-      const effectiveBreakMinutes = summary
-        ? summary.total_break_minutes + summary.total_auto_deducted_break_minutes
-        : 0
+      const effectiveBreakMinutes = summary ? summary.total_break_minutes : 0
 
       const hasPunches = Boolean(summary && summary.sessions.length > 0)
       const isSelectable =
@@ -957,6 +953,25 @@ export function AttendancePage({ embedded = false }: AttendancePageProps) {
         : null,
     [calendarDays, selectedDayDate],
   )
+
+  const supersededEventIds = useMemo(() => {
+    const set = new Set<string>()
+    for (const ev of ledger?.events ?? []) {
+      if (ev.supersedes_event_id) {
+        set.add(ev.supersedes_event_id)
+      }
+    }
+    return set
+  }, [ledger?.events])
+
+  const supersedeableDayEvents = useMemo(() => {
+    if (!selectedDayRow) return []
+    return selectedDayRow.dayEvents.filter(
+      (ev) =>
+        !supersededEventIds.has(ev.id) &&
+        ev.corrected_event_type !== 'void',
+    )
+  }, [selectedDayRow, supersededEventIds])
 
   const openDayDetail = (row: CalendarDayRow) => {
     if (
@@ -2132,19 +2147,23 @@ export function AttendancePage({ embedded = false }: AttendancePageProps) {
                             <SelectItem value="none">
                               {t('attendance.drawer.noSupersede')}
                             </SelectItem>
-                            {selectedDayRow.dayEvents
-                              .filter((ev) => ev.event_type !== 'correction')
-                              .map((ev) => (
-                                <SelectItem key={ev.id} value={ev.id}>
-                                  {t(`attendance.actions.${ev.event_type}`)} ·{' '}
-                                  {formatUtcDateTime(
-                                    ev.occurred_at_utc,
-                                    locale,
-                                    ev.store_timezone,
-                                  )}{' '}
-                                  ({ev.id.slice(0, 8)})
-                                </SelectItem>
-                              ))}
+                            {supersedeableDayEvents.map((ev) => (
+                              <SelectItem key={ev.id} value={ev.id}>
+                                {ev.event_type === 'correction' &&
+                                ev.corrected_event_type
+                                  ? t(
+                                      `attendance.correctedTypes.${ev.corrected_event_type}`,
+                                    )
+                                  : t(`attendance.actions.${ev.event_type}`)}{' '}
+                                ·{' '}
+                                {formatUtcDateTime(
+                                  ev.occurred_at_utc,
+                                  locale,
+                                  ev.store_timezone,
+                                )}{' '}
+                                ({ev.id.slice(0, 8)})
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </div>

@@ -16,6 +16,7 @@ import {
   setDevAccessToken,
 } from '@/api/client'
 import type { AuthMeResponse, TenantMembershipSummary } from '@/api/types'
+import { clearKioskLock } from '@/features/attendance/kioskLock'
 import { getSupabaseAuth } from '@/lib/supabase'
 
 const STORAGE_DEV_TOKEN = 'okteam.dev_token'
@@ -165,6 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     sessionStorage.removeItem(STORAGE_DEV_TOKEN)
     localStorage.removeItem(STORAGE_TENANT_ID)
+    clearKioskLock()
     setDevAccessToken(null)
     setActiveTenantHeader(null)
     setProfile(null)

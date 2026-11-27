@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -52,7 +53,11 @@ from app.domain.payroll import (
 from app.domain.security import AuthenticatedPrincipal, MembershipStatus, UserRole
 from app.infrastructure.config import Settings
 from app.infrastructure.document_storage import LocalDocumentStorageAdapter
-from app.infrastructure.pdf_generator import PurePythonAttendancePdfRenderer
+from app.infrastructure.pdf_generator import (
+    PurePythonAttendancePdfRenderer,
+    ReportLabAttendancePdfRenderer,
+    _format_absence_line,
+)
 from app.infrastructure.supabase_jwt import SupabaseJWTVerifier, sign_dev_hs256_token
 from app.interfaces.api.deps import (
     get_announcement_repository,
@@ -1430,3 +1435,358 @@ def test_p1_negative_regressions_locks_unicode_pdf_and_concurrency(tmp_path: Pat
                 expected_revision=existing_closing.revision_number,
             )
         )
+
+
+def test_cross_store_support_and_cross_timezone_included_in_primary_store_closing(
+    tmp_path: Path,
+) -> None:
+    """[B3] Cross-store support punches & leaves (incl. Canary tz) roll up to primary store."""
+    client, headers, ctx = _build_phase5_app(tmp_path)
+    org_repo, _store_repo, emp_repo, att_repo, leave_repo, _doc_repo, _payroll_repo, _storage = ctx[
+        "repos"
+    ]
+    tenant_id = ctx["tenant_id"]
+    store_a = ctx["store_a"]  # Europe/Madrid
+    store_b = ctx["store_b"]
+    emp_1_id = ctx["emp_1_id"]
+    now = ctx["now_ref"][0]
+
+    # Configure store_b as Atlantic/Canary (WEST = UTC+1 in May, 1h behind Madrid CEST = UTC+2)
+    org_repo.stores[store_b] = Store(
+        id=store_b,
+        tenant_id=tenant_id,
+        name="Tenerife Sur",
+        code="TFN-01",
+        timezone="Atlantic/Canary",
+        address="Av. Canarias 1",
+        city="Arona",
+        postal_code="38650",
+        is_active=True,
+        created_at=now,
+        updated_at=now,
+    )
+
+    # Clear default events/leaves for clean accounting
+    att_repo.events.clear()
+    leave_repo.leaves.clear()
+
+    # Add an employee whose primary store is store_b, plus an event from another tenant
+    other_emp_b = Employee(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        primary_store_id=store_b,
+        user_id=None,
+        employee_code="EMP-B1",
+        full_name="Canarias Staff",
+        preferred_name="Canarias",
+        email="b1@example.com",
+        phone="",
+        birth_date=date(1993, 2, 1),
+        contract_type=ContractType.INDEFINIDO,
+        work_schedule_type=WorkScheduleType.FULL_TIME,
+        contracted_weekly_hours=Decimal("40.00"),
+        annual_vacation_days=30,
+        hire_date=date(2025, 1, 1),
+        termination_date=None,
+        nie_dni_enc=None,
+        nie_dni_masked=None,
+        nie_dni_blind_index=None,
+        iban_enc=None,
+        iban_masked=None,
+        naf_enc=None,
+        naf_masked=None,
+        employment_status=EmploymentStatus.ACTIVE,
+        retention_until=None,
+        anonymized_at=None,
+        created_at=now,
+        updated_at=now,
+    )
+    emp_repo.employees[other_emp_b.id] = other_emp_b
+
+    # 1) emp_1 works 8h at primary store_a (Europe/Madrid) on May 4
+    # 2) emp_1 supports store_b (Atlantic/Canary) for 8h on May 5
+    # 3) emp_1 supports store_b at month boundary: 2026-05-31 22:30 UTC -> 2026-06-01 02:30 UTC (4h)
+    #    In Atlantic/Canary (UTC+1), 22:30 UTC is 2026-05-31 23:30 (May 31!),
+    #    whereas in Europe/Madrid (UTC+2) it would be 2026-06-01 00:30 (June 1).
+    att_repo.events.extend(
+        [
+            AttendanceEvent(
+                id=uuid4(),
+                tenant_id=tenant_id,
+                store_id=store_a,
+                employee_id=emp_1_id,
+                event_type=AttendanceEventType.CLOCK_IN,
+                occurred_at_utc=datetime(2026, 5, 4, 7, 0, tzinfo=UTC),
+                store_timezone="Europe/Madrid",
+                source=AttendanceSource.WEB,
+                recorded_by_user_id=ctx["emp"],
+                recorded_at_utc=now,
+                retention_until=datetime(2030, 5, 4, tzinfo=UTC),
+            ),
+            AttendanceEvent(
+                id=uuid4(),
+                tenant_id=tenant_id,
+                store_id=store_a,
+                employee_id=emp_1_id,
+                event_type=AttendanceEventType.CLOCK_OUT,
+                occurred_at_utc=datetime(2026, 5, 4, 15, 0, tzinfo=UTC),
+                store_timezone="Europe/Madrid",
+                source=AttendanceSource.WEB,
+                recorded_by_user_id=ctx["emp"],
+                recorded_at_utc=now,
+                retention_until=datetime(2030, 5, 4, tzinfo=UTC),
+            ),
+            AttendanceEvent(
+                id=uuid4(),
+                tenant_id=tenant_id,
+                store_id=store_b,
+                employee_id=emp_1_id,
+                event_type=AttendanceEventType.CLOCK_IN,
+                occurred_at_utc=datetime(2026, 5, 5, 8, 0, tzinfo=UTC),
+                store_timezone="Atlantic/Canary",
+                source=AttendanceSource.KIOSK,
+                recorded_by_user_id=ctx["emp"],
+                recorded_at_utc=now,
+                retention_until=datetime(2030, 5, 5, tzinfo=UTC),
+            ),
+            AttendanceEvent(
+                id=uuid4(),
+                tenant_id=tenant_id,
+                store_id=store_b,
+                employee_id=emp_1_id,
+                event_type=AttendanceEventType.CLOCK_OUT,
+                occurred_at_utc=datetime(2026, 5, 5, 16, 0, tzinfo=UTC),
+                store_timezone="Atlantic/Canary",
+                source=AttendanceSource.KIOSK,
+                recorded_by_user_id=ctx["emp"],
+                recorded_at_utc=now,
+                retention_until=datetime(2030, 5, 5, tzinfo=UTC),
+            ),
+            AttendanceEvent(
+                id=uuid4(),
+                tenant_id=tenant_id,
+                store_id=store_b,
+                employee_id=emp_1_id,
+                event_type=AttendanceEventType.CLOCK_IN,
+                occurred_at_utc=datetime(2026, 5, 31, 22, 30, tzinfo=UTC),
+                store_timezone="Atlantic/Canary",
+                source=AttendanceSource.KIOSK,
+                recorded_by_user_id=ctx["emp"],
+                recorded_at_utc=now,
+                retention_until=datetime(2030, 5, 31, tzinfo=UTC),
+            ),
+            AttendanceEvent(
+                id=uuid4(),
+                tenant_id=tenant_id,
+                store_id=store_b,
+                employee_id=emp_1_id,
+                event_type=AttendanceEventType.CLOCK_OUT,
+                occurred_at_utc=datetime(2026, 6, 1, 2, 30, tzinfo=UTC),
+                store_timezone="Atlantic/Canary",
+                source=AttendanceSource.KIOSK,
+                recorded_by_user_id=ctx["emp"],
+                recorded_at_utc=now,
+                retention_until=datetime(2030, 6, 1, tzinfo=UTC),
+            ),
+            # Noise 1: other_emp_b (primary store_b) helping at store_a -> must NOT enter store_a
+            AttendanceEvent(
+                id=uuid4(),
+                tenant_id=tenant_id,
+                store_id=store_a,
+                employee_id=other_emp_b.id,
+                event_type=AttendanceEventType.CLOCK_IN,
+                occurred_at_utc=datetime(2026, 5, 10, 8, 0, tzinfo=UTC),
+                store_timezone="Europe/Madrid",
+                source=AttendanceSource.KIOSK,
+                recorded_by_user_id=ctx["hr"],
+                recorded_at_utc=now,
+                retention_until=datetime(2030, 5, 10, tzinfo=UTC),
+            ),
+            AttendanceEvent(
+                id=uuid4(),
+                tenant_id=tenant_id,
+                store_id=store_a,
+                employee_id=other_emp_b.id,
+                event_type=AttendanceEventType.CLOCK_OUT,
+                occurred_at_utc=datetime(2026, 5, 10, 14, 0, tzinfo=UTC),
+                store_timezone="Europe/Madrid",
+                source=AttendanceSource.KIOSK,
+                recorded_by_user_id=ctx["hr"],
+                recorded_at_utc=now,
+                retention_until=datetime(2030, 5, 10, tzinfo=UTC),
+            ),
+            # Noise 2: foreign tenant event with same employee_id -> strictly isolated by tenant_id
+            AttendanceEvent(
+                id=uuid4(),
+                tenant_id=uuid4(),
+                store_id=store_a,
+                employee_id=emp_1_id,
+                event_type=AttendanceEventType.CLOCK_IN,
+                occurred_at_utc=datetime(2026, 5, 12, 8, 0, tzinfo=UTC),
+                store_timezone="Europe/Madrid",
+                source=AttendanceSource.WEB,
+                recorded_by_user_id=ctx["emp"],
+                recorded_at_utc=now,
+                retention_until=datetime(2030, 5, 12, tzinfo=UTC),
+            ),
+        ]
+    )
+
+    # Cross-store leave stored under store_b for emp_1 -> must be counted in store_a closing
+    leave_repo.leaves.append(
+        LeaveRequest(
+            id=uuid4(),
+            tenant_id=tenant_id,
+            store_id=store_b,
+            employee_id=emp_1_id,
+            leave_type=LeaveType.VACATION,
+            start_date=date(2026, 5, 20),
+            end_date=date(2026, 5, 21),
+            natural_days=2,
+            status=LeaveStatus.APPROVED,
+            reason="",
+            requested_by_user_id=ctx["emp"],
+            reviewed_by_user_id=ctx["hr"],
+            reviewed_at_utc=now,
+            review_note="",
+            medical_document_id=None,
+            retention_until=datetime(2030, 5, 21, tzinfo=UTC),
+            created_at=now,
+            updated_at=now,
+        )
+    )
+
+    # Preview store_a May 2026: emp_1 has 8 + 8 + 4 = 20.00h across 3 days and 2 vacation days
+    prev_a = client.get(
+        f"/api/v1/payroll/preview?store_id={store_a}&period_month=2026-05",
+        headers=headers(ctx["hr"]),
+    )
+    assert prev_a.status_code == 200
+    body_a = prev_a.json()
+    assert body_a["can_close"] is True
+    emp_ids_a = {e["employee_id"] for e in body_a["employees"]}
+    assert str(emp_1_id) in emp_ids_a
+    assert str(other_emp_b.id) not in emp_ids_a
+
+    emp_1_summary = next(e for e in body_a["employees"] if e["employee_id"] == str(emp_1_id))
+    assert emp_1_summary["worked_days"] == 3
+    assert Decimal(emp_1_summary["total_net_hours"]) == Decimal("20.00")
+    assert emp_1_summary["vacation_days"] == 2
+
+    # Preview store_b May 2026: other_emp_b gets their 6.00h support shift at store_a
+    prev_b = client.get(
+        f"/api/v1/payroll/preview?store_id={store_b}&period_month=2026-05",
+        headers=headers(ctx["hr"]),
+    )
+    assert prev_b.status_code == 200
+    body_b = prev_b.json()
+    other_b_summary = next(
+        e for e in body_b["employees"] if e["employee_id"] == str(other_emp_b.id)
+    )
+    assert other_b_summary["worked_days"] == 1
+    assert Decimal(other_b_summary["total_net_hours"]) == Decimal("6.00")
+
+
+def test_reportlab_pdf_renderer_cjk_redact_health_and_signature_boxes() -> None:
+    """[B4] ReportLab PDF supports CJK/Unicode, strict redact_health, and paper signature boxes."""
+    import base64
+    import re
+    import zlib
+
+    assert isinstance(get_pdf_renderer(), ReportLabAttendancePdfRenderer)
+
+    rows = tuple(
+        AttendancePdfDayRow(
+            local_date=date(2026, 5, (i % 28) + 1),
+            clock_in_local="09:00:00",
+            clock_out_local="17:30:00",
+            break_minutes=30,
+            net_hours=Decimal("8.00"),
+            has_corrections=(i % 6 == 0),
+            notes="修正记录 (Ñ)" if i % 6 == 0 else "",
+        )
+        for i in range(40)
+    )
+    base_input = AttendancePdfDocumentInput(
+        tenant_legal_name="华味餐饮集团 S.L. (€)",
+        tenant_cif="B12345678",
+        store_code="MAD-01",
+        store_name="马德里太阳门旗舰店",
+        store_timezone="Europe/Madrid",
+        period_month="2026-05",
+        revision_number=2,
+        employee_full_name="王小明 / José Núñez",
+        employee_code="EMP-ZH01",
+        nie_dni_masked="*****567L",
+        contract_type=ContractType.INDEFINIDO,
+        work_schedule_type=WorkScheduleType.FULL_TIME,
+        contracted_weekly_hours=Decimal("40.00"),
+        worked_days=20,
+        total_net_hours=Decimal("160.00"),
+        regular_hours=Decimal("160.00"),
+        overtime_hours=Decimal("0.00"),
+        annual_overtime_hours=Decimal("0.00"),
+        total_break_minutes=600,
+        vacation_days=2,
+        sick_leave_days=3,
+        paid_leave_days=1,
+        unpaid_leave_days=2,
+        warning_alerts_count=0,
+        violation_alerts_count=0,
+        daily_rows=rows,
+        generated_at_utc=datetime(2026, 6, 1, 9, 0, tzinfo=UTC),
+        redact_health=False,
+    )
+
+    # 1. Default renderer (auto-detects CJK font on Windows/Linux) renders valid multi-page PDF
+    renderer = ReportLabAttendancePdfRenderer()
+    cjk_pdf = renderer.render_monthly_attendance_pdf(base_input)
+    assert cjk_pdf.startswith(b"%PDF")
+    assert b"%%EOF" in cjk_pdf
+    validate_file_magic("application/pdf", cjk_pdf)
+    assert len(cjk_pdf) > 2000
+
+    # 2. Verify redact_health=True hides sick leave breakdown & signature boxes are rendered
+    redacted_input = replace(base_input, redact_health=True, daily_rows=())
+    unredacted_short = replace(base_input, redact_health=False, daily_rows=())
+
+    assert "Baja" not in _format_absence_line(redacted_input)
+    assert "Otras Ausencias: 6d" in _format_absence_line(redacted_input)
+    assert "Baja Médica (IT): 3d" in _format_absence_line(unredacted_short)
+
+    # Also inspect decompressed ReportLab content stream via Helvetica fallback (ASCII literal text)
+    fallback_renderer = ReportLabAttendancePdfRenderer(
+        regular_font_candidates=(),
+        bold_font_candidates=(),
+    )
+
+    def _extract_stream_text(pdf_bytes: bytes) -> bytes:
+        chunks: list[bytes] = []
+        for match in re.finditer(rb"stream\r?\n(.*?)endstream", pdf_bytes, re.DOTALL):
+            raw = match.group(1).strip()
+            decoded = raw
+            if raw.endswith(b"~>"):
+                try:
+                    decoded = base64.a85decode(raw, adobe=True)
+                except ValueError:
+                    decoded = raw
+            try:
+                chunks.append(zlib.decompress(decoded))
+            except zlib.error:
+                chunks.append(decoded)
+        return b"\n".join(chunks)
+
+    redacted_pdf = fallback_renderer.render_monthly_attendance_pdf(redacted_input)
+    validate_file_magic("application/pdf", redacted_pdf)
+    redacted_stream = _extract_stream_text(redacted_pdf)
+    assert b"Otras Ausencias: 6d" in redacted_stream
+    assert b"Baja" not in redacted_stream
+    assert b"Firma y sello de la Empresa" in redacted_stream
+    assert b"Firma del Trabajador / Recib" in redacted_stream
+
+    unredacted_pdf = fallback_renderer.render_monthly_attendance_pdf(unredacted_short)
+    validate_file_magic("application/pdf", unredacted_pdf)
+    unredacted_stream = _extract_stream_text(unredacted_pdf)
+    assert b"Baja" in unredacted_stream
+    assert b"Firma y sello de la Empresa" in unredacted_stream
+    assert b"Firma del Trabajador / Recib" in unredacted_stream

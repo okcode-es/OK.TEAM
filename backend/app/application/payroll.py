@@ -8,7 +8,7 @@ import hashlib
 import io
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, tzinfo
 from decimal import Decimal
 from uuid import UUID, uuid4
 
@@ -137,8 +137,9 @@ async def _evaluate_store_month_readiness(
     existing = await payroll_repo.get_by_store_month(tenant_id, store.id, period_month)
 
     store_employees = await employee_repo.list_by_tenant(tenant_id, store_id=store.id)
-    store_events = await attendance_repo.list_by_tenant(tenant_id, store_id=store.id)
-    store_leaves = await leave_repo.list_by_tenant(tenant_id, store_id=store.id)
+    store_emp_ids = {emp.id for emp in store_employees}
+    tenant_events = await attendance_repo.list_by_tenant(tenant_id) if store_emp_ids else []
+    tenant_leaves = await leave_repo.list_by_tenant(tenant_id) if store_emp_ids else []
     policy_lookup = (
         build_break_policy_lookup(await policy_repo.list_by_tenant(tenant_id))
         if policy_repo is not None
@@ -147,16 +148,25 @@ async def _evaluate_store_month_readiness(
 
     events_by_emp: dict[UUID, list[AttendanceEvent]] = defaultdict(list)
     has_events_in_month: set[UUID] = set()
-    tz = resolve_timezone(store.timezone)
-    for ev in store_events:
+    tz_cache: dict[str, tzinfo] = {store.timezone: resolve_timezone(store.timezone)}
+    for ev in tenant_events:
+        if ev.employee_id not in store_emp_ids:
+            continue
         events_by_emp[ev.employee_id].append(ev)
-        ev_local_date = ev.occurred_at_utc.astimezone(tz).date()
+        ev_tz_name = ev.store_timezone or store.timezone
+        ev_tz = tz_cache.get(ev_tz_name)
+        if ev_tz is None:
+            ev_tz = resolve_timezone(ev_tz_name)
+            tz_cache[ev_tz_name] = ev_tz
+        ev_local_date = ev.occurred_at_utc.astimezone(ev_tz).date()
         if month_start <= ev_local_date <= month_end:
             has_events_in_month.add(ev.employee_id)
 
     leaves_by_emp: dict[UUID, list[LeaveRequest]] = defaultdict(list)
     has_leaves_in_month: set[UUID] = set()
-    for lv in store_leaves:
+    for lv in tenant_leaves:
+        if lv.employee_id not in store_emp_ids:
+            continue
         leaves_by_emp[lv.employee_id].append(lv)
         if count_overlap_days(lv.start_date, lv.end_date, month_start, month_end) > 0:
             has_leaves_in_month.add(lv.employee_id)

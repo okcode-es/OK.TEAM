@@ -1,8 +1,25 @@
-"""Zero-dependency pure Python stdlib es-ES A4 PDF generator (RDL 8/2019 / Art. 34.9 ET)."""
+"""A4 es-ES PDF generators for RDL 8/2019 / Art. 34.9 ET Monthly Attendance Reports.
+
+Includes:
+- ReportLabAttendancePdfRenderer: Unicode/CJK-capable A4 renderer using ReportLab with
+  automatic Linux/Windows CJK font discovery and symmetric paper signature lines.
+- PurePythonAttendancePdfRenderer: Legacy zero-dependency WinAnsi renderer kept for backwards
+  compatibility.
+"""
 
 from __future__ import annotations
 
+import io
+import os
+import threading
+from collections.abc import Sequence
 from datetime import UTC
+from pathlib import Path
+
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfgen import canvas
 
 from app.domain.payroll import AttendancePdfDocumentInput
 
@@ -346,3 +363,379 @@ class PurePythonAttendancePdfRenderer:
         )
 
         return _build_pdf_document(pages)
+
+
+_CJK_REGULAR_FONT_NAME = "OkTeamCJKRegular"
+_CJK_BOLD_FONT_NAME = "OkTeamCJKBold"
+_FONT_REGISTER_LOCK = threading.Lock()
+_RESOLVED_CJK_FONTS: tuple[str, str] | None = None
+
+_SIG_BOX_WIDTH = 210.0
+
+
+def _sanitize_unicode_text(text: str) -> str:
+    """Strip ASCII control chars while preserving Unicode (CJK, accents, Euro sign)."""
+    chars: list[str] = []
+    for ch in text:
+        if ch in ("\r", "\n", "\t"):
+            chars.append(" ")
+            continue
+        code = ord(ch)
+        if code < 0x20 or code == 0x7F:
+            continue
+        chars.append(ch)
+    return "".join(chars)
+
+
+def _default_cjk_font_candidates() -> tuple[
+    tuple[tuple[str, int | None], ...],
+    tuple[tuple[str, int | None], ...],
+]:
+    win_fonts = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts"
+    regular: tuple[tuple[str, int | None], ...] = (
+        # Linux: Noto Sans CJK (Debian/Ubuntu/Alpine) & WenQuanYi
+        ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 2),
+        ("/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", 0),
+        ("/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc", 2),
+        ("/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc", 0),
+        ("/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc", 2),
+        ("/usr/share/fonts/truetype/noto/NotoSansSC-Regular.ttf", None),
+        ("/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc", 0),
+        ("/usr/share/fonts/truetype/wqy/wqy-microhei.ttc", 0),
+        # Windows: Microsoft YaHei / SimHei / SimSun
+        (str(win_fonts / "msyh.ttc"), 0),
+        (str(win_fonts / "msyh.ttf"), None),
+        (str(win_fonts / "simhei.ttf"), None),
+        (str(win_fonts / "simsun.ttc"), 0),
+    )
+    bold: tuple[tuple[str, int | None], ...] = (
+        ("/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc", 2),
+        ("/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc", 0),
+        ("/usr/share/fonts/noto-cjk/NotoSansCJK-Bold.ttc", 2),
+        ("/usr/share/fonts/noto-cjk/NotoSansCJK-Bold.ttc", 0),
+        ("/usr/share/fonts/truetype/noto/NotoSansSC-Bold.ttf", None),
+        (str(win_fonts / "msyhbd.ttc"), 0),
+        (str(win_fonts / "msyhbd.ttf"), None),
+    )
+    return regular, bold
+
+
+def _try_register_ttfont(
+    font_name: str,
+    font_path: str,
+    subfont_index: int | None,
+) -> bool:
+    if not os.path.isfile(font_path):
+        return False
+    if font_name in pdfmetrics.getRegisteredFontNames():
+        return True
+    try:
+        if subfont_index is not None:
+            font = TTFont(font_name, font_path, subfontIndex=subfont_index)
+        else:
+            font = TTFont(font_name, font_path)
+        pdfmetrics.registerFont(font)
+        return True
+    except Exception:
+        return False
+
+
+def _resolve_reportlab_fonts(
+    *,
+    regular_candidates: Sequence[tuple[str, int | None]] | None = None,
+    bold_candidates: Sequence[tuple[str, int | None]] | None = None,
+) -> tuple[str, str]:
+    """Detect and register system CJK TrueType fonts, falling back to Helvetica."""
+    global _RESOLVED_CJK_FONTS
+    use_cache = regular_candidates is None and bold_candidates is None
+    with _FONT_REGISTER_LOCK:
+        if use_cache and _RESOLVED_CJK_FONTS is not None:
+            return _RESOLVED_CJK_FONTS
+
+        default_reg, default_bold = _default_cjk_font_candidates()
+        reg_list = default_reg if regular_candidates is None else tuple(regular_candidates)
+        bold_list = default_bold if bold_candidates is None else tuple(bold_candidates)
+
+        regular_name: str | None = None
+        for path, subfont_idx in reg_list:
+            if _try_register_ttfont(_CJK_REGULAR_FONT_NAME, path, subfont_idx):
+                regular_name = _CJK_REGULAR_FONT_NAME
+                break
+
+        if regular_name is None:
+            result = ("Helvetica", "Helvetica-Bold")
+        else:
+            bold_name = regular_name
+            for path, subfont_idx in bold_list:
+                if _try_register_ttfont(_CJK_BOLD_FONT_NAME, path, subfont_idx):
+                    bold_name = _CJK_BOLD_FONT_NAME
+                    break
+            result = (regular_name, bold_name)
+
+        if use_cache:
+            _RESOLVED_CJK_FONTS = result
+        return result
+
+
+def _format_absence_line(data: AttendancePdfDocumentInput) -> str:
+    """Format monthly absence summary line, strictly redacting health data when required."""
+    if data.redact_health:
+        other_absences = data.sick_leave_days + data.paid_leave_days + data.unpaid_leave_days
+        return (
+            f"Pausa Total: {data.total_break_minutes} min | "
+            f"Vacaciones: {data.vacation_days}d | Otras Ausencias: {other_absences}d"
+        )
+    return (
+        f"Pausa Total: {data.total_break_minutes} min | "
+        f"Vacaciones: {data.vacation_days}d | "
+        f"Baja Médica (IT): {data.sick_leave_days}d | "
+        f"Perm. Retrib.: {data.paid_leave_days}d | No Retrib.: {data.unpaid_leave_days}d"
+    )
+
+
+class ReportLabAttendancePdfRenderer:
+    """ReportLab A4 es-ES/CJK RDL 8/2019 Monthly Attendance Report PDF renderer."""
+
+    def __init__(
+        self,
+        *,
+        regular_font_candidates: Sequence[tuple[str, int | None]] | None = None,
+        bold_font_candidates: Sequence[tuple[str, int | None]] | None = None,
+    ) -> None:
+        self._regular_font_candidates = regular_font_candidates
+        self._bold_font_candidates = bold_font_candidates
+
+    def render_monthly_attendance_pdf(self, data: AttendancePdfDocumentInput) -> bytes:
+        font_regular, font_bold = _resolve_reportlab_fonts(
+            regular_candidates=self._regular_font_candidates,
+            bold_candidates=self._bold_font_candidates,
+        )
+        buf = io.BytesIO()
+        c = canvas.Canvas(buf, pagesize=A4)
+        c.setLineWidth(0.5)
+        page_num = 1
+
+        def _text(
+            x: float,
+            y_pos: float,
+            value: str,
+            *,
+            bold: bool = False,
+            size: float = 8.5,
+        ) -> None:
+            c.setFont(font_bold if bold else font_regular, size)
+            c.drawString(x, y_pos, _sanitize_unicode_text(value))
+
+        def _text_right(
+            x_right: float,
+            y_pos: float,
+            value: str,
+            *,
+            bold: bool = False,
+            size: float = 8.5,
+        ) -> None:
+            c.setFont(font_bold if bold else font_regular, size)
+            c.drawRightString(x_right, y_pos, _sanitize_unicode_text(value))
+
+        def _text_center(
+            x_center: float,
+            y_pos: float,
+            value: str,
+            *,
+            bold: bool = False,
+            size: float = 8.5,
+        ) -> None:
+            c.setFont(font_bold if bold else font_regular, size)
+            c.drawCentredString(x_center, y_pos, _sanitize_unicode_text(value))
+
+        def _hline(
+            y_pos: float,
+            *,
+            x1: float = _MARGIN_LEFT,
+            x2: float = _MARGIN_RIGHT,
+        ) -> None:
+            c.line(x1, y_pos, x2, y_pos)
+
+        def _draw_header(current_page: int) -> float:
+            y_pos = 800.0
+            _text(
+                _MARGIN_LEFT,
+                y_pos,
+                "RESUMEN MENSUAL DE REGISTRO DIARIO DE JORNADA (RDL 8/2019)",
+                bold=True,
+                size=10.5,
+            )
+            _text_right(
+                _MARGIN_RIGHT,
+                y_pos,
+                f"Periodo: {data.period_month} (v{data.revision_number})",
+                bold=True,
+                size=8.5,
+            )
+            y_pos -= 14.0
+            _hline(y_pos)
+            y_pos -= 14.0
+            _text(
+                _MARGIN_LEFT,
+                y_pos,
+                f"Empresa: {_truncate(data.tenant_legal_name, 48)} | CIF: {data.tenant_cif}",
+                size=8.5,
+            )
+            _text_right(_MARGIN_RIGHT, y_pos, f"Pág. {current_page}", size=8.5)
+            y_pos -= 12.0
+            _text(
+                _MARGIN_LEFT,
+                y_pos,
+                f"Centro: {data.store_code} - {_truncate(data.store_name, 38)} | "
+                f"Zona Horaria: {data.store_timezone}",
+                size=8.5,
+            )
+            y_pos -= 14.0
+            return y_pos
+
+        def _draw_table_header(y_pos: float) -> float:
+            _text(_MARGIN_LEFT, y_pos, "Fecha", bold=True, size=8.5)
+            _text(112.0, y_pos, "Entrada", bold=True, size=8.5)
+            _text(178.0, y_pos, "Salida", bold=True, size=8.5)
+            _text(244.0, y_pos, "Pausa (min)", bold=True, size=8.5)
+            _text(314.0, y_pos, "Horas Netas", bold=True, size=8.5)
+            _text(386.0, y_pos, "Corr.", bold=True, size=8.5)
+            _text(430.0, y_pos, "Notas", bold=True, size=8.5)
+            y_pos -= 5.0
+            _hline(y_pos)
+            return y_pos - 13.0
+
+        y = _draw_header(page_num)
+
+        # Employee block on first page
+        contract_label = _CONTRACT_LABELS_ES.get(data.contract_type.value, data.contract_type.value)
+        schedule_label = _SCHEDULE_LABELS_ES.get(
+            data.work_schedule_type.value, data.work_schedule_type.value
+        )
+        nie_display = data.nie_dni_masked or "No registrado"
+        _text(
+            _MARGIN_LEFT,
+            y,
+            f"Trabajador: {_truncate(data.employee_full_name, 42)} ({data.employee_code})",
+            bold=True,
+            size=9.0,
+        )
+        _text_right(_MARGIN_RIGHT, y, f"NIE/DNI: {nie_display}", size=9.0)
+        y -= 12.0
+        _text(
+            _MARGIN_LEFT,
+            y,
+            f"Contrato: {contract_label} | Jornada: {schedule_label} | "
+            f"Horas/Sem: {data.contracted_weekly_hours:.2f}h",
+            size=8.5,
+        )
+        y -= 12.0
+        _hline(y)
+        y -= 16.0
+
+        y = _draw_table_header(y)
+
+        if not data.daily_rows:
+            _text(
+                _MARGIN_LEFT,
+                y,
+                "Sin registros diarios de jornada en el periodo.",
+                size=8.5,
+            )
+            y -= 16.0
+        else:
+            for row in data.daily_rows:
+                if y < _BOTTOM_MARGIN + 20.0:
+                    c.showPage()
+                    c.setLineWidth(0.5)
+                    page_num += 1
+                    y = _draw_header(page_num)
+                    y = _draw_table_header(y)
+
+                _text(_MARGIN_LEFT, y, row.local_date.isoformat(), size=8.5)
+                _text(112.0, y, row.clock_in_local, size=8.5)
+                _text(178.0, y, row.clock_out_local, size=8.5)
+                _text(255.0, y, str(row.break_minutes), size=8.5)
+                _text(320.0, y, f"{row.net_hours:.2f}h", size=8.5)
+                _text(390.0, y, "Sí" if row.has_corrections else "No", size=8.5)
+                _text(430.0, y, _truncate(row.notes, 24), size=8.5)
+                y -= 13.5
+
+        # Summary + legal notice + paper signature block (~185pt needed)
+        if y < _BOTTOM_MARGIN + 185.0:
+            c.showPage()
+            c.setLineWidth(0.5)
+            page_num += 1
+            y = _draw_header(page_num)
+
+        y -= 6.0
+        _hline(y)
+        y -= 15.0
+        _text(_MARGIN_LEFT, y, "RESUMEN MENSUAL Y AUSENCIAS", bold=True, size=9.0)
+        y -= 13.0
+        _text(
+            _MARGIN_LEFT,
+            y,
+            f"Días Trabajados: {data.worked_days} | Horas Netas: {data.total_net_hours:.2f}h | "
+            f"Ordinarias: {data.regular_hours:.2f}h | Extra: {data.overtime_hours:.2f}h",
+            size=8.5,
+        )
+        y -= 12.0
+        _text(_MARGIN_LEFT, y, _format_absence_line(data), size=8.5)
+        y -= 12.0
+        _text(
+            _MARGIN_LEFT,
+            y,
+            f"Alertas Legales -> Avisos: {data.warning_alerts_count} | "
+            f"Infracciones: {data.violation_alerts_count} | "
+            f"Extra Anual Acumulada: {data.annual_overtime_hours:.2f}h",
+            size=8.5,
+        )
+        y -= 16.0
+        _hline(y)
+        y -= 13.0
+        gen_ts = data.generated_at_utc.astimezone(UTC).strftime("%Y-%m-%d %H:%M:%SZ")
+        _text(
+            _MARGIN_LEFT,
+            y,
+            "ACUSE DE RECIBO ELECTRÓNICO (Art. 34.9 ET / RDL 8/2019): Documento inmutable "
+            "para firma del trabajador con huella SHA-256.",
+            bold=True,
+            size=8.0,
+        )
+        y -= 11.0
+        _text(
+            _MARGIN_LEFT,
+            y,
+            f"Generado UTC: {gen_ts} | Conservación legal obligatoria >= 4 años.",
+            size=8.0,
+        )
+
+        # Symmetric left/right paper signature boxes
+        sig_line_y = y - 54.0
+        left_x1 = _MARGIN_LEFT
+        left_x2 = _MARGIN_LEFT + _SIG_BOX_WIDTH
+        right_x1 = _MARGIN_RIGHT - _SIG_BOX_WIDTH
+        right_x2 = _MARGIN_RIGHT
+
+        _hline(sig_line_y, x1=left_x1, x2=left_x2)
+        _hline(sig_line_y, x1=right_x1, x2=right_x2)
+
+        sig_label_y = sig_line_y - 13.0
+        _text_center(
+            (left_x1 + left_x2) / 2.0,
+            sig_label_y,
+            "Firma y sello de la Empresa",
+            bold=True,
+            size=8.5,
+        )
+        _text_center(
+            (right_x1 + right_x2) / 2.0,
+            sig_label_y,
+            "Firma del Trabajador / Recibí",
+            bold=True,
+            size=8.5,
+        )
+
+        c.save()
+        return buf.getvalue()

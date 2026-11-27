@@ -42,7 +42,7 @@ from app.infrastructure.document_storage import (
     LocalDocumentStorageAdapter,
     SupabaseDocumentStorageAdapter,
 )
-from app.infrastructure.pdf_generator import PurePythonAttendancePdfRenderer
+from app.infrastructure.pdf_generator import ReportLabAttendancePdfRenderer
 from app.infrastructure.pii_crypto import AesGcmPiiCipher
 from app.infrastructure.repositories import (
     SqlAlchemyAnnouncementRepository,
@@ -174,7 +174,7 @@ def get_attendance_day_review_repository(
 
 
 def get_pdf_renderer() -> AttendancePdfRendererPort:
-    return PurePythonAttendancePdfRenderer()
+    return ReportLabAttendancePdfRenderer()
 
 
 @lru_cache(maxsize=4)

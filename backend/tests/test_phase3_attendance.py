@@ -1249,3 +1249,232 @@ def test_api_attendance_clock_kiosk_corrections_rbac_and_csv() -> None:
     assert ",30,8.50,Sí," in csv_body
     # Formula injection neutralized with leading single quote
     assert "'=CMD|' /C calc'!A0" in csv_body
+
+
+# ---------------------------------------------------------------------------
+# 3. P0 Regressions: Split-Shift 12h Rest (B1) & Cross-Month/Year Overtime (B2)
+# ---------------------------------------------------------------------------
+
+
+def test_split_shift_same_day_no_inter_shift_violation_but_next_day_triggers() -> None:
+    """[B1] Same-day split shifts (两头班) must not trigger 12h rest violation; next day must."""
+    t_id, s_id, e_id = uuid4(), uuid4(), uuid4()
+
+    # Day 1 (2026-05-04, Europe/Madrid CEST=UTC+2):
+    #   Segment 1: 11:00–15:30 CEST (09:00–13:30 UTC) -> 4.5h
+    #   Segment 2: 19:00–23:00 CEST (17:00–21:00 UTC) -> 4.0h (gap 3.5h, same local_date -> OK)
+    # Day 2 (2026-05-05):
+    #   Shift: 09:00–15:00 CEST (07:00–13:00 UTC) -> 10h gap (< 12h) -> VIOLATION
+    events = [
+        _make_event(
+            tenant_id=t_id,
+            store_id=s_id,
+            employee_id=e_id,
+            event_type=AttendanceEventType.CLOCK_IN,
+            occurred_at_utc=datetime(2026, 5, 4, 9, 0, 0, tzinfo=UTC),
+        ),
+        _make_event(
+            tenant_id=t_id,
+            store_id=s_id,
+            employee_id=e_id,
+            event_type=AttendanceEventType.CLOCK_OUT,
+            occurred_at_utc=datetime(2026, 5, 4, 13, 30, 0, tzinfo=UTC),
+        ),
+        _make_event(
+            tenant_id=t_id,
+            store_id=s_id,
+            employee_id=e_id,
+            event_type=AttendanceEventType.CLOCK_IN,
+            occurred_at_utc=datetime(2026, 5, 4, 17, 0, 0, tzinfo=UTC),
+        ),
+        _make_event(
+            tenant_id=t_id,
+            store_id=s_id,
+            employee_id=e_id,
+            event_type=AttendanceEventType.CLOCK_OUT,
+            occurred_at_utc=datetime(2026, 5, 4, 21, 0, 0, tzinfo=UTC),
+        ),
+    ]
+    same_day_report = evaluate_attendance_ledger(
+        employee_id=e_id,
+        events=events,
+        birth_date=date(1992, 6, 1),
+        work_schedule_type=WorkScheduleType.FULL_TIME,
+        contracted_weekly_hours=Decimal("40.00"),
+    )
+    assert not any(
+        a.code == AlertCode.INTER_SHIFT_REST_VIOLATION for a in same_day_report.alerts
+    )
+
+    # Add next-day shift starting 10h after Day 1 evening clock-out -> violation on 2026-05-05
+    next_day_short_rest = [
+        *events,
+        _make_event(
+            tenant_id=t_id,
+            store_id=s_id,
+            employee_id=e_id,
+            event_type=AttendanceEventType.CLOCK_IN,
+            occurred_at_utc=datetime(2026, 5, 5, 7, 0, 0, tzinfo=UTC),
+        ),
+        _make_event(
+            tenant_id=t_id,
+            store_id=s_id,
+            employee_id=e_id,
+            event_type=AttendanceEventType.CLOCK_OUT,
+            occurred_at_utc=datetime(2026, 5, 5, 13, 0, 0, tzinfo=UTC),
+        ),
+    ]
+    next_day_report = evaluate_attendance_ledger(
+        employee_id=e_id,
+        events=next_day_short_rest,
+        birth_date=date(1992, 6, 1),
+        work_schedule_type=WorkScheduleType.FULL_TIME,
+        contracted_weekly_hours=Decimal("40.00"),
+    )
+    rest_alerts = [
+        a for a in next_day_report.alerts if a.code == AlertCode.INTER_SHIFT_REST_VIOLATION
+    ]
+    assert len(rest_alerts) == 1
+    assert rest_alerts[0].local_date == date(2026, 5, 5)
+    assert rest_alerts[0].actual_value == Decimal("10.00")
+
+    # Cross-year boundary: 2026-12-31 19:00-23:30 CET (18:00-22:30 UTC) -> 2027-01-01 09:00 CET
+    # (08:00 UTC), 9.5h gap -> must trigger INTER_SHIFT_REST_VIOLATION on 2027-01-01
+    cross_year_events = [
+        _make_event(
+            tenant_id=t_id,
+            store_id=s_id,
+            employee_id=e_id,
+            event_type=AttendanceEventType.CLOCK_IN,
+            occurred_at_utc=datetime(2026, 12, 31, 18, 0, 0, tzinfo=UTC),
+        ),
+        _make_event(
+            tenant_id=t_id,
+            store_id=s_id,
+            employee_id=e_id,
+            event_type=AttendanceEventType.CLOCK_OUT,
+            occurred_at_utc=datetime(2026, 12, 31, 22, 30, 0, tzinfo=UTC),
+        ),
+        _make_event(
+            tenant_id=t_id,
+            store_id=s_id,
+            employee_id=e_id,
+            event_type=AttendanceEventType.CLOCK_IN,
+            occurred_at_utc=datetime(2027, 1, 1, 8, 0, 0, tzinfo=UTC),
+        ),
+        _make_event(
+            tenant_id=t_id,
+            store_id=s_id,
+            employee_id=e_id,
+            event_type=AttendanceEventType.CLOCK_OUT,
+            occurred_at_utc=datetime(2027, 1, 1, 13, 0, 0, tzinfo=UTC),
+        ),
+    ]
+    cross_year_report = evaluate_attendance_ledger(
+        employee_id=e_id,
+        events=cross_year_events,
+        birth_date=date(1992, 6, 1),
+        work_schedule_type=WorkScheduleType.FULL_TIME,
+        contracted_weekly_hours=Decimal("40.00"),
+    )
+    cy_rest_alerts = [
+        a for a in cross_year_report.alerts if a.code == AlertCode.INTER_SHIFT_REST_VIOLATION
+    ]
+    assert len(cy_rest_alerts) == 1
+    assert cy_rest_alerts[0].local_date == date(2027, 1, 1)
+    assert cy_rest_alerts[0].actual_value == Decimal("9.50")
+
+
+def test_cross_month_and_cross_year_weekly_overtime_no_double_counting() -> None:
+    """[B2] Weekly overtime deltas attribute to triggering local_date without double counting."""
+    t_id, s_id, e_id = uuid4(), uuid4(), uuid4()
+
+    def _shift_events(start_utc: datetime, hours: int) -> list[AttendanceEvent]:
+        return [
+            _make_event(
+                tenant_id=t_id,
+                store_id=s_id,
+                employee_id=e_id,
+                event_type=AttendanceEventType.CLOCK_IN,
+                occurred_at_utc=start_utc,
+            ),
+            _make_event(
+                tenant_id=t_id,
+                store_id=s_id,
+                employee_id=e_id,
+                event_type=AttendanceEventType.CLOCK_OUT,
+                occurred_at_utc=start_utc + timedelta(hours=hours),
+            ),
+        ]
+
+    # Case 1: Cross-month ISO week 2026-W27 (Mon Jun 29 .. Fri Jul 3), 9h/day = 45h (5h OT on Jul 3)
+    cross_month_events: list[AttendanceEvent] = []
+    for day_offset in range(5):
+        cross_month_events.extend(
+            _shift_events(datetime(2026, 6, 29, 7, 0, tzinfo=UTC) + timedelta(days=day_offset), 9)
+        )
+
+    june_report = evaluate_attendance_ledger(
+        employee_id=e_id,
+        events=cross_month_events,
+        birth_date=date(1990, 1, 1),
+        work_schedule_type=WorkScheduleType.FULL_TIME,
+        contracted_weekly_hours=Decimal("40.00"),
+        date_from=date(2026, 6, 1),
+        date_to=date(2026, 6, 30),
+    )
+    july_report = evaluate_attendance_ledger(
+        employee_id=e_id,
+        events=cross_month_events,
+        birth_date=date(1990, 1, 1),
+        work_schedule_type=WorkScheduleType.FULL_TIME,
+        contracted_weekly_hours=Decimal("40.00"),
+        date_from=date(2026, 7, 1),
+        date_to=date(2026, 7, 31),
+    )
+    assert june_report.total_net_hours == Decimal("18.00")
+    assert june_report.overtime_hours == Decimal("0.00")
+    assert june_report.regular_hours == Decimal("18.00")
+
+    assert july_report.total_net_hours == Decimal("27.00")
+    assert july_report.overtime_hours == Decimal("5.00")
+    assert july_report.regular_hours == Decimal("22.00")
+    assert june_report.overtime_hours + july_report.overtime_hours == Decimal("5.00")
+
+    # Case 2: Cross-year ISO week 2026-W53 (Mon Dec 28 .. Thu Dec 31 = 42h -> 2h OT on Dec 31;
+    # Fri Jan 1, 2027 = 8h -> 8h OT on Jan 1)
+    cross_year_events: list[AttendanceEvent] = []
+    for day_offset, hrs in [(0, 11), (1, 11), (2, 11), (3, 9), (4, 8)]:
+        cross_year_events.extend(
+            _shift_events(
+                datetime(2026, 12, 28, 7, 0, tzinfo=UTC) + timedelta(days=day_offset), hrs
+            )
+        )
+
+    dec_report = evaluate_attendance_ledger(
+        employee_id=e_id,
+        events=cross_year_events,
+        birth_date=date(1990, 1, 1),
+        work_schedule_type=WorkScheduleType.FULL_TIME,
+        contracted_weekly_hours=Decimal("40.00"),
+        date_from=date(2026, 12, 1),
+        date_to=date(2026, 12, 31),
+    )
+    jan_report = evaluate_attendance_ledger(
+        employee_id=e_id,
+        events=cross_year_events,
+        birth_date=date(1990, 1, 1),
+        work_schedule_type=WorkScheduleType.FULL_TIME,
+        contracted_weekly_hours=Decimal("40.00"),
+        date_from=date(2027, 1, 1),
+        date_to=date(2027, 1, 31),
+    )
+    assert dec_report.total_net_hours == Decimal("42.00")
+    assert dec_report.overtime_hours == Decimal("2.00")
+    assert dec_report.regular_hours == Decimal("40.00")
+    assert dec_report.annual_overtime_hours == Decimal("2.00")
+
+    assert jan_report.total_net_hours == Decimal("8.00")
+    assert jan_report.overtime_hours == Decimal("8.00")
+    assert jan_report.regular_hours == Decimal("0.00")
+    assert jan_report.annual_overtime_hours == Decimal("8.00")

@@ -911,11 +911,13 @@ def evaluate_attendance_ledger(
                 )
             )
 
-    # 2. Inter-Shift Rest >= 12h UTC gap (Art. 34.3 ET)
+    # 2. Inter-Shift Rest >= 12h UTC gap (Art. 34.3 ET) — only across distinct workdays
     for idx in range(1, len(all_sessions)):
         prev_session = all_sessions[idx - 1]
         curr_session = all_sessions[idx]
         if prev_session.clock_out_utc is None:
+            continue
+        if prev_session.local_date == curr_session.local_date:
             continue
         gap_seconds = int(
             (curr_session.clock_in_utc - prev_session.clock_out_utc).total_seconds()
@@ -964,27 +966,42 @@ def evaluate_attendance_ledger(
 
     # 4 & 5. Weekly Regular Limit (Art. 34.1 ET) & Part-Time Overtime Prohibition (Art. 12.4.c ET)
     regular_weekly_limit = min(contracted_weekly_hours, STATUTORY_MAX_WEEKLY_HOURS)
+    regular_weekly_limit_minutes = int(
+        (regular_weekly_limit * Decimal(60)).quantize(Decimal("1"))
+    )
     weekly_minutes: dict[tuple[int, int], int] = defaultdict(int)
     weekly_last_date: dict[tuple[int, int], date] = {}
+    daily_overtime_minutes: dict[date, int] = defaultdict(int)
+
     for session in all_sessions:
         if session.is_open:
             continue
         iso = session.local_date.isocalendar()
         week_key = (iso.year, iso.week)
-        weekly_minutes[week_key] += session.net_minutes
+        prev_cum = weekly_minutes[week_key]
+        new_cum = prev_cum + session.net_minutes
+        weekly_minutes[week_key] = new_cum
         if week_key not in weekly_last_date or session.local_date > weekly_last_date[week_key]:
             weekly_last_date[week_key] = session.local_date
 
-    annual_overtime_by_year: dict[int, Decimal] = defaultdict(lambda: Decimal("0.00"))
-    weekly_overtime_by_week: dict[tuple[int, int], Decimal] = {}
+        prev_ot = max(0, prev_cum - regular_weekly_limit_minutes)
+        new_ot = max(0, new_cum - regular_weekly_limit_minutes)
+        delta_ot = new_ot - prev_ot
+        if delta_ot > 0:
+            daily_overtime_minutes[session.local_date] += delta_ot
+
+    annual_overtime_minutes_by_year: dict[int, int] = defaultdict(int)
+    for ot_date, ot_mins in daily_overtime_minutes.items():
+        annual_overtime_minutes_by_year[ot_date.year] += ot_mins
+    annual_overtime_by_year: dict[int, Decimal] = {
+        year: _minutes_to_hours(mins) for year, mins in annual_overtime_minutes_by_year.items()
+    }
 
     for week_key, mins in sorted(weekly_minutes.items()):
         weekly_hours = _minutes_to_hours(mins)
         week_date = weekly_last_date[week_key]
-        if weekly_hours > regular_weekly_limit:
-            overtime = (weekly_hours - regular_weekly_limit).quantize(Decimal("0.01"))
-            weekly_overtime_by_week[week_key] = overtime
-            annual_overtime_by_year[week_date.year] += overtime
+        if mins > regular_weekly_limit_minutes:
+            overtime = _minutes_to_hours(mins - regular_weekly_limit_minutes)
 
             if work_schedule_type == WorkScheduleType.PART_TIME:
                 alerts.append(
@@ -1112,16 +1129,14 @@ def evaluate_attendance_ledger(
     total_net_mins = sum(s.net_minutes for s in filtered_sessions if not s.is_open)
     total_net_hours = _minutes_to_hours(total_net_mins)
 
-    # Calculate overtime for the filtered weeks (or total)
-    filtered_week_keys = {
-        (s.local_date.isocalendar().year, s.local_date.isocalendar().week)
-        for s in filtered_sessions
-        if not s.is_open
-    }
-    overtime_hours = sum(
-        (weekly_overtime_by_week.get(wk, Decimal("0.00")) for wk in filtered_week_keys),
-        Decimal("0.00"),
-    ).quantize(Decimal("0.01"))
+    # Attribute weekly overtime increments to the triggering local_date within [date_from, date_to]
+    filtered_overtime_mins = sum(
+        mins
+        for ot_date, mins in daily_overtime_minutes.items()
+        if (date_from is None or ot_date >= date_from)
+        and (date_to is None or ot_date <= date_to)
+    )
+    overtime_hours = _minutes_to_hours(filtered_overtime_mins)
     regular_hours = max(Decimal("0.00"), (total_net_hours - overtime_hours)).quantize(
         Decimal("0.01")
     )
