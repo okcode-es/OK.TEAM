@@ -222,3 +222,20 @@ export type BulkUpsertLeaveEntitlementsBody =
   components['schemas']['BulkUpsertLeaveEntitlementsBody']
 export type DirectAssignLeaveBody =
   components['schemas']['DirectAssignLeaveBody']
+
+// Phase 5H: Personio Time Management & Attendance Redesign
+export type SegmentType = components['schemas']['SegmentType']
+export type AttendanceSegmentResponse =
+  components['schemas']['AttendanceSegmentResponse']
+export type AttendanceDayReviewStatus =
+  components['schemas']['AttendanceDayReviewStatus']
+export type AttendanceDayReviewResponse =
+  components['schemas']['AttendanceDayReviewResponse']
+export type BatchReviewAttendanceDaysRequest =
+  components['schemas']['BatchReviewAttendanceDaysRequest']
+export type BatchReviewAttendanceDaysResponse =
+  components['schemas']['BatchReviewAttendanceDaysResponse']
+
+// Phase 5I: Interactive Organization Chart
+export type OrgChartNodePublic = components['schemas']['OrgChartNodePublic']
+export type OrgChartResponse = components['schemas']['OrgChartResponse']

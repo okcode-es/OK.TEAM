@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from app.application.bulk_import import BulkImportEmployeesUseCase, DownloadImportTemplateUseCase
 from app.application.employees import (
+    UNSET,
     AnonymizeEmployeeUseCase,
     CreateEmployeeCommand,
     CreateEmployeeUseCase,
@@ -73,6 +74,7 @@ class EmployeeCreateRequest(BaseModel):
     )
     annual_vacation_days: int = Field(default=30, ge=30, le=90)
     default_break_minutes: int | None = Field(default=None, ge=5, le=180)
+    manager_id: UUID | None = None
     hire_date: date
     nie_dni: str | None = Field(default=None, max_length=32)
     iban: str | None = Field(default=None, max_length=40)
@@ -97,6 +99,7 @@ class EmployeeUpdateRequest(BaseModel):
     contracted_weekly_hours: Decimal = Field(gt=Decimal("0"), le=Decimal("40.00"))
     annual_vacation_days: int = Field(ge=30, le=90)
     default_break_minutes: int | None = Field(default=None, ge=5, le=180)
+    manager_id: UUID | None = None
     hire_date: date
     employment_status: EmploymentStatus = EmploymentStatus.ACTIVE
     # Omit/null to preserve existing encrypted value; send "" to clear; send new value to rotate.
@@ -131,6 +134,7 @@ class EmployeeResponse(BaseModel):
     contracted_weekly_hours: Decimal
     annual_vacation_days: int
     default_break_minutes: int | None = None
+    manager_id: UUID | None = None
     is_overtime_prohibited: bool
     hire_date: date
     termination_date: date | None
@@ -174,6 +178,7 @@ class EmployeeResponse(BaseModel):
             contracted_weekly_hours=employee.contracted_weekly_hours,
             annual_vacation_days=employee.annual_vacation_days,
             default_break_minutes=employee.default_break_minutes,
+            manager_id=employee.manager_id,
             is_overtime_prohibited=employee.is_overtime_prohibited,
             hire_date=employee.hire_date,
             termination_date=employee.termination_date,
@@ -418,6 +423,7 @@ async def create_employee(
             contracted_weekly_hours=payload.contracted_weekly_hours,
             annual_vacation_days=payload.annual_vacation_days,
             default_break_minutes=payload.default_break_minutes,
+            manager_id=payload.manager_id,
             hire_date=payload.hire_date,
             nie_dni=payload.nie_dni,
             iban=payload.iban,
@@ -486,6 +492,9 @@ async def update_employee(
             contracted_weekly_hours=payload.contracted_weekly_hours,
             annual_vacation_days=payload.annual_vacation_days,
             default_break_minutes=payload.default_break_minutes,
+            manager_id=(
+                payload.manager_id if "manager_id" in payload.model_fields_set else UNSET
+            ),
             hire_date=payload.hire_date,
             employment_status=payload.employment_status,
             nie_dni=payload.nie_dni,

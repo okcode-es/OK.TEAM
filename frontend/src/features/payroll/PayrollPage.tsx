@@ -14,6 +14,7 @@ import {
 } from '@tanstack/react-table'
 import {
   AlertTriangle,
+  ArrowRight,
   CheckCircle2,
   Clock,
   Download,
@@ -987,57 +988,117 @@ export function PayrollPage({ onNavigate }: PayrollPageProps) {
         </div>
       )}
 
-      {/* Readiness Blockers Banner */}
+      {/* Readiness Blockers Card */}
       {!isClosed && actionableBlockers.length > 0 && (
         <div
           role="alert"
-          className="rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800"
+          className="overflow-hidden rounded-xl border border-slate-200/80 border-l-4 border-l-rose-500 bg-white"
         >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2 font-medium">
-              <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
-              <span>{t('payroll.banners.blockersTitle')}</span>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
+            <div className="flex items-center gap-2">
+              <AlertTriangle
+                className="h-4 w-4 shrink-0 text-rose-600"
+                aria-hidden="true"
+              />
+              <span className="text-sm font-semibold text-slate-900">
+                {t('payroll.banners.blockersTitle')}
+              </span>
             </div>
-            {onNavigate && (
-              <div className="flex flex-wrap gap-2">
-                {actionableBlockers.some((b) => b.code === 'OPEN_SHIFT') && (
-                  <Button
-                    type="button"
-                    size="xs"
-                    variant="outline"
-                    className="border-rose-200 bg-white text-rose-700 hover:bg-rose-50"
-                    onClick={() => onNavigate('attendance')}
-                  >
-                    {t('payroll.banners.goToAttendance')}
-                  </Button>
-                )}
-                {actionableBlockers.some((b) => b.code === 'PENDING_LEAVE') && (
-                  <Button
-                    type="button"
-                    size="xs"
-                    variant="outline"
-                    className="border-rose-200 bg-white text-rose-700 hover:bg-rose-50"
-                    onClick={() => onNavigate('leaves')}
-                  >
-                    {t('payroll.banners.goToLeaves')}
-                  </Button>
-                )}
-              </div>
-            )}
+            <span className="text-xs font-medium text-slate-600 tabular-nums">
+              {t('payroll.blockers.count', { count: actionableBlockers.length })}
+            </span>
           </div>
-          <ul className="mt-2 space-y-1 text-xs">
-            {actionableBlockers.map((blocker, idx) => (
-              <li
-                key={`${blocker.code}-${blocker.reference_id ?? idx}`}
-                className="tabular-nums"
-              >
-                <span className="font-medium">[{blocker.code}]</span>{' '}
-                {blocker.employee_code ? `${blocker.employee_code} · ` : ''}
-                {blocker.employee_full_name ? `${blocker.employee_full_name} — ` : ''}
-                {blocker.local_date ? `${blocker.local_date}: ` : ''}
-                {blocker.message}
-              </li>
-            ))}
+          <ul className="divide-y divide-slate-100">
+            {actionableBlockers.map((blocker, idx) => {
+              const codeLabel =
+                blocker.code === 'OPEN_SHIFT'
+                  ? t('payroll.blockers.codes.OPEN_SHIFT')
+                  : blocker.code === 'PENDING_LEAVE'
+                    ? t('payroll.blockers.codes.PENDING_LEAVE')
+                    : blocker.code === 'ALREADY_CLOSED'
+                      ? t('payroll.blockers.codes.ALREADY_CLOSED')
+                      : blocker.code
+
+              let description: string
+              if (blocker.code === 'OPEN_SHIFT') {
+                description = t('payroll.blockers.descriptions.OPEN_SHIFT')
+              } else if (blocker.code === 'PENDING_LEAVE') {
+                const rangeMatch = blocker.message?.match(
+                  /\((\d{4}-\d{2}-\d{2})\.\.(\d{4}-\d{2}-\d{2})\)/,
+                )
+                if (rangeMatch && rangeMatch[1] !== rangeMatch[2]) {
+                  description = t(
+                    'payroll.blockers.descriptions.PENDING_LEAVE_RANGE',
+                    {
+                      start: rangeMatch[1],
+                      end: rangeMatch[2],
+                    },
+                  )
+                } else {
+                  description = t('payroll.blockers.descriptions.PENDING_LEAVE')
+                }
+              } else {
+                description = t('payroll.blockers.descriptions.fallback')
+              }
+
+              const targetSection: NavSection | null =
+                blocker.code === 'OPEN_SHIFT'
+                  ? 'attendance'
+                  : blocker.code === 'PENDING_LEAVE'
+                    ? 'leaves'
+                    : null
+              const actionLabel =
+                blocker.code === 'OPEN_SHIFT'
+                  ? t('payroll.blockers.actions.OPEN_SHIFT')
+                  : blocker.code === 'PENDING_LEAVE'
+                    ? t('payroll.blockers.actions.PENDING_LEAVE')
+                    : null
+
+              return (
+                <li
+                  key={`${blocker.code}-${blocker.reference_id ?? idx}`}
+                  className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="min-w-0 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2 text-xs tabular-nums">
+                      <span className="inline-flex items-center gap-1.5 rounded-md border border-rose-200/80 bg-rose-50/70 px-2 py-0.5 font-medium text-rose-700">
+                        <span
+                          className="h-1.5 w-1.5 rounded-full bg-rose-500"
+                          aria-hidden="true"
+                        />
+                        {codeLabel}
+                      </span>
+                      {(blocker.employee_code || blocker.employee_full_name) && (
+                        <span className="font-medium text-slate-900">
+                          {[blocker.employee_code, blocker.employee_full_name]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </span>
+                      )}
+                      {blocker.local_date && (
+                        <span className="text-slate-600">
+                          {blocker.local_date}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-600">{description}</p>
+                  </div>
+                  {onNavigate && targetSection && actionLabel && (
+                    <button
+                      type="button"
+                      onClick={() => onNavigate(targetSection)}
+                      className="inline-flex shrink-0 items-center gap-1 self-start rounded-md px-2 py-1 text-xs font-medium text-[#2563EB] transition-colors hover:bg-blue-50 hover:text-blue-700 focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:outline-none sm:self-center"
+                    >
+                      <span>{actionLabel}</span>
+                      <ArrowRight
+                        className="h-3.5 w-3.5 shrink-0"
+                        aria-hidden="true"
+                      />
+                    </button>
+                  )}
+                </li>
+              )
+            })}
           </ul>
         </div>
       )}

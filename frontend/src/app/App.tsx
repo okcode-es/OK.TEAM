@@ -8,7 +8,6 @@ import { AnnouncementsPage } from '@/features/announcements/AnnouncementsPage'
 import { AuthProvider, useAuth } from '@/features/auth/AuthContext'
 import { LoginPage } from '@/features/auth/LoginPage'
 import { OnboardingPage } from '@/features/auth/OnboardingPage'
-import { AttendancePage } from '@/features/attendance/AttendancePage'
 import { KioskPage } from '@/features/attendance/KioskPage'
 import { ClockStateProvider, useClockState } from '@/features/clock/ClockStateContext'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
@@ -161,10 +160,12 @@ function WorkspaceRouter() {
           />
         ))}
       {section === 'employees' && <EmployeesPage />}
-      {section === 'attendance' && <AttendancePage />}
+      {section === 'attendance' && (
+        <LeavesPage key="time-attendance" initialTab="attendance" />
+      )}
       {section === 'kiosk' && activeTenant.role !== 'employee' && <KioskPage />}
       {section === 'schedule' && <SchedulePage />}
-      {section === 'leaves' && <LeavesPage />}
+      {section === 'leaves' && <LeavesPage key="time-leaves" initialTab="team" />}
       {section === 'documents' && <DocumentsPage />}
       {section === 'announcements' && <AnnouncementsPage />}
       {section === 'payroll' && activeTenant.role !== 'employee' && (

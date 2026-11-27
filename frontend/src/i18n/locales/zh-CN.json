@@ -20,7 +20,7 @@
   },
   "nav": {
     "dashboard": "工作台",
-    "employees": "员工档案",
+    "employees": "组织与员工",
     "attendance": "考勤台账",
     "kiosk": "平板打卡",
     "schedule": "排班日历",
@@ -237,7 +237,9 @@
       "nieDni": "NIE / DNI（AES-256-GCM 加密存储）",
       "iban": "IBAN 工资卡号（加密存储）",
       "naf": "NAF 社保号 12 位（加密存储）",
-      "status": "在职状态"
+      "status": "在职状态",
+      "manager": "直属主管",
+      "noManager": "无直属主管"
     },
     "drawer": {
       "createTitle": "新建员工档案",
@@ -484,6 +486,70 @@
       "submit": "追加修正记录",
       "submitting": "正在提交…",
       "savedNotice": "修正事件已追加并重新核算合规状态。"
+    },
+    "redesign": {
+      "prevPeriod": "上一周期",
+      "nextPeriod": "下一周期",
+      "viewModeLabel": "考勤视图切换",
+      "weekView": "周",
+      "monthView": "月",
+      "settingsTitle": "休息规则与考勤设置",
+      "settingsDescription": "配置当前员工的休息策略（继承或覆盖门店/企业默认设置）。",
+      "moreActions": "更多操作",
+      "exportPdf": "导出西语合规考勤 PDF",
+      "exportCsv": "导出 ITSS 考勤 CSV",
+      "manualEntry": "补录单日考勤",
+      "recordedHoursTitle": "已记录工时",
+      "viewDetails": "查看明细",
+      "recordedThisWeek": "本周已记录",
+      "recordedThisMonth": "本月已记录",
+      "workScheduleTitle": "标准排班",
+      "perWeekUnit": "周",
+      "viewHistory": "查看历史",
+      "periodDayCount": "共 {{count}} 天",
+      "legendWork": "打卡工作",
+      "legendBreak": "休息时间",
+      "legendOvertime": "超时预警",
+      "selectAllDays": "全选可操作日期",
+      "colDate": "日期",
+      "colStartEnd": "起止时间",
+      "colRecorded": "已录工时",
+      "colProgress": "进度",
+      "colBreaks": "休息时长",
+      "colAbsence": "请假/缺勤",
+      "colStatus": "审批状态",
+      "colActions": "操作",
+      "lockedDay": "该日期已锁定或未到，不可编辑或提交。",
+      "segmentsCountBadge": "+{{count}}段",
+      "statusViolation": "异常",
+      "statusApproved": "已批准",
+      "statusPending": "待审核",
+      "redactedAbsence": "缺勤",
+      "selectedDaysCount": "已选 {{count}} 天",
+      "batchSubmit": "批量提交审核",
+      "batchApprove": "批量批准",
+      "batchSubmittedNotice": "已提交 {{count}} 天的考勤记录待审核。",
+      "batchApprovedNotice": "已批准 {{count}} 天的考勤记录。",
+      "clearSelection": "取消",
+      "periodBreakdownTitle": "周期分段工时明细",
+      "paid": "计薪",
+      "unpaid": "不计薪",
+      "autoDeductedBreakNote": "含系统自动扣除休息 {{minutes}} 分钟",
+      "historyTitle": "排班与休息策略历史",
+      "effectiveBreakPolicy": "当前生效休息策略",
+      "inheritanceSource": "继承来源",
+      "inheritedFrom": {
+        "employee": "员工专属配置",
+        "store": "门店默认配置",
+        "tenant": "企业全局配置",
+        "legacy_default": "系统默认",
+        "none": "未配置"
+      },
+      "breakDuration": "默认休息时长",
+      "breakPaidStatus": "计薪方式",
+      "publishedShifts": "本周期排班记录",
+      "noShiftsInPeriod": "当前周期暂无排班记录。",
+      "chronologicalSegments": "当日时间分段"
     }
   },
   "kiosk": {
@@ -807,6 +873,24 @@
       "reopenAuditMeta": "重开时间：{{time}} · 原因：{{reason}}",
       "alertsTitle": "本月共检测到 {{warnings}} 项劳动法预警、{{violations}} 项违规记录，关账后仍可查阅历史明细。"
     },
+    "blockers": {
+      "count": "{{count}} 项待处理",
+      "codes": {
+        "OPEN_SHIFT": "未签退班次",
+        "PENDING_LEAVE": "待审批请假",
+        "ALREADY_CLOSED": "当月已关账"
+      },
+      "descriptions": {
+        "OPEN_SHIFT": "存在未完结的打卡班次，请先在考勤台账补录下班打卡或修正异常（若处于休息中，请先结束休息或作废休息记录）。",
+        "PENDING_LEAVE": "存在待审批的请假申请，请前往年假与请假完成批准或驳回。",
+        "PENDING_LEAVE_RANGE": "存在 {{start}} 至 {{end}} 的待审批请假申请，请前往年假与请假完成批准或驳回。",
+        "fallback": "存在待处理关账阻断项，请核对后重试。"
+      },
+      "actions": {
+        "OPEN_SHIFT": "前往考勤台账",
+        "PENDING_LEAVE": "前往年假与请假"
+      }
+    },
     "columns": {
       "employee": "员工",
       "contract": "合同与工时",
@@ -1125,5 +1209,99 @@
     "HTTP_ERROR": "请求未能完成，请稍后重试。",
     "NETWORK_ERROR": "网络连接异常，请检查网络后重试。",
     "GENERIC": "操作未能完成，请稍后重试。"
+  },
+  "orgChart": {
+    "subtitle": "查看企业汇报关系、团队层级与门店公开通讯录。",
+    "activeCount": "共 {{count}} 位在职员工",
+    "loadFailed": "组织架构加载失败",
+    "retry": "重试",
+    "emptyTitle": "暂无组织架构数据",
+    "emptyDescription": "创建在职员工档案后，组织架构将自动生成。",
+    "emptyFilteredTitle": "无匹配员工",
+    "emptyFilteredDescription": "当前筛选条件下没有找到匹配的成员。",
+    "bridgeLabel": "上级路径",
+    "expandNode": "展开 {{name}} 的直属下属",
+    "collapseNode": "收起 {{name}} 的直属下属",
+    "fields": {
+      "jobTitle": "岗位",
+      "department": "部门",
+      "store": "门店",
+      "workEmail": "工作邮箱"
+    },
+    "toolbar": {
+      "label": "组织架构工具栏",
+      "searchGroup": "搜索定位员工",
+      "viewGroup": "视图、高亮与筛选",
+      "exportGroup": "导出组织架构",
+      "searchPlaceholder": "搜索员工姓名、岗位或门店…",
+      "noSearchResults": "未找到匹配的员工",
+      "customize": "自定义",
+      "highlight": "高亮",
+      "focus": "聚焦",
+      "filter": "筛选",
+      "export": "导出"
+    },
+    "customize": {
+      "title": "卡片显示字段"
+    },
+    "highlight": {
+      "title": "按维度高亮显示",
+      "clear": "清除高亮",
+      "none": "不高亮",
+      "activeBadge": "高亮: {{label}}"
+    },
+    "focus": {
+      "myDirectTeam": "我的直属团队",
+      "selectedPerson": "聚焦选中人员",
+      "banner": "当前聚焦分支：{{name}}",
+      "resetFullView": "重置全公司视图"
+    },
+    "filter": {
+      "title": "筛选组织架构",
+      "clearAll": "清除全部",
+      "allDepartments": "全部部门",
+      "removeStore": "移除门店筛选",
+      "removeDepartment": "移除部门筛选"
+    },
+    "export": {
+      "png": "导出高清 PNG",
+      "svg": "导出矢量 SVG"
+    },
+    "unassigned": {
+      "title": "未分配汇报线"
+    },
+    "controls": {
+      "label": "画布缩放与导航控制",
+      "zoomGroup": "缩放控制",
+      "navigationGroup": "视图与层级导航",
+      "zoomOut": "缩小",
+      "zoomIn": "放大",
+      "fit": "适配全屏",
+      "locateMe": "定位到我",
+      "expandLevel": "展开下一层级",
+      "collapseLevel": "收起一层",
+      "resetHome": "回到顶层"
+    },
+    "drawer": {
+      "noJobTitle": "未设置岗位",
+      "focusBranch": "聚焦此分支",
+      "copyEmail": "复制工作邮箱",
+      "directManager": "直属主管",
+      "noManager": "暂无直属主管",
+      "directReports": "直属下属",
+      "noReports": "暂无直属下属",
+      "openFullProfile": "查看完整人事档案"
+    },
+    "announcements": {
+      "located": "已定位并居中显示 {{name}}",
+      "expandedLevel": "已展开下一层级",
+      "collapsedLevel": "已收起最末展开层级",
+      "resetView": "已重置为全公司视图",
+      "locateMeUnavailable": "当前账号未关联在职员工档案，无法定位",
+      "myTeamUnavailable": "当前暂无可聚焦的直属团队",
+      "focusedBranch": "已聚焦至 {{name}} 的分支",
+      "exportedPng": "已导出高清 PNG 组织架构图",
+      "exportedSvg": "已导出矢量 SVG 组织架构图"
+    }
   }
 }

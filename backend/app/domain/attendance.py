@@ -65,6 +65,16 @@ class WorkMode(StrEnum):
     REMOTE = "remote"
 
 
+class SegmentType(StrEnum):
+    WORK = "work"
+    BREAK = "break"
+
+
+class AttendanceDayReviewStatus(StrEnum):
+    SUBMITTED = "submitted"
+    APPROVED = "approved"
+
+
 class AlertSeverity(StrEnum):
     WARNING = "warning"
     VIOLATION = "violation"
@@ -117,6 +127,30 @@ class ComplianceAlert:
 
 
 @dataclass(frozen=True, slots=True)
+class AttendanceSegment:
+    type: SegmentType
+    start_at: datetime
+    end_at: datetime | None
+    duration_minutes: int
+    is_paid: bool
+
+
+@dataclass(frozen=True, slots=True)
+class AttendanceDayReview:
+    id: UUID
+    tenant_id: UUID
+    employee_id: UUID
+    store_id: UUID
+    local_date: date
+    status: AttendanceDayReviewStatus
+    reviewed_by_user_id: UUID
+    reviewed_at_utc: datetime
+    note: str
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
 class WorkSession:
     employee_id: UUID
     store_id: UUID
@@ -133,6 +167,7 @@ class WorkSession:
     source_event_ids: tuple[UUID, ...]
     paid_break_minutes: int = 0
     auto_deducted_break_minutes: int = 0
+    segments: tuple[AttendanceSegment, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,6 +184,11 @@ class DailyAttendanceSummary:
     alerts: tuple[ComplianceAlert, ...]
     total_paid_break_minutes: int = 0
     total_auto_deducted_break_minutes: int = 0
+    segments: tuple[AttendanceSegment, ...] = ()
+    planned_minutes: int = 0
+    is_locked: bool = False
+    daily_limit_minutes: int = 540
+    review_status: AttendanceDayReviewStatus | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -370,11 +410,149 @@ def _compute_auto_deduct_minutes(
     return min(gross_minutes, overlap_mins)
 
 
+def _build_auto_deduct_segments(
+    clock_in_utc: datetime,
+    clock_out_utc: datetime,
+    store_timezone: str,
+    gross_minutes: int,
+    auto_deducted_mins: int,
+    break_policy: EffectiveBreakPolicy,
+) -> tuple[AttendanceSegment, ...]:
+    """Split a closed shift without manual breaks into chronological WORK/BREAK segments."""
+    if break_policy.break_mode == BreakMode.FIXED_WINDOW and break_policy.windows:
+        tz = resolve_timezone(store_timezone)
+        local_in_date = clock_in_utc.astimezone(tz).date()
+        local_out_date = clock_out_utc.astimezone(tz).date()
+        raw_overlaps: list[tuple[datetime, datetime]] = []
+        cursor = local_in_date
+        while cursor <= local_out_date:
+            for window in break_policy.windows:
+                s_min = parse_hhmm_minutes(window.start)
+                e_min = parse_hhmm_minutes(window.end)
+                w_start_utc = datetime(
+                    cursor.year, cursor.month, cursor.day, s_min // 60, s_min % 60, tzinfo=tz
+                ).astimezone(UTC)
+                w_end_utc = datetime(
+                    cursor.year, cursor.month, cursor.day, e_min // 60, e_min % 60, tzinfo=tz
+                ).astimezone(UTC)
+                ov_start = max(clock_in_utc, w_start_utc)
+                ov_end = min(clock_out_utc, w_end_utc)
+                if ov_end > ov_start:
+                    raw_overlaps.append((ov_start, ov_end))
+            cursor += timedelta(days=1)
+
+        if raw_overlaps:
+            raw_overlaps.sort(key=lambda iv: (iv[0], iv[1]))
+            merged: list[tuple[datetime, datetime]] = [raw_overlaps[0]]
+            for ov_start, ov_end in raw_overlaps[1:]:
+                prev_start, prev_end = merged[-1]
+                if ov_start <= prev_end:
+                    merged[-1] = (prev_start, max(prev_end, ov_end))
+                else:
+                    merged.append((ov_start, ov_end))
+
+            segments: list[AttendanceSegment] = []
+            cursor_utc = clock_in_utc
+            for ov_start, ov_end in merged:
+                if ov_start > cursor_utc:
+                    work_mins = max(0, int((ov_start - cursor_utc).total_seconds()) // 60)
+                    segments.append(
+                        AttendanceSegment(
+                            type=SegmentType.WORK,
+                            start_at=cursor_utc,
+                            end_at=ov_start,
+                            duration_minutes=work_mins,
+                            is_paid=True,
+                        )
+                    )
+                brk_mins = max(0, int((ov_end - ov_start).total_seconds()) // 60)
+                segments.append(
+                    AttendanceSegment(
+                        type=SegmentType.BREAK,
+                        start_at=ov_start,
+                        end_at=ov_end,
+                        duration_minutes=brk_mins,
+                        is_paid=break_policy.is_paid,
+                    )
+                )
+                cursor_utc = ov_end
+            if clock_out_utc > cursor_utc:
+                work_mins = max(0, int((clock_out_utc - cursor_utc).total_seconds()) // 60)
+                segments.append(
+                    AttendanceSegment(
+                        type=SegmentType.WORK,
+                        start_at=cursor_utc,
+                        end_at=clock_out_utc,
+                        duration_minutes=work_mins,
+                        is_paid=True,
+                    )
+                )
+            return tuple(segments)
+
+    if break_policy.break_mode == BreakMode.FIXED_DURATION:
+        if auto_deducted_mins >= gross_minutes:
+            return (
+                AttendanceSegment(
+                    type=SegmentType.BREAK,
+                    start_at=clock_in_utc,
+                    end_at=clock_out_utc,
+                    duration_minutes=auto_deducted_mins,
+                    is_paid=break_policy.is_paid,
+                ),
+            )
+        before_mins = (gross_minutes - auto_deducted_mins) // 2
+        after_mins = gross_minutes - auto_deducted_mins - before_mins
+        break_start = clock_in_utc + timedelta(minutes=before_mins)
+        break_end = break_start + timedelta(minutes=auto_deducted_mins)
+        segments = []
+        if before_mins > 0:
+            segments.append(
+                AttendanceSegment(
+                    type=SegmentType.WORK,
+                    start_at=clock_in_utc,
+                    end_at=break_start,
+                    duration_minutes=before_mins,
+                    is_paid=True,
+                )
+            )
+        segments.append(
+            AttendanceSegment(
+                type=SegmentType.BREAK,
+                start_at=break_start,
+                end_at=break_end,
+                duration_minutes=auto_deducted_mins,
+                is_paid=break_policy.is_paid,
+            )
+        )
+        if after_mins > 0:
+            segments.append(
+                AttendanceSegment(
+                    type=SegmentType.WORK,
+                    start_at=break_end,
+                    end_at=clock_out_utc,
+                    duration_minutes=after_mins,
+                    is_paid=True,
+                )
+            )
+        return tuple(segments)
+
+    return (
+        AttendanceSegment(
+            type=SegmentType.WORK,
+            start_at=clock_in_utc,
+            end_at=clock_out_utc,
+            duration_minutes=gross_minutes,
+            is_paid=True,
+        ),
+    )
+
+
 def fold_attendance_events(
     employee_id: UUID,
     events: list[AttendanceEvent],
     *,
     break_policy: EffectiveBreakPolicy | None = None,
+    now_utc: datetime | None = None,
 ) -> tuple[WorkSession, ...]:
     """Fold raw and correction events into chronological WorkSessions, enforcing state machine."""
     effective = _resolve_effective_punches(events)
@@ -385,10 +563,12 @@ def fold_attendance_events(
     state = _ShiftState.NOT_CLOCKED_IN
 
     current_in: _EffectivePunch | None = None
+    current_work_start: datetime | None = None
     current_break_start: datetime | None = None
     break_seconds = 0
     has_corrections = False
     event_ids: list[UUID] = []
+    session_segments: list[AttendanceSegment] = []
 
     for punch in effective:
         if punch.punch_type == AttendanceEventType.CLOCK_IN:
@@ -398,17 +578,32 @@ def fold_attendance_events(
                 )
             state = _ShiftState.WORKING
             current_in = punch
+            current_work_start = punch.occurred_at_utc
             current_break_start = None
             break_seconds = 0
             has_corrections = punch.is_corrected
             event_ids = [punch.event_id]
+            session_segments = []
 
         elif punch.punch_type == AttendanceEventType.BREAK_START:
-            if state != _ShiftState.WORKING:
+            if state != _ShiftState.WORKING or current_work_start is None:
                 raise ValidationDomainError(
                     "Invalid state transition: break_start requires an active working shift"
                 )
+            work_mins = max(
+                0, int((punch.occurred_at_utc - current_work_start).total_seconds()) // 60
+            )
+            session_segments.append(
+                AttendanceSegment(
+                    type=SegmentType.WORK,
+                    start_at=current_work_start,
+                    end_at=punch.occurred_at_utc,
+                    duration_minutes=work_mins,
+                    is_paid=True,
+                )
+            )
             state = _ShiftState.ON_BREAK
+            current_work_start = None
             current_break_start = punch.occurred_at_utc
             has_corrections = has_corrections or punch.is_corrected
             event_ids.append(punch.event_id)
@@ -418,8 +613,19 @@ def fold_attendance_events(
                 raise ValidationDomainError(
                     "Invalid state transition: break_end requires an open break"
                 )
-            break_seconds += int((punch.occurred_at_utc - current_break_start).total_seconds())
+            brk_secs = int((punch.occurred_at_utc - current_break_start).total_seconds())
+            break_seconds += brk_secs
+            session_segments.append(
+                AttendanceSegment(
+                    type=SegmentType.BREAK,
+                    start_at=current_break_start,
+                    end_at=punch.occurred_at_utc,
+                    duration_minutes=max(0, brk_secs // 60),
+                    is_paid=bool(break_policy and break_policy.is_paid),
+                )
+            )
             current_break_start = None
+            current_work_start = punch.occurred_at_utc
             state = _ShiftState.WORKING
             has_corrections = has_corrections or punch.is_corrected
             event_ids.append(punch.event_id)
@@ -429,10 +635,23 @@ def fold_attendance_events(
                 raise ValidationDomainError(
                     "Invalid state transition: cannot clock_out while on an open break"
                 )
-            if state != _ShiftState.WORKING or current_in is None:
+            if state != _ShiftState.WORKING or current_in is None or current_work_start is None:
                 raise ValidationDomainError(
                     "Invalid state transition: clock_out requires an active clock_in"
                 )
+
+            work_mins = max(
+                0, int((punch.occurred_at_utc - current_work_start).total_seconds()) // 60
+            )
+            session_segments.append(
+                AttendanceSegment(
+                    type=SegmentType.WORK,
+                    start_at=current_work_start,
+                    end_at=punch.occurred_at_utc,
+                    duration_minutes=work_mins,
+                    is_paid=True,
+                )
+            )
 
             total_seconds = int(
                 (punch.occurred_at_utc - current_in.occurred_at_utc).total_seconds()
@@ -453,6 +672,23 @@ def fold_attendance_events(
                     gross_mins,
                     break_policy,
                 )
+
+            if (
+                break_policy is not None
+                and break_policy.tracking_mode == BreakTrackingMode.AUTO_DEDUCT
+                and auto_deducted_mins > 0
+                and manual_break_mins == 0
+            ):
+                final_segments = _build_auto_deduct_segments(
+                    current_in.occurred_at_utc,
+                    punch.occurred_at_utc,
+                    current_in.store_timezone,
+                    gross_mins,
+                    auto_deducted_mins,
+                    break_policy,
+                )
+            else:
+                final_segments = tuple(session_segments)
 
             break_mins = manual_break_mins + auto_deducted_mins
             if break_policy is not None and break_policy.is_paid:
@@ -488,19 +724,43 @@ def fold_attendance_events(
                     source_event_ids=tuple(event_ids),
                     paid_break_minutes=paid_break_mins,
                     auto_deducted_break_minutes=auto_deducted_mins,
+                    segments=final_segments,
                 )
             )
             state = _ShiftState.NOT_CLOCKED_IN
             current_in = None
+            current_work_start = None
             current_break_start = None
             break_seconds = 0
             has_corrections = False
             event_ids = []
+            session_segments = []
 
     if state != _ShiftState.NOT_CLOCKED_IN and current_in is not None:
         local_dt = current_in.occurred_at_utc.astimezone(
             resolve_timezone(current_in.store_timezone)
         )
+        is_break = state == _ShiftState.ON_BREAK
+        seg_start = current_break_start if is_break else current_work_start
+        if seg_start is not None:
+            if now_utc is not None:
+                now_norm = (
+                    now_utc.astimezone(UTC)
+                    if now_utc.tzinfo is not None
+                    else now_utc.replace(tzinfo=UTC)
+                )
+                open_duration = max(0, int((now_norm - seg_start).total_seconds()) // 60)
+            else:
+                open_duration = 0
+            session_segments.append(
+                AttendanceSegment(
+                    type=SegmentType.BREAK if is_break else SegmentType.WORK,
+                    start_at=seg_start,
+                    end_at=None,
+                    duration_minutes=open_duration,
+                    is_paid=(not is_break) or bool(break_policy and break_policy.is_paid),
+                )
+            )
         sessions.append(
             WorkSession(
                 employee_id=employee_id,
@@ -514,8 +774,9 @@ def fold_attendance_events(
                 net_hours=Decimal("0.00"),
                 has_corrections=has_corrections,
                 is_open=True,
-                has_open_break=(state == _ShiftState.ON_BREAK),
+                has_open_break=is_break,
                 source_event_ids=tuple(event_ids),
+                segments=tuple(session_segments),
             )
         )
 
@@ -616,9 +877,12 @@ def evaluate_attendance_ledger(
     date_from: date | None = None,
     date_to: date | None = None,
     break_policy: EffectiveBreakPolicy | None = None,
+    now_utc: datetime | None = None,
 ) -> AttendanceLedgerReport:
     """Fold events and evaluate all 6 Spanish statutory labor law rules."""
-    all_sessions = fold_attendance_events(employee_id, events, break_policy=break_policy)
+    all_sessions = fold_attendance_events(
+        employee_id, events, break_policy=break_policy, now_utc=now_utc
+    )
     alerts: list[ComplianceAlert] = []
 
     # 1. Group closed sessions by local_date for Daily Max (Art. 34.3 ET)
@@ -819,6 +1083,13 @@ def evaluate_attendance_ledger(
         total_paid_break = sum(s.paid_break_minutes for s in day_sessions)
         total_auto_deduct = sum(s.auto_deducted_break_minutes for s in day_sessions)
         total_net = sum(s.net_minutes for s in day_sessions)
+        day_segments = tuple(
+            sorted(
+                (seg for s in day_sessions for seg in s.segments),
+                key=lambda seg: (seg.start_at, 0 if seg.type == SegmentType.WORK else 1),
+            )
+        )
+        daily_limit_minutes = 480 if is_minor_on_date(birth_date, dt) else 540
         daily_summaries.append(
             DailyAttendanceSummary(
                 employee_id=employee_id,
@@ -833,6 +1104,8 @@ def evaluate_attendance_ledger(
                 alerts=tuple(alerts_by_date.get(dt, [])),
                 total_paid_break_minutes=total_paid_break,
                 total_auto_deducted_break_minutes=total_auto_deduct,
+                segments=day_segments,
+                daily_limit_minutes=daily_limit_minutes,
             )
         )
 

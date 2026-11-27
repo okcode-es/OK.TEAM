@@ -20,7 +20,7 @@
   },
   "nav": {
     "dashboard": "Inicio",
-    "employees": "Empleados",
+    "employees": "Organización",
     "attendance": "Registro de jornada",
     "kiosk": "Terminal Kiosk",
     "schedule": "Turnos",
@@ -237,7 +237,9 @@
       "nieDni": "NIE / DNI (cifrado AES-256-GCM)",
       "iban": "IBAN nómina (cifrado)",
       "naf": "NAF Seguridad Social 12 dígitos (cifrado)",
-      "status": "Estado laboral"
+      "status": "Estado laboral",
+      "manager": "Responsable directo",
+      "noManager": "Sin responsable"
     },
     "drawer": {
       "createTitle": "Nuevo empleado",
@@ -484,6 +486,70 @@
       "submit": "Registrar corrección",
       "submitting": "Guardando…",
       "savedNotice": "Corrección registrada y cumplimiento recalculado."
+    },
+    "redesign": {
+      "prevPeriod": "Período anterior",
+      "nextPeriod": "Período siguiente",
+      "viewModeLabel": "Vista de jornada",
+      "weekView": "Semana",
+      "monthView": "Mes",
+      "settingsTitle": "Reglas de descanso y ajustes",
+      "settingsDescription": "Configure la política de descanso del empleado (heredada o personalizada).",
+      "moreActions": "Más acciones",
+      "exportPdf": "Exportar PDF RDL 8/2019",
+      "exportCsv": "Exportar CSV ITSS",
+      "manualEntry": "Registro manual",
+      "recordedHoursTitle": "Horas registradas",
+      "viewDetails": "Ver detalles",
+      "recordedThisWeek": "Registradas esta semana",
+      "recordedThisMonth": "Registradas este mes",
+      "workScheduleTitle": "Horario de trabajo",
+      "perWeekUnit": "semana",
+      "viewHistory": "Ver historial",
+      "periodDayCount": "{{count}} días",
+      "legendWork": "Trabajo",
+      "legendBreak": "Descanso",
+      "legendOvertime": "Exceso >9h",
+      "selectAllDays": "Seleccionar todos los días disponibles",
+      "colDate": "Fecha",
+      "colStartEnd": "Comienzo → Final",
+      "colRecorded": "Horas registradas",
+      "colProgress": "Progreso",
+      "colBreaks": "Descansos",
+      "colAbsence": "Ausencia",
+      "colStatus": "Estado",
+      "colActions": "Acciones",
+      "lockedDay": "Día bloqueado o futuro; no editable.",
+      "segmentsCountBadge": "+{{count}} tramos",
+      "statusViolation": "Incidencia",
+      "statusApproved": "Aprobado",
+      "statusPending": "Pendiente",
+      "redactedAbsence": "Ausencia",
+      "selectedDaysCount": "{{count}} días seleccionados",
+      "batchSubmit": "Enviar a revisión",
+      "batchApprove": "Aprobar",
+      "batchSubmittedNotice": "Se han enviado {{count}} días a revisión.",
+      "batchApprovedNotice": "Se han aprobado {{count}} días.",
+      "clearSelection": "Limpiar",
+      "periodBreakdownTitle": "Desglose por tramos del período",
+      "paid": "remunerado",
+      "unpaid": "no remunerado",
+      "autoDeductedBreakNote": "Incluye {{minutes}} min de pausa deducida automáticamente",
+      "historyTitle": "Historial de horario y descansos",
+      "effectiveBreakPolicy": "Política de descanso efectiva",
+      "inheritanceSource": "Origen de la regla",
+      "inheritedFrom": {
+        "employee": "Personalizada del empleado",
+        "store": "Por defecto del centro",
+        "tenant": "Global de la empresa",
+        "legacy_default": "Por defecto del sistema",
+        "none": "Sin configurar"
+      },
+      "breakDuration": "Duración de pausa",
+      "breakPaidStatus": "Remuneración",
+      "publishedShifts": "Turnos del período",
+      "noShiftsInPeriod": "No hay turnos registrados en este período.",
+      "chronologicalSegments": "Tramos cronológicos del día"
     }
   },
   "kiosk": {
@@ -807,6 +873,24 @@
       "reopenAuditMeta": "Reabierto el {{time}} · Motivo: {{reason}}",
       "alertsTitle": "Se detectaron {{warnings}} advertencias y {{violations}} infracciones laborales en el mes."
     },
+    "blockers": {
+      "count": "{{count}} pendientes",
+      "codes": {
+        "OPEN_SHIFT": "Jornada abierta",
+        "PENDING_LEAVE": "Ausencia pendiente",
+        "ALREADY_CLOSED": "Mes ya cerrado"
+      },
+      "descriptions": {
+        "OPEN_SHIFT": "Jornada sin fichaje de salida; complétela o corríjala en el Registro de jornada (si hay una pausa abierta, ciérrela o anúlela primero).",
+        "PENDING_LEAVE": "Solicitud de ausencia pendiente de revisión; apruébela o rechácela en Vacaciones y bajas.",
+        "PENDING_LEAVE_RANGE": "Solicitud de ausencia pendiente ({{start}} – {{end}}); apruébela o rechácela en Vacaciones y bajas.",
+        "fallback": "Existe un bloqueo pendiente de revisión antes de cerrar el mes."
+      },
+      "actions": {
+        "OPEN_SHIFT": "Ir a Registro de jornada",
+        "PENDING_LEAVE": "Ir a Vacaciones y bajas"
+      }
+    },
     "columns": {
       "employee": "Empleado",
       "contract": "Contrato y jornada",
@@ -1125,5 +1209,99 @@
     "HTTP_ERROR": "No se pudo completar la solicitud. Inténtalo de nuevo.",
     "NETWORK_ERROR": "Error de conexión con el servidor. Comprueba tu red e inténtalo de nuevo.",
     "GENERIC": "No se pudo completar la operación. Inténtalo de nuevo."
+  },
+  "orgChart": {
+    "subtitle": "Consulte la estructura de equipos, líneas de reporte y el directorio público.",
+    "activeCount": "{{count}} empleados activos",
+    "loadFailed": "Error al cargar el organigrama",
+    "retry": "Reintentar",
+    "emptyTitle": "Sin datos en el organigrama",
+    "emptyDescription": "El organigrama se generará automáticamente cuando haya empleados activos.",
+    "emptyFilteredTitle": "Sin coincidencias",
+    "emptyFilteredDescription": "No hay empleados que coincidan con los filtros aplicados.",
+    "bridgeLabel": "Jerarquía superior",
+    "expandNode": "Expandir equipo directo de {{name}}",
+    "collapseNode": "Contraer equipo directo de {{name}}",
+    "fields": {
+      "jobTitle": "Puesto",
+      "department": "Departamento",
+      "store": "Centro",
+      "workEmail": "Email laboral"
+    },
+    "toolbar": {
+      "label": "Barra de herramientas del organigrama",
+      "searchGroup": "Buscar personas",
+      "viewGroup": "Vista, resaltado y filtros",
+      "exportGroup": "Exportar organigrama",
+      "searchPlaceholder": "Buscar personas por nombre, puesto o centro…",
+      "noSearchResults": "No se encontraron personas",
+      "customize": "Personalizar",
+      "highlight": "Resaltar",
+      "focus": "Foco",
+      "filter": "Filtrar",
+      "export": "Exportar"
+    },
+    "customize": {
+      "title": "Campos visibles en tarjeta"
+    },
+    "highlight": {
+      "title": "Resaltar por dimensión",
+      "clear": "Limpiar",
+      "none": "Sin resaltado",
+      "activeBadge": "Resaltado: {{label}}"
+    },
+    "focus": {
+      "myDirectTeam": "Mi equipo directo",
+      "selectedPerson": "Enfocar persona seleccionada",
+      "banner": "Rama enfocada: {{name}}",
+      "resetFullView": "Restablecer vista completa"
+    },
+    "filter": {
+      "title": "Filtrar organigrama",
+      "clearAll": "Limpiar todo",
+      "allDepartments": "Todos los departamentos",
+      "removeStore": "Quitar filtro de centro",
+      "removeDepartment": "Quitar filtro de departamento"
+    },
+    "export": {
+      "png": "Exportar PNG (HD)",
+      "svg": "Exportar SVG"
+    },
+    "unassigned": {
+      "title": "Sin línea de reporte asignada"
+    },
+    "controls": {
+      "label": "Controles de zoom y navegación del lienzo",
+      "zoomGroup": "Control de zoom",
+      "navigationGroup": "Navegación y niveles",
+      "zoomOut": "Alejar",
+      "zoomIn": "Acercar",
+      "fit": "Ajustar a pantalla",
+      "locateMe": "Ubicarme",
+      "expandLevel": "Expandir un nivel",
+      "collapseLevel": "Contraer un nivel",
+      "resetHome": "Volver al inicio"
+    },
+    "drawer": {
+      "noJobTitle": "Sin puesto asignado",
+      "focusBranch": "Enfocar esta rama",
+      "copyEmail": "Copiar email laboral",
+      "directManager": "Responsable directo",
+      "noManager": "Sin responsable directo",
+      "directReports": "Equipo directo",
+      "noReports": "Sin subordinados directos",
+      "openFullProfile": "Ver ficha completa de RR. HH."
+    },
+    "announcements": {
+      "located": "Centrado en {{name}}",
+      "expandedLevel": "Se expandió un nivel adicional",
+      "collapsedLevel": "Se contrajo el último nivel expandido",
+      "resetView": "Vista completa restablecida",
+      "locateMeUnavailable": "Tu cuenta no tiene una ficha de empleado activa vinculada",
+      "myTeamUnavailable": "No hay un equipo directo disponible para enfocar",
+      "focusedBranch": "Enfocado en la rama de {{name}}",
+      "exportedPng": "Organigrama exportado en PNG (HD)",
+      "exportedSvg": "Organigrama exportado en SVG"
+    }
   }
 }

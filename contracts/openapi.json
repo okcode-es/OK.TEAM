@@ -1913,6 +1913,71 @@
         }
       }
     },
+    "/api/v1/attendance/day-reviews": {
+      "post": {
+        "tags": [
+          "attendance"
+        ],
+        "summary": "Batch Review Attendance Days",
+        "operationId": "batchReviewAttendanceDays",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchReviewAttendanceDaysRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchReviewAttendanceDaysResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/attendance/export.csv": {
       "get": {
         "tags": [
@@ -2020,6 +2085,128 @@
                 "schema": {}
               },
               "text/csv": {}
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/attendance/export.pdf": {
+      "get": {
+        "tags": [
+          "attendance"
+        ],
+        "summary": "Export Attendance Pdf",
+        "operationId": "exportAttendancePdf",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "store_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Store Id"
+            }
+          },
+          {
+            "name": "employee_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Employee Id"
+            }
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date From"
+            }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date To"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ITSS-compliant Spanish (es-ES) A4 attendance PDF export",
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "application/pdf": {}
             }
           },
           "422": {
@@ -5337,6 +5524,61 @@
         }
       }
     },
+    "/api/v1/organization/org-chart": {
+      "get": {
+        "tags": [
+          "organization"
+        ],
+        "summary": "Get tenant interactive organization chart (GDPR-minimized, all active roles)",
+        "operationId": "getOrganizationOrgChart",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgChartResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/reports/executive-summary": {
       "get": {
         "tags": [
@@ -6371,6 +6613,67 @@
         ],
         "title": "ApprovedLeaveSummaryResponse"
       },
+      "AttendanceDayReviewResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "employee_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Employee Id"
+          },
+          "store_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Store Id"
+          },
+          "local_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Local Date"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AttendanceDayReviewStatus"
+          },
+          "reviewed_by_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Reviewed By User Id"
+          },
+          "reviewed_at_utc": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Reviewed At Utc"
+          },
+          "note": {
+            "type": "string",
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "employee_id",
+          "store_id",
+          "local_date",
+          "status",
+          "reviewed_by_user_id",
+          "reviewed_at_utc",
+          "note"
+        ],
+        "title": "AttendanceDayReviewResponse"
+      },
+      "AttendanceDayReviewStatus": {
+        "type": "string",
+        "enum": [
+          "submitted",
+          "approved"
+        ],
+        "title": "AttendanceDayReviewStatus"
+      },
       "AttendanceEventResponse": {
         "properties": {
           "id": {
@@ -6500,6 +6803,47 @@
         ],
         "title": "AttendanceLedgerResponse"
       },
+      "AttendanceSegmentResponse": {
+        "properties": {
+          "type": {
+            "$ref": "#/components/schemas/SegmentType"
+          },
+          "start_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Start At"
+          },
+          "end_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End At"
+          },
+          "duration_minutes": {
+            "type": "integer",
+            "title": "Duration Minutes"
+          },
+          "is_paid": {
+            "type": "boolean",
+            "title": "Is Paid"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "start_at",
+          "end_at",
+          "duration_minutes",
+          "is_paid"
+        ],
+        "title": "AttendanceSegmentResponse"
+      },
       "AttendanceSource": {
         "type": "string",
         "enum": [
@@ -6547,6 +6891,62 @@
           "tenants"
         ],
         "title": "AuthMeResponse"
+      },
+      "BatchReviewAttendanceDaysRequest": {
+        "properties": {
+          "employee_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Employee Id"
+          },
+          "dates": {
+            "items": {
+              "type": "string",
+              "format": "date"
+            },
+            "type": "array",
+            "maxItems": 31,
+            "minItems": 1,
+            "title": "Dates"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "submit",
+              "approve"
+            ],
+            "title": "Action"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 300,
+            "title": "Note",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "employee_id",
+          "dates",
+          "action"
+        ],
+        "title": "BatchReviewAttendanceDaysRequest"
+      },
+      "BatchReviewAttendanceDaysResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AttendanceDayReviewResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "BatchReviewAttendanceDaysResponse"
       },
       "Body_bulkImportEmployees": {
         "properties": {
@@ -7646,6 +8046,43 @@
             },
             "type": "array",
             "title": "Alerts"
+          },
+          "segments": {
+            "items": {
+              "$ref": "#/components/schemas/AttendanceSegmentResponse"
+            },
+            "type": "array",
+            "title": "Segments"
+          },
+          "planned_minutes": {
+            "type": "integer",
+            "title": "Planned Minutes"
+          },
+          "is_locked": {
+            "type": "boolean",
+            "title": "Is Locked"
+          },
+          "daily_limit_minutes": {
+            "type": "integer",
+            "title": "Daily Limit Minutes"
+          },
+          "total_paid_break_minutes": {
+            "type": "integer",
+            "title": "Total Paid Break Minutes"
+          },
+          "total_auto_deducted_break_minutes": {
+            "type": "integer",
+            "title": "Total Auto Deducted Break Minutes"
+          },
+          "review_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AttendanceDayReviewStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -7659,7 +8096,14 @@
           "total_net_minutes",
           "total_net_hours",
           "has_corrections",
-          "alerts"
+          "alerts",
+          "segments",
+          "planned_minutes",
+          "is_locked",
+          "daily_limit_minutes",
+          "total_paid_break_minutes",
+          "total_auto_deducted_break_minutes",
+          "review_status"
         ],
         "title": "DailyAttendanceSummaryResponse"
       },
@@ -8202,6 +8646,10 @@
             "type": "string",
             "title": "Store Timezone"
           },
+          "contracted_weekly_hours": {
+            "type": "string",
+            "title": "Contracted Weekly Hours"
+          },
           "total_net_hours": {
             "type": "string",
             "title": "Total Net Hours"
@@ -8217,6 +8665,30 @@
           "annual_overtime_hours": {
             "type": "string",
             "title": "Annual Overtime Hours"
+          },
+          "closed_months": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Closed Months"
+          },
+          "effective_break_policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EffectiveBreakPolicyResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "day_reviews": {
+            "items": {
+              "$ref": "#/components/schemas/AttendanceDayReviewResponse"
+            },
+            "type": "array",
+            "title": "Day Reviews"
           },
           "daily_summaries": {
             "items": {
@@ -8256,10 +8728,13 @@
           "store_code",
           "store_name",
           "store_timezone",
+          "contracted_weekly_hours",
           "total_net_hours",
           "regular_hours",
           "overtime_hours",
           "annual_overtime_hours",
+          "closed_months",
+          "day_reviews",
           "daily_summaries",
           "sessions",
           "alerts",
@@ -8523,6 +8998,18 @@
               }
             ],
             "title": "Default Break Minutes"
+          },
+          "manager_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manager Id"
           },
           "hire_date": {
             "type": "string",
@@ -8788,6 +9275,18 @@
               }
             ],
             "title": "Default Break Minutes"
+          },
+          "manager_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manager Id"
           },
           "is_overtime_prohibited": {
             "type": "boolean",
@@ -9188,6 +9687,18 @@
               }
             ],
             "title": "Default Break Minutes"
+          },
+          "manager_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manager Id"
           },
           "hire_date": {
             "type": "string",
@@ -10755,6 +11266,149 @@
         ],
         "title": "MyDashboardResponse"
       },
+      "OrgChartNodePublic": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "full_name": {
+            "type": "string",
+            "title": "Full Name"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "job_title": {
+            "type": "string",
+            "title": "Job Title"
+          },
+          "department_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Department Id"
+          },
+          "department_name": {
+            "type": "string",
+            "title": "Department Name"
+          },
+          "store_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Store Id"
+          },
+          "store_name": {
+            "type": "string",
+            "title": "Store Name"
+          },
+          "work_email": {
+            "type": "string",
+            "title": "Work Email"
+          },
+          "manager_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manager Id"
+          },
+          "direct_reports_count": {
+            "type": "integer",
+            "title": "Direct Reports Count"
+          },
+          "total_reports_count": {
+            "type": "integer",
+            "title": "Total Reports Count"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "full_name",
+          "job_title",
+          "department_name",
+          "store_id",
+          "store_name",
+          "work_email",
+          "direct_reports_count",
+          "total_reports_count"
+        ],
+        "title": "OrgChartNodePublic",
+        "description": "Strictly GDPR-minimized public org-chart node (exact 12 fields, no sensitive HR/PII)."
+      },
+      "OrgChartResponse": {
+        "properties": {
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/OrgChartNodePublic"
+            },
+            "type": "array",
+            "title": "Nodes"
+          },
+          "root_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Root Ids"
+          },
+          "unassigned_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "title": "Unassigned Ids"
+          },
+          "current_employee_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Employee Id"
+          },
+          "total_active_employees": {
+            "type": "integer",
+            "title": "Total Active Employees"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "nodes",
+          "root_ids",
+          "unassigned_ids",
+          "total_active_employees"
+        ],
+        "title": "OrgChartResponse"
+      },
       "PublishWeekRequest": {
         "properties": {
           "store_id": {
@@ -11056,6 +11710,14 @@
           "limit_value"
         ],
         "title": "ScheduleAlertResponse"
+      },
+      "SegmentType": {
+        "type": "string",
+        "enum": [
+          "work",
+          "break"
+        ],
+        "title": "SegmentType"
       },
       "ShiftMutationResponse": {
         "properties": {

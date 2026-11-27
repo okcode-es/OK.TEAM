@@ -2,17 +2,23 @@
 
 from __future__ import annotations
 
+import calendar
 import csv
 import io
 from collections import Counter, defaultdict
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from dataclasses import dataclass, replace
+from datetime import UTC, date, datetime, time, timedelta
+from decimal import Decimal
+from typing import Literal
 from uuid import UUID, uuid4
 
 from app.application.break_policies import build_break_policy_lookup, resolve_policy_for_employee
 from app.domain.attendance import (
     AlertCode,
+    AlertSeverity,
+    AttendanceDayReview,
+    AttendanceDayReviewStatus,
     AttendanceEvent,
     AttendanceEventType,
     AttendanceLedgerReport,
@@ -36,6 +42,7 @@ from app.domain.employees import (
     FrozenRecordError,
     normalize_employee_code,
 )
+from app.domain.leaves import LeaveStatus, LeaveType
 from app.domain.organization import (
     ConflictError,
     EntityNotFoundError,
@@ -43,14 +50,23 @@ from app.domain.organization import (
     ValidationDomainError,
     validate_non_empty_text,
 )
+from app.domain.payroll import (
+    AttendancePdfDayRow,
+    AttendancePdfDocumentInput,
+    AttendancePdfRendererPort,
+)
 from app.domain.repositories import (
+    AttendanceDayReviewRepository,
     AttendanceRepository,
     BreakPolicyRepository,
     EmployeeRepository,
+    LeaveRepository,
     PayrollClosingRepository,
+    ShiftRepository,
     StoreRepository,
     TenantRepository,
 )
+from app.domain.scheduling import ShiftStatus
 from app.domain.security import (
     TENANT_WIDE_ROLES,
     AuthenticatedPrincipal,
@@ -126,6 +142,17 @@ class EmployeeAttendanceLedgerItem:
     store: Store
     report: AttendanceLedgerReport
     events: tuple[AttendanceEvent, ...]
+    effective_break_policy: EffectiveBreakPolicy | None = None
+    closed_months: tuple[str, ...] = ()
+    day_reviews: tuple[AttendanceDayReview, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class BatchReviewAttendanceDaysCommand:
+    employee_id: UUID
+    dates: tuple[date, ...]
+    action: Literal["submit", "approve"]
+    note: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -763,6 +790,8 @@ class GetAttendanceLedgerUseCase:
         utc_now: Callable[[], datetime] | None = None,
         payroll_repo: PayrollClosingRepository | None = None,
         policy_repo: BreakPolicyRepository | None = None,
+        shift_repo: ShiftRepository | None = None,
+        day_review_repo: AttendanceDayReviewRepository | None = None,
     ) -> None:
         self._attendance_repo = attendance_repo
         self._employee_repo = employee_repo
@@ -770,6 +799,8 @@ class GetAttendanceLedgerUseCase:
         self._utc_now = utc_now or (lambda: datetime.now(UTC))
         self._payroll_repo = payroll_repo
         self._policy_repo = policy_repo
+        self._shift_repo = shift_repo
+        self._day_review_repo = day_review_repo
 
     async def execute(
         self,
@@ -876,6 +907,30 @@ class GetAttendanceLedgerUseCase:
             else None
         )
         has_mutations = False
+        reviews_by_emp: dict[UUID, list[AttendanceDayReview]] = defaultdict(list)
+        review_by_emp_date: dict[tuple[UUID, date], AttendanceDayReview] = {}
+        if self._day_review_repo is not None and employees:
+            all_reviews = await self._day_review_repo.list_by_tenant(
+                principal.tenant_id,
+                employee_ids=[e.id for e in employees],
+                date_from=date_from,
+                date_to=date_to,
+            )
+            for rev in all_reviews:
+                reviews_by_emp[rev.employee_id].append(rev)
+                review_by_emp_date[(rev.employee_id, rev.local_date)] = rev
+
+        range_months: set[str] = set()
+        if date_from is not None and date_to is not None:
+            m_cursor = date_from.replace(day=1)
+            end_m = date_to.replace(day=1)
+            while m_cursor <= end_m:
+                range_months.add(m_cursor.strftime("%Y-%m"))
+                if m_cursor.month == 12:
+                    m_cursor = date(m_cursor.year + 1, 1, 1)
+                else:
+                    m_cursor = date(m_cursor.year, m_cursor.month + 1, 1)
+
         items: list[EmployeeAttendanceLedgerItem] = []
         for emp in employees:
             store = store_map.get(emp.primary_store_id)
@@ -909,7 +964,84 @@ class GetAttendanceLedgerUseCase:
                 date_from=date_from,
                 date_to=date_to,
                 break_policy=eff_policy,
+                now_utc=now_utc,
             )
+
+            spanned_months = set(range_months)
+            if not spanned_months:
+                spanned_months = {s.local_date.strftime("%Y-%m") for s in report.daily_summaries}
+                if date_from is not None:
+                    spanned_months.add(date_from.strftime("%Y-%m"))
+                if date_to is not None:
+                    spanned_months.add(date_to.strftime("%Y-%m"))
+
+            closed_by_store: dict[UUID, set[str]] = {}
+            if self._payroll_repo is not None and spanned_months:
+                month_list = sorted(spanned_months)
+                store_ids_to_check = {emp.primary_store_id} | {s.store_id for s in report.sessions}
+                for check_store_id in store_ids_to_check:
+                    closed_by_store[check_store_id] = (
+                        await self._payroll_repo.list_closed_months_for_store(
+                            principal.tenant_id, check_store_id, month_list
+                        )
+                    )
+            closed_months = tuple(sorted(closed_by_store.get(emp.primary_store_id, set())))
+
+            shifts_by_date: dict[date, list[int]] = defaultdict(list)
+            if self._shift_repo is not None and report.daily_summaries:
+                min_dt = report.daily_summaries[0].local_date
+                max_dt = report.daily_summaries[-1].local_date
+                win_start = datetime.combine(min_dt - timedelta(days=1), time.min, tzinfo=UTC)
+                win_end = datetime.combine(max_dt + timedelta(days=2), time.min, tzinfo=UTC)
+                emp_shifts = await self._shift_repo.list_by_employee_window(
+                    principal.tenant_id,
+                    emp.id,
+                    window_start_utc=win_start,
+                    window_end_utc=win_end,
+                )
+                for sh in emp_shifts:
+                    if not sh.is_active:
+                        continue
+                    if principal.role == UserRole.EMPLOYEE and sh.status != ShiftStatus.PUBLISHED:
+                        continue
+                    if (
+                        principal.role == UserRole.STORE_MANAGER
+                        and sh.store_id not in principal.store_ids
+                    ):
+                        continue
+                    sh_store = store_map.get(sh.store_id) or store
+                    sh_local_date = sh.start_at_utc.astimezone(
+                        resolve_timezone(sh_store.timezone)
+                    ).date()
+                    shifts_by_date[sh_local_date].append(sh.net_minutes)
+
+            contract_daily_mins = int(
+                (emp.contracted_weekly_hours * Decimal(60) / Decimal(5)).to_integral_value()
+            )
+            updated_summaries = []
+            for summary in report.daily_summaries:
+                if summary.local_date in shifts_by_date:
+                    planned_mins = sum(shifts_by_date[summary.local_date])
+                else:
+                    planned_mins = contract_daily_mins if summary.local_date.weekday() < 5 else 0
+                day_rev = review_by_emp_date.get((emp.id, summary.local_date))
+                summary_month = summary.local_date.strftime("%Y-%m")
+                day_locked = summary_month in closed_by_store.get(
+                    emp.primary_store_id, set()
+                ) or any(
+                    summary_month in closed_by_store.get(s.store_id, set())
+                    for s in summary.sessions
+                )
+                updated_summaries.append(
+                    replace(
+                        summary,
+                        planned_minutes=planned_mins,
+                        is_locked=day_locked,
+                        review_status=(day_rev.status if day_rev is not None else None),
+                    )
+                )
+            report = replace(report, daily_summaries=tuple(updated_summaries))
+
             filtered_events = tuple(
                 ev
                 for ev in emp_events
@@ -932,6 +1064,9 @@ class GetAttendanceLedgerUseCase:
                     store=store,
                     report=report,
                     events=filtered_events,
+                    effective_break_policy=eff_policy,
+                    closed_months=closed_months,
+                    day_reviews=tuple(reviews_by_emp.get(emp.id, ())),
                 )
             )
 
@@ -1056,3 +1191,340 @@ class ExportAttendanceCsvUseCase:
                 )
 
         return buffer.getvalue()
+
+
+class BatchReviewAttendanceDaysUseCase:
+    def __init__(
+        self,
+        attendance_repo: AttendanceRepository,
+        employee_repo: EmployeeRepository,
+        store_repo: StoreRepository,
+        day_review_repo: AttendanceDayReviewRepository,
+        *,
+        utc_now: Callable[[], datetime] | None = None,
+        payroll_repo: PayrollClosingRepository | None = None,
+        policy_repo: BreakPolicyRepository | None = None,
+    ) -> None:
+        self._attendance_repo = attendance_repo
+        self._employee_repo = employee_repo
+        self._store_repo = store_repo
+        self._day_review_repo = day_review_repo
+        self._utc_now = utc_now or (lambda: datetime.now(UTC))
+        self._payroll_repo = payroll_repo
+        self._policy_repo = policy_repo
+
+    async def execute(
+        self,
+        principal: AuthenticatedPrincipal,
+        command: BatchReviewAttendanceDaysCommand,
+    ) -> list[AttendanceDayReview]:
+        if principal.role == UserRole.ACCOUNTANT:
+            raise ForbiddenScopeError(
+                "Accountant role is read-only and cannot review attendance days"
+            )
+
+        emp = await self._employee_repo.get_by_id(principal.tenant_id, command.employee_id)
+        if emp is None:
+            raise EntityNotFoundError("Employee not found")
+
+        if principal.role == UserRole.EMPLOYEE:
+            if command.action != "submit" or emp.user_id != principal.user_id:
+                raise ForbiddenScopeError(
+                    "Employees may only submit their own attendance days for review"
+                )
+        elif principal.role == UserRole.STORE_MANAGER:
+            if emp.user_id == principal.user_id and command.action == "approve":
+                raise ForbiddenScopeError(
+                    "Store managers cannot self-approve their own attendance days"
+                )
+            if not (emp.user_id == principal.user_id and command.action == "submit"):
+                principal.require_store_access(principal.tenant_id, emp.primary_store_id)
+                if (
+                    emp.employment_status not in MANAGER_VISIBLE_STATUSES
+                    or emp.deleted_at is not None
+                ):
+                    raise ForbiddenScopeError(
+                        "Frozen or anonymized employee records are blocked from store manager "
+                        "access (Art. 32 LOPDGDD)"
+                    )
+                principal.require_employee_in_scope(emp)
+        elif principal.role not in {UserRole.OWNER, UserRole.HR}:
+            raise ForbiddenScopeError("Insufficient permissions to review attendance days")
+
+        if emp.employment_status not in CLOCKABLE_STATUSES or emp.deleted_at is not None:
+            raise FrozenRecordError(
+                f"Employee with status '{emp.employment_status.value}' cannot be reviewed"
+            )
+
+        unique_dates = tuple(dict.fromkeys(command.dates))
+        if not (1 <= len(unique_dates) <= 31):
+            raise ValidationDomainError("dates must contain between 1 and 31 unique dates")
+
+        store = await self._store_repo.get_by_id(principal.tenant_id, emp.primary_store_id)
+        if store is None:
+            raise EntityNotFoundError("Store not found")
+
+        now_utc = _ensure_utc(self._utc_now())
+        store_local_today = now_utc.astimezone(resolve_timezone(store.timezone)).date()
+        for dt in unique_dates:
+            if dt > store_local_today:
+                raise ValidationDomainError("Cannot review future attendance dates")
+
+        emp_events = await self._attendance_repo.list_by_employee(principal.tenant_id, emp.id)
+        eff_policy = None
+        if self._policy_repo is not None:
+            lookup = build_break_policy_lookup(
+                await self._policy_repo.list_by_tenant(principal.tenant_id)
+            )
+            eff_policy = resolve_policy_for_employee(emp, lookup)
+
+        report = evaluate_attendance_ledger(
+            employee_id=emp.id,
+            events=emp_events,
+            birth_date=emp.birth_date,
+            work_schedule_type=emp.work_schedule_type,
+            contracted_weekly_hours=emp.contracted_weekly_hours,
+            break_policy=eff_policy,
+            now_utc=now_utc,
+        )
+
+        target_dates = set(unique_dates)
+        checks: set[tuple[UUID, str]] = {
+            (emp.primary_store_id, dt.strftime("%Y-%m")) for dt in unique_dates
+        }
+        for sess in report.sessions:
+            if sess.local_date in target_dates:
+                checks.add((sess.store_id, sess.local_date.strftime("%Y-%m")))
+        await _check_store_months_open(
+            self._payroll_repo,
+            tenant_id=principal.tenant_id,
+            checks=checks,
+        )
+
+        if command.action == "submit":
+            existing_reviews = await self._day_review_repo.list_by_employee(
+                principal.tenant_id,
+                emp.id,
+                date_from=min(unique_dates),
+                date_to=max(unique_dates),
+            )
+            if any(
+                r.status == AttendanceDayReviewStatus.APPROVED and r.local_date in target_dates
+                for r in existing_reviews
+            ):
+                raise ConflictError("Cannot re-submit an already approved attendance day")
+
+        if command.action == "approve":
+            if any(sess.is_open for sess in report.sessions if sess.local_date in target_dates):
+                raise ConflictError("Cannot approve attendance day with an open shift")
+            if any(
+                alert.severity == AlertSeverity.VIOLATION
+                for alert in report.alerts
+                if alert.local_date in target_dates
+            ):
+                raise ConflictError("Cannot approve attendance day with compliance violations")
+
+        target_status = (
+            AttendanceDayReviewStatus.SUBMITTED
+            if command.action == "submit"
+            else AttendanceDayReviewStatus.APPROVED
+        )
+        clean_note = command.note.strip()[:300]
+        reviews = [
+            AttendanceDayReview(
+                id=uuid4(),
+                tenant_id=principal.tenant_id,
+                employee_id=emp.id,
+                store_id=emp.primary_store_id,
+                local_date=dt,
+                status=target_status,
+                reviewed_by_user_id=principal.user_id,
+                reviewed_at_utc=now_utc,
+                note=clean_note,
+                created_at=now_utc,
+                updated_at=now_utc,
+            )
+            for dt in unique_dates
+        ]
+        return await self._day_review_repo.upsert_many(reviews)
+
+
+class ExportAttendancePdfUseCase:
+    def __init__(
+        self,
+        ledger_use_case: GetAttendanceLedgerUseCase,
+        tenant_repo: TenantRepository,
+        pdf_renderer: AttendancePdfRendererPort,
+        *,
+        leave_repo: LeaveRepository | None = None,
+        utc_now: Callable[[], datetime] | None = None,
+    ) -> None:
+        self._ledger_use_case = ledger_use_case
+        self._tenant_repo = tenant_repo
+        self._pdf_renderer = pdf_renderer
+        self._leave_repo = leave_repo
+        self._utc_now = utc_now or (lambda: datetime.now(UTC))
+
+    async def execute(
+        self,
+        principal: AuthenticatedPrincipal,
+        *,
+        store_id: UUID | None = None,
+        employee_id: UUID | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> tuple[bytes, str, bool]:
+        tenant = await self._tenant_repo.get_by_id(principal.tenant_id)
+        if tenant is None:
+            raise EntityNotFoundError("Tenant not found")
+
+        if principal.role != UserRole.EMPLOYEE and employee_id is None:
+            raise ValidationDomainError(
+                "employee_id query parameter is required for attendance PDF export"
+            )
+
+        ledger = await self._ledger_use_case.execute(
+            principal,
+            store_id=store_id,
+            employee_id=employee_id,
+            date_from=date_from,
+            date_to=date_to,
+        )
+        if not ledger.items:
+            raise EntityNotFoundError("No attendance records found in scope")
+
+        item = ledger.items[0]
+        now_utc = _ensure_utc(self._utc_now())
+        tz = resolve_timezone(item.store.timezone)
+
+        redact_health = principal.role == UserRole.ACCOUNTANT and (
+            item.employee.user_id != principal.user_id
+            or item.employee.employment_status not in CLOCKABLE_STATUSES
+            or item.employee.deleted_at is not None
+        )
+
+        if date_from is not None and date_to is not None:
+            last_dom = calendar.monthrange(date_to.year, date_to.month)[1]
+            if (
+                date_from.day == 1
+                and date_from.year == date_to.year
+                and date_from.month == date_to.month
+                and date_to.day == last_dom
+            ):
+                period_month = date_from.strftime("%Y-%m")
+            else:
+                period_month = f"{date_from.isoformat()}..{date_to.isoformat()}"
+        elif date_from is not None:
+            period_month = f"{date_from.isoformat()}.."
+        elif date_to is not None:
+            period_month = f"..{date_to.isoformat()}"
+        else:
+            period_month = now_utc.astimezone(tz).strftime("%Y-%m")
+
+        vacation_days = 0
+        sick_leave_days = 0
+        paid_leave_days = 0
+        unpaid_leave_days = 0
+        if self._leave_repo is not None:
+            if date_from is not None and date_to is not None:
+                range_start, range_end = date_from, date_to
+            elif item.report.daily_summaries:
+                range_start = item.report.daily_summaries[0].local_date
+                range_end = item.report.daily_summaries[-1].local_date
+            else:
+                today_local = now_utc.astimezone(tz).date()
+                range_start = today_local.replace(day=1)
+                range_end = today_local.replace(
+                    day=calendar.monthrange(today_local.year, today_local.month)[1]
+                )
+            leaves = await self._leave_repo.list_by_employee(principal.tenant_id, item.employee.id)
+            for lv in leaves:
+                if lv.deleted_at is not None or lv.status != LeaveStatus.APPROVED:
+                    continue
+                ov_start = max(lv.start_date, range_start)
+                ov_end = min(lv.end_date, range_end)
+                if ov_end >= ov_start:
+                    days = (ov_end - ov_start).days + 1
+                    if lv.leave_type == LeaveType.VACATION:
+                        vacation_days += days
+                    elif lv.leave_type in {LeaveType.SICK_LEAVE, LeaveType.MEDICAL_APPOINTMENT}:
+                        sick_leave_days += days
+                    elif lv.leave_type == LeaveType.UNPAID_LEAVE:
+                        unpaid_leave_days += days
+                    else:
+                        paid_leave_days += days
+
+        alerts_by_date: dict[date, list[str]] = defaultdict(list)
+        for alert in item.report.alerts:
+            alerts_by_date[alert.local_date].append(alert.code.value)
+
+        daily_rows = tuple(
+            AttendancePdfDayRow(
+                local_date=sess.local_date,
+                clock_in_local=sess.clock_in_utc.astimezone(
+                    resolve_timezone(sess.store_timezone)
+                ).strftime("%H:%M"),
+                clock_out_local=(
+                    sess.clock_out_utc.astimezone(
+                        resolve_timezone(sess.store_timezone)
+                    ).strftime("%H:%M")
+                    if sess.clock_out_utc is not None
+                    else "Abierta"
+                ),
+                break_minutes=sess.break_minutes,
+                net_hours=sess.net_hours,
+                has_corrections=sess.has_corrections,
+                notes=", ".join(alerts_by_date.get(sess.local_date, ())),
+            )
+            for sess in item.report.sessions
+        )
+
+        pdf_bytes = self._pdf_renderer.render_monthly_attendance_pdf(
+            AttendancePdfDocumentInput(
+                tenant_legal_name=tenant.legal_name,
+                tenant_cif=tenant.cif_nif,
+                store_code=item.store.code,
+                store_name=item.store.name,
+                store_timezone=item.store.timezone,
+                period_month=period_month,
+                revision_number=1,
+                employee_full_name=item.employee.full_name,
+                employee_code=item.employee.employee_code,
+                nie_dni_masked=item.employee.nie_dni_masked,
+                contract_type=item.employee.contract_type,
+                work_schedule_type=item.employee.work_schedule_type,
+                contracted_weekly_hours=item.employee.contracted_weekly_hours,
+                worked_days=len({s.local_date for s in item.report.sessions if not s.is_open}),
+                total_net_hours=item.report.total_net_hours,
+                regular_hours=item.report.regular_hours,
+                overtime_hours=item.report.overtime_hours,
+                annual_overtime_hours=item.report.annual_overtime_hours,
+                total_break_minutes=sum(
+                    s.break_minutes for s in item.report.sessions if not s.is_open
+                ),
+                vacation_days=vacation_days,
+                sick_leave_days=sick_leave_days,
+                paid_leave_days=paid_leave_days,
+                unpaid_leave_days=unpaid_leave_days,
+                warning_alerts_count=sum(
+                    1 for a in item.report.alerts if a.severity == AlertSeverity.WARNING
+                ),
+                violation_alerts_count=sum(
+                    1 for a in item.report.alerts if a.severity == AlertSeverity.VIOLATION
+                ),
+                daily_rows=daily_rows,
+                generated_at_utc=now_utc,
+                redact_health=redact_health,
+            )
+        )
+        safe_code = "".join(
+            c if (c.isascii() and c.isalnum()) or c in "-_" else "_"
+            for c in item.employee.employee_code
+        )
+        period_for_file = period_month.replace("..", "_to_")
+        safe_period = "".join(
+            c if (c.isascii() and c.isalnum()) or c in "-_." else "_"
+            for c in period_for_file
+        )
+        filename = f"registro_jornada_{safe_code}_{safe_period}.pdf"
+        return (pdf_bytes, filename, ledger.has_mutations)

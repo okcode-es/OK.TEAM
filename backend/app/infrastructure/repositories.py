@@ -8,6 +8,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import and_, delete, func, or_, select
+from sqlalchemy import update as sa_update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -18,6 +19,8 @@ from app.domain.announcements import (
     AnnouncementCategory,
 )
 from app.domain.attendance import (
+    AttendanceDayReview,
+    AttendanceDayReviewStatus,
     AttendanceEvent,
     AttendanceEventType,
     AttendanceSource,
@@ -68,6 +71,7 @@ from app.domain.security import MembershipStatus, UserRole
 from app.infrastructure.models import (
     AnnouncementAcknowledgementModel,
     AnnouncementModel,
+    AttendanceDayReviewModel,
     AttendanceEventModel,
     BreakPolicyModel,
     ComplianceDocumentModel,
@@ -644,6 +648,7 @@ def _to_employee(model: EmployeeModel) -> Employee:
         avatar_mime_type=model.avatar_mime_type,
         avatar_updated_at=model.avatar_updated_at,
         default_break_minutes=model.default_break_minutes,
+        manager_id=model.manager_id,
         retention_until=model.retention_until,
         anonymized_at=model.anonymized_at,
         created_at=model.created_at,
@@ -757,6 +762,7 @@ class SqlAlchemyEmployeeRepository:
             contracted_weekly_hours=employee.contracted_weekly_hours,
             annual_vacation_days=employee.annual_vacation_days,
             default_break_minutes=employee.default_break_minutes,
+            manager_id=employee.manager_id,
             hire_date=employee.hire_date,
             termination_date=employee.termination_date,
             nie_dni_enc=employee.nie_dni_enc,
@@ -818,6 +824,7 @@ class SqlAlchemyEmployeeRepository:
         emergency_contact_name: str = "",
         emergency_contact_phone: str = "",
         default_break_minutes: int | None = None,
+        manager_id: UUID | None = None,
     ) -> Employee | None:
         stmt = select(EmployeeModel).where(
             EmployeeModel.tenant_id == tenant_id,
@@ -849,6 +856,7 @@ class SqlAlchemyEmployeeRepository:
         model.contracted_weekly_hours = contracted_weekly_hours
         model.annual_vacation_days = annual_vacation_days
         model.default_break_minutes = default_break_minutes
+        model.manager_id = manager_id
         model.hire_date = hire_date
         model.employment_status = employment_status.value
         model.nie_dni_enc = nie_dni_enc
@@ -942,6 +950,7 @@ class SqlAlchemyEmployeeRepository:
             return None
 
         model.user_id = None
+        model.manager_id = None
         model.full_name = anonymized_full_name
         model.preferred_name = ""
         model.job_title = ""
@@ -965,6 +974,14 @@ class SqlAlchemyEmployeeRepository:
         model.anonymized_at = anonymized_at
         model.deleted_at = anonymized_at
         model.updated_at = anonymized_at
+        await self._session.execute(
+            sa_update(EmployeeModel)
+            .where(
+                EmployeeModel.tenant_id == tenant_id,
+                EmployeeModel.manager_id == employee_id,
+            )
+            .values(manager_id=None, updated_at=anonymized_at)
+        )
         await self._session.flush()
         return _to_employee(model)
 
@@ -2388,3 +2405,114 @@ class SqlAlchemyBreakPolicyRepository:
         model.updated_by_user_id = updated_by_user_id
         await self._session.flush()
         return _to_break_policy(model)
+
+
+def _to_attendance_day_review(model: AttendanceDayReviewModel) -> AttendanceDayReview:
+    return AttendanceDayReview(
+        id=model.id,
+        tenant_id=model.tenant_id,
+        employee_id=model.employee_id,
+        store_id=model.store_id,
+        local_date=model.local_date,
+        status=AttendanceDayReviewStatus(model.status),
+        reviewed_by_user_id=model.reviewed_by_user_id,
+        reviewed_at_utc=model.reviewed_at_utc,
+        note=model.note,
+        created_at=model.created_at,
+        updated_at=model.updated_at,
+    )
+
+
+class SqlAlchemyAttendanceDayReviewRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def list_by_employee(
+        self,
+        tenant_id: UUID,
+        employee_id: UUID,
+        *,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> list[AttendanceDayReview]:
+        stmt = select(AttendanceDayReviewModel).where(
+            AttendanceDayReviewModel.tenant_id == tenant_id,
+            AttendanceDayReviewModel.employee_id == employee_id,
+        )
+        if date_from is not None:
+            stmt = stmt.where(AttendanceDayReviewModel.local_date >= date_from)
+        if date_to is not None:
+            stmt = stmt.where(AttendanceDayReviewModel.local_date <= date_to)
+        stmt = stmt.order_by(AttendanceDayReviewModel.local_date.asc())
+        result = await self._session.execute(stmt)
+        return [_to_attendance_day_review(row) for row in result.scalars().all()]
+
+    async def list_by_tenant(
+        self,
+        tenant_id: UUID,
+        *,
+        employee_ids: Sequence[UUID] | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> list[AttendanceDayReview]:
+        if employee_ids is not None and len(employee_ids) == 0:
+            return []
+        stmt = select(AttendanceDayReviewModel).where(
+            AttendanceDayReviewModel.tenant_id == tenant_id
+        )
+        if employee_ids is not None:
+            stmt = stmt.where(AttendanceDayReviewModel.employee_id.in_(list(employee_ids)))
+        if date_from is not None:
+            stmt = stmt.where(AttendanceDayReviewModel.local_date >= date_from)
+        if date_to is not None:
+            stmt = stmt.where(AttendanceDayReviewModel.local_date <= date_to)
+        stmt = stmt.order_by(
+            AttendanceDayReviewModel.local_date.asc(),
+            AttendanceDayReviewModel.employee_id.asc(),
+        )
+        result = await self._session.execute(stmt)
+        return [_to_attendance_day_review(row) for row in result.scalars().all()]
+
+    async def upsert_many(
+        self,
+        reviews: Sequence[AttendanceDayReview],
+    ) -> list[AttendanceDayReview]:
+        if not reviews:
+            return []
+        models: list[AttendanceDayReviewModel] = []
+        for review in reviews:
+            stmt = select(AttendanceDayReviewModel).where(
+                AttendanceDayReviewModel.tenant_id == review.tenant_id,
+                AttendanceDayReviewModel.employee_id == review.employee_id,
+                AttendanceDayReviewModel.local_date == review.local_date,
+            )
+            model = (await self._session.execute(stmt)).scalar_one_or_none()
+            if model is None:
+                model = AttendanceDayReviewModel(
+                    id=review.id,
+                    tenant_id=review.tenant_id,
+                    employee_id=review.employee_id,
+                    store_id=review.store_id,
+                    local_date=review.local_date,
+                    status=review.status.value,
+                    reviewed_by_user_id=review.reviewed_by_user_id,
+                    reviewed_at_utc=review.reviewed_at_utc,
+                    note=review.note,
+                    created_at=review.created_at,
+                    updated_at=review.updated_at,
+                )
+                self._session.add(model)
+            else:
+                model.store_id = review.store_id
+                model.status = review.status.value
+                model.reviewed_by_user_id = review.reviewed_by_user_id
+                model.reviewed_at_utc = review.reviewed_at_utc
+                model.note = review.note
+                model.updated_at = review.updated_at
+            models.append(model)
+        try:
+            await self._session.flush()
+        except IntegrityError as exc:
+            await self._session.rollback()
+            raise ConflictError("Concurrent attendance day review update conflict") from exc
+        return [_to_attendance_day_review(m) for m in models]

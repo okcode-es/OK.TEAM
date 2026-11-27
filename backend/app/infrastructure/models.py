@@ -202,8 +202,13 @@ class EmployeeModel(Base):
             "(default_break_minutes >= 5 AND default_break_minutes <= 180)",
             name="ck_employees_default_break_valid",
         ),
+        CheckConstraint(
+            "manager_id IS NULL OR manager_id <> id",
+            name="ck_employees_no_self_manager",
+        ),
         Index("ix_employees_tenant_store", "tenant_id", "primary_store_id"),
         Index("ix_employees_tenant_user", "tenant_id", "user_id"),
+        Index("ix_employees_tenant_manager", "tenant_id", "manager_id"),
         Index(
             "uq_employees_tenant_code_active",
             "tenant_id",
@@ -279,6 +284,11 @@ class EmployeeModel(Base):
         server_default=text("30"),
     )
     default_break_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    manager_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("employees.id", name="fk_employees_manager_id", ondelete="SET NULL"),
+        nullable=True,
+    )
     hire_date: Mapped[date] = mapped_column(Date, nullable=False)
     termination_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
@@ -988,3 +998,37 @@ class BreakPolicyModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AttendanceDayReviewModel(Base):
+    __tablename__ = "attendance_day_reviews"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('submitted', 'approved')",
+            name="ck_attendance_day_reviews_status",
+        ),
+        UniqueConstraint(
+            "tenant_id",
+            "employee_id",
+            "local_date",
+            name="uq_attendance_day_reviews_tenant_emp_date",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True)
+    tenant_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="RESTRICT"), nullable=False
+    )
+    employee_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("employees.id", ondelete="RESTRICT"), nullable=False
+    )
+    store_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("stores.id", ondelete="RESTRICT"), nullable=False
+    )
+    local_date: Mapped[date] = mapped_column(Date, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    reviewed_by_user_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
+    reviewed_at_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    note: Mapped[str] = mapped_column(String(300), nullable=False, server_default=text("''"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

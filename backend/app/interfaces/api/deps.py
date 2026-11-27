@@ -17,6 +17,7 @@ from app.domain.employees import PiiCipher
 from app.domain.payroll import AttendancePdfRendererPort
 from app.domain.repositories import (
     AnnouncementRepository,
+    AttendanceDayReviewRepository,
     AttendanceRepository,
     BreakPolicyRepository,
     DocumentRepository,
@@ -45,6 +46,7 @@ from app.infrastructure.pdf_generator import PurePythonAttendancePdfRenderer
 from app.infrastructure.pii_crypto import AesGcmPiiCipher
 from app.infrastructure.repositories import (
     SqlAlchemyAnnouncementRepository,
+    SqlAlchemyAttendanceDayReviewRepository,
     SqlAlchemyAttendanceRepository,
     SqlAlchemyBreakPolicyRepository,
     SqlAlchemyDocumentRepository,
@@ -163,6 +165,12 @@ def get_break_policy_repository(
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> BreakPolicyRepository:
     return SqlAlchemyBreakPolicyRepository(session)
+
+
+def get_attendance_day_review_repository(
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> AttendanceDayReviewRepository:
+    return SqlAlchemyAttendanceDayReviewRepository(session)
 
 
 def get_pdf_renderer() -> AttendancePdfRendererPort:

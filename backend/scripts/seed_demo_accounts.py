@@ -264,6 +264,7 @@ async def seed_demo_accounts() -> None:
                     updated_at=now,
                 )
                 session.add(emp_003)
+                await session.flush()
             else:
                 emp_003.user_id = hr_uid
                 emp_003.full_name = "Elena Chen"
@@ -272,6 +273,187 @@ async def seed_demo_accounts() -> None:
                 emp_003.job_title = "Responsable de RR. HH. / 人事主管"
                 emp_003.email = "hr@dragon.es"
                 emp_003.updated_at = now
+
+            # 3c. Phase 5I: Carlos Manager (EMP-004, linked to manager@dragon.es)
+            manager_uid = dev_user_id("manager@dragon.es")
+            emp_004 = (
+                await session.execute(
+                    select(EmployeeModel).where(
+                        EmployeeModel.tenant_id == tenant.id,
+                        func.upper(EmployeeModel.employee_code) == "EMP-004",
+                        EmployeeModel.deleted_at.is_(None),
+                    )
+                )
+            ).scalar_one_or_none()
+            if emp_004 is None:
+                emp_004 = EmployeeModel(
+                    id=uuid4(),
+                    tenant_id=tenant.id,
+                    primary_store_id=active_stores[0].id,
+                    user_id=manager_uid,
+                    manager_id=emp_003.id,
+                    employee_code="EMP-004",
+                    full_name="Carlos Manager",
+                    preferred_name="Carlos",
+                    department="Operaciones",
+                    job_title="Encargado de Tienda / 店长",
+                    email="manager@dragon.es",
+                    phone="",
+                    contract_type="indefinido",
+                    work_schedule_type="full_time",
+                    contracted_weekly_hours=Decimal("40.00"),
+                    annual_vacation_days=30,
+                    hire_date=date(2024, 3, 1),
+                    employment_status="active",
+                    created_at=now,
+                    updated_at=now,
+                )
+                session.add(emp_004)
+                await session.flush()
+            else:
+                emp_004.user_id = manager_uid
+                if emp_004.manager_id is None and emp_003.manager_id != emp_004.id:
+                    emp_004.manager_id = emp_003.id
+                emp_004.updated_at = now
+
+            # Wire EMP-001 and EMP-002 under Carlos Manager only when manager_id is None
+            emp_001 = (
+                await session.execute(
+                    select(EmployeeModel).where(
+                        EmployeeModel.tenant_id == tenant.id,
+                        func.upper(EmployeeModel.employee_code) == "EMP-001",
+                        EmployeeModel.deleted_at.is_(None),
+                    )
+                )
+            ).scalar_one_or_none()
+            if emp_001 is not None and emp_001.manager_id is None:
+                emp_001.manager_id = emp_004.id
+                emp_001.updated_at = now
+            if emp_002 is not None and emp_002.manager_id is None:
+                emp_002.manager_id = emp_004.id
+                emp_002.updated_at = now
+
+            # 3d. Seed 5 additional active store employees (EMP-005..EMP-009) under Carlos Manager
+            # so Carlos has 6+ direct reports (testing the >5 compact grid)
+            additional_reports = [
+                (
+                    "EMP-005",
+                    "Lucía Fernández",
+                    "Lucía",
+                    "Sala",
+                    "Camarera",
+                    "lucia.fernandez@dragon.es",
+                ),
+                (
+                    "EMP-006",
+                    "Javier Morales",
+                    "Javi",
+                    "Cocina",
+                    "Cocinero",
+                    "javier.morales@dragon.es",
+                ),
+                (
+                    "EMP-007",
+                    "Sofía Wang",
+                    "Sofía",
+                    "Caja",
+                    "Cajera",
+                    "sofia.wang@dragon.es",
+                ),
+                (
+                    "EMP-008",
+                    "Pablo Ruiz",
+                    "Pablo",
+                    "Cocina",
+                    "Ayudante de Cocina",
+                    "pablo.ruiz@dragon.es",
+                ),
+                (
+                    "EMP-009",
+                    "Carmen Díaz",
+                    "Carmen",
+                    "Sala",
+                    "Camarera",
+                    "carmen.diaz@dragon.es",
+                ),
+            ]
+            for idx, (code, full_name, preferred, dept, title, email) in enumerate(
+                additional_reports
+            ):
+                store_id = active_stores[idx % len(active_stores)].id
+                existing_emp = (
+                    await session.execute(
+                        select(EmployeeModel).where(
+                            EmployeeModel.tenant_id == tenant.id,
+                            func.upper(EmployeeModel.employee_code) == code,
+                            EmployeeModel.deleted_at.is_(None),
+                        )
+                    )
+                ).scalar_one_or_none()
+                if existing_emp is None:
+                    session.add(
+                        EmployeeModel(
+                            id=uuid4(),
+                            tenant_id=tenant.id,
+                            primary_store_id=store_id,
+                            user_id=None,
+                            manager_id=emp_004.id,
+                            employee_code=code,
+                            full_name=full_name,
+                            preferred_name=preferred,
+                            department=dept,
+                            job_title=title,
+                            email=email,
+                            phone="",
+                            contract_type="indefinido",
+                            work_schedule_type="full_time",
+                            contracted_weekly_hours=Decimal("40.00"),
+                            annual_vacation_days=30,
+                            hire_date=date(2025, 1, 15),
+                            employment_status="active",
+                            created_at=now,
+                            updated_at=now,
+                        )
+                    )
+                elif existing_emp.manager_id is None:
+                    existing_emp.manager_id = emp_004.id
+                    existing_emp.updated_at = now
+
+            # 3e. Seed 1 standalone employee (EMP-010, manager_id=None, 0 reports)
+            emp_010 = (
+                await session.execute(
+                    select(EmployeeModel).where(
+                        EmployeeModel.tenant_id == tenant.id,
+                        func.upper(EmployeeModel.employee_code) == "EMP-010",
+                        EmployeeModel.deleted_at.is_(None),
+                    )
+                )
+            ).scalar_one_or_none()
+            if emp_010 is None:
+                session.add(
+                    EmployeeModel(
+                        id=uuid4(),
+                        tenant_id=tenant.id,
+                        primary_store_id=active_stores[0].id,
+                        user_id=None,
+                        manager_id=None,
+                        employee_code="EMP-010",
+                        full_name="Andrés Navarro",
+                        preferred_name="Andrés",
+                        department="Administración",
+                        job_title="Asesor Externo",
+                        email="andres.navarro@dragon.es",
+                        phone="",
+                        contract_type="indefinido",
+                        work_schedule_type="part_time",
+                        contracted_weekly_hours=Decimal("20.00"),
+                        annual_vacation_days=30,
+                        hire_date=date(2025, 6, 1),
+                        employment_status="active",
+                        created_at=now,
+                        updated_at=now,
+                    )
+                )
 
         await session.commit()
         print(

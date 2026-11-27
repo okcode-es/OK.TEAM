@@ -294,12 +294,23 @@ class PurePythonAttendancePdfRenderer:
             size=8.5,
         )
         y -= 12.0
+        if data.redact_health:
+            other_absences = data.sick_leave_days + data.paid_leave_days + data.unpaid_leave_days
+            absence_line = (
+                f"Pausa Total: {data.total_break_minutes} min | "
+                f"Vacaciones: {data.vacation_days}d | Otras Ausencias: {other_absences}d"
+            )
+        else:
+            absence_line = (
+                f"Pausa Total: {data.total_break_minutes} min | "
+                f"Vacaciones: {data.vacation_days}d | "
+                f"Baja Medica (IT): {data.sick_leave_days}d | "
+                f"Perm. Retrib.: {data.paid_leave_days}d | No Retrib.: {data.unpaid_leave_days}d"
+            )
         page.text(
             _MARGIN_LEFT,
             y,
-            f"Pausa Total: {data.total_break_minutes} min | Vacaciones: {data.vacation_days}d | "
-            f"Baja Medica (IT): {data.sick_leave_days}d | Perm. Retrib.: {data.paid_leave_days}d | "
-            f"No Retrib.: {data.unpaid_leave_days}d",
+            absence_line,
             font="F1",
             size=8.5,
         )

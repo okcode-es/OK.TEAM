@@ -21,6 +21,7 @@ from app.infrastructure.pii_crypto import AesGcmPiiCipher
 from app.infrastructure.supabase_jwt import SupabaseJWTVerifier, sign_dev_hs256_token
 from app.interfaces.api.deps import (
     get_announcement_repository,
+    get_attendance_day_review_repository,
     get_attendance_repository,
     get_break_policy_repository,
     get_commit_fn,
@@ -249,8 +250,20 @@ def _build_env(tmp_path: Path, now_utc: datetime | None = None):
         ) -> list[object]:
             return []
 
+    class _EmptyDayReviewRepo:
+        async def list_by_tenant(
+            self,
+            _tenant_id: UUID,
+            *,
+            employee_ids: object = None,
+            date_from: object = None,
+            date_to: object = None,
+        ) -> list[object]:
+            return []
+
     app.dependency_overrides[get_payroll_closing_repository] = lambda: payroll_repo
     app.dependency_overrides[get_break_policy_repository] = lambda: _EmptyBreakPolicyRepo()
+    app.dependency_overrides[get_attendance_day_review_repository] = lambda: _EmptyDayReviewRepo()
     app.dependency_overrides[get_leave_entitlement_repository] = (
         lambda: _EmptyLeaveEntitlementRepo()
     )

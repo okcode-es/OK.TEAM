@@ -158,6 +158,7 @@ class InMemoryEmployeeRepo:
         emergency_contact_name: str = "",
         emergency_contact_phone: str = "",
         default_break_minutes: int | None = None,
+        manager_id: UUID | None = None,
     ) -> Employee | None:
         existing = await self.get_by_id(tenant_id, employee_id)
         if existing is None or existing.deleted_at is not None:
@@ -174,6 +175,7 @@ class InMemoryEmployeeRepo:
             emergency_contact_name=emergency_contact_name,
             emergency_contact_phone=emergency_contact_phone,
             default_break_minutes=default_break_minutes,
+            manager_id=manager_id,
             email=email,
             phone=phone,
             birth_date=birth_date,
@@ -256,6 +258,7 @@ class InMemoryEmployeeRepo:
         wiped = replace(
             existing,
             user_id=None,
+            manager_id=None,
             full_name=anonymized_full_name,
             preferred_name="",
             job_title="",
@@ -277,6 +280,13 @@ class InMemoryEmployeeRepo:
             updated_at=anonymized_at,
         )
         self.employees[employee_id] = wiped
+        for sub_id, sub in list(self.employees.items()):
+            if sub.tenant_id == tenant_id and sub.manager_id == employee_id:
+                self.employees[sub_id] = replace(
+                    sub,
+                    manager_id=None,
+                    updated_at=anonymized_at,
+                )
         return wiped
 
 

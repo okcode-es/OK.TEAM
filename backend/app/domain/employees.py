@@ -6,6 +6,7 @@ Pure Python standard library only (enforced by scripts/check_domain_purity.py).
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -256,12 +257,37 @@ class Employee:
     avatar_mime_type: str | None = None
     avatar_updated_at: datetime | None = None
     default_break_minutes: int | None = None
+    manager_id: UUID | None = None
     deleted_at: datetime | None = None
 
     @property
     def is_overtime_prohibited(self) -> bool:
         """Art. 12.4.c ET: part-time employees are prohibited from regular overtime."""
         return self.work_schedule_type == WorkScheduleType.PART_TIME
+
+
+def validate_no_manager_cycle(
+    employee_id: UUID,
+    manager_id: UUID | None,
+    manager_by_employee_id: Mapping[UUID, UUID | None],
+) -> None:
+    """Reject self-management or indirect reporting-line cycles."""
+    if manager_id is None:
+        return
+    if manager_id == employee_id:
+        raise ValidationDomainError("An employee cannot be their own manager")
+
+    visited: set[UUID] = set()
+    current: UUID | None = manager_id
+    while current is not None:
+        if current == employee_id:
+            raise ValidationDomainError(
+                "Reporting line cycle detected: manager chain cannot loop back to employee"
+            )
+        if current in visited:
+            break
+        visited.add(current)
+        current = manager_by_employee_id.get(current)
 
 
 def validate_avatar_upload(mime_type: str, content: bytes) -> None:

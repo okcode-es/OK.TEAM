@@ -37,6 +37,7 @@ import type {
   ContractType,
   EmployeeResponse,
   EmploymentStatus,
+  OrgChartNodePublic,
   StoreResponse,
   WorkScheduleType,
 } from '@/api/types'
@@ -75,6 +76,7 @@ import { useAuth } from '@/features/auth/AuthContext'
 import { BulkImportSheet } from '@/features/employees/BulkImportSheet'
 import { normalizeDepartment } from '@/features/employees/department'
 import { EmployeeProfilePage } from '@/features/employees/EmployeeProfilePage'
+import { OrgChartPublicDrawer } from '@/features/employees/OrgChartPublicDrawer'
 import { OrgChartView } from '@/features/employees/OrgChartView'
 import { isImeComposing } from '@/lib/ime'
 import { cn } from '@/lib/utils'
@@ -102,6 +104,7 @@ interface CreateEmployeeForm {
   work_schedule_type: WorkScheduleType
   contracted_weekly_hours: string
   annual_vacation_days: string
+  manager_id: string
   nie_dni: string
   iban: string
   naf: string
@@ -122,6 +125,7 @@ const DEFAULT_CREATE_FORM: CreateEmployeeForm = {
   work_schedule_type: 'full_time',
   contracted_weekly_hours: '40.00',
   annual_vacation_days: '30',
+  manager_id: '',
   nie_dni: '',
   iban: '',
   naf: '',
@@ -132,15 +136,23 @@ export function EmployeesPage() {
   const { activeTenant } = useAuth()
   const locale = i18n.language || 'zh-CN'
   const isEs = locale.startsWith('es')
+  const isEmployeeRole = activeTenant?.role === 'employee'
   const canManage =
     activeTenant?.role === 'owner' || activeTenant?.role === 'hr'
 
   const [employees, setEmployees] = useState<EmployeeResponse[]>([])
+  const [publicNodes, setPublicNodes] = useState<OrgChartNodePublic[]>([])
+  const [publicDrawerNodeId, setPublicDrawerNodeId] = useState<string | null>(
+    null,
+  )
+  const [publicDrawerOpen, setPublicDrawerOpen] = useState(false)
   const [stores, setStores] = useState<StoreResponse[]>([])
   const [loading, setLoading] = useState(true)
   const [errorBanner, setErrorBanner] = useState<string | null>(null)
 
-  const [primaryTab, setPrimaryTab] = useState<'list' | 'org'>('list')
+  const [primaryTab, setPrimaryTab] = useState<'list' | 'org'>(() =>
+    isEmployeeRole ? 'org' : 'list',
+  )
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table')
   const [searchQuery, setSearchQuery] = useState('')
   const [storeFilter, setStoreFilter] = useState<string>('all')
@@ -174,6 +186,16 @@ export function EmployeesPage() {
     setLoading(true)
     setErrorBanner(null)
     try {
+      if (isEmployeeRole) {
+        const orgRes = await apiClient.GET('/api/v1/organization/org-chart')
+        if (orgRes.error || !orgRes.data) {
+          setErrorBanner(extractApiError(orgRes.error, t('common.error')))
+          return
+        }
+        setPublicNodes(orgRes.data.nodes)
+        setEmployees([])
+        return
+      }
       const [empRes, storeRes] = await Promise.all([
         apiClient.GET('/api/v1/employees'),
         apiClient.GET('/api/v1/stores'),
@@ -189,12 +211,13 @@ export function EmployeesPage() {
     } finally {
       setLoading(false)
     }
-  }, [t])
+  }, [isEmployeeRole, t])
 
   useEffect(() => {
     setSelectedEmployeeId(null)
+    setPrimaryTab(isEmployeeRole ? 'org' : 'list')
     void loadData()
-  }, [loadData, activeTenant?.tenant_id])
+  }, [loadData, activeTenant?.tenant_id, isEmployeeRole])
 
   const storeMap = useMemo(
     () => new Map(stores.map((s) => [s.id, s])),
@@ -347,6 +370,7 @@ export function EmployeesPage() {
           work_schedule_type: form.work_schedule_type,
           contracted_weekly_hours: Number(form.contracted_weekly_hours),
           annual_vacation_days: Number(form.annual_vacation_days),
+          manager_id: form.manager_id || null,
           nie_dni: form.nie_dni.trim() || null,
           iban: form.iban.trim() || null,
           naf: form.naf.trim() || null,
@@ -519,6 +543,29 @@ export function EmployeesPage() {
     [storeMap, t, isEs],
   )
 
+  const filteredPublicNodes = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return publicNodes
+    return publicNodes.filter(
+      (n) =>
+        n.full_name.toLowerCase().includes(q) ||
+        n.job_title.toLowerCase().includes(q) ||
+        n.department_name.toLowerCase().includes(q) ||
+        n.store_name.toLowerCase().includes(q) ||
+        n.work_email.toLowerCase().includes(q),
+    )
+  }, [publicNodes, searchQuery])
+
+  const activeManagerOptions = useMemo(
+    () =>
+      employees.filter(
+        (e) =>
+          e.employment_status === 'active' ||
+          e.employment_status === 'on_leave',
+      ),
+    [employees],
+  )
+
   const table = useReactTable({
     data: filteredEmployees,
     columns,
@@ -548,20 +595,26 @@ export function EmployeesPage() {
           <h1 className="text-xl font-semibold tracking-tight text-slate-900">
             {isEs ? 'Organización' : '组织与员工'}
           </h1>
-          <p className="text-sm text-slate-600">{t('employees.subtitle')}</p>
+          <p className="text-sm text-slate-600">
+            {primaryTab === 'org' || isEmployeeRole
+              ? t('orgChart.subtitle')
+              : t('employees.subtitle')}
+          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handleExportCsv}
-            className="bg-white"
-          >
-            <Download className="h-4 w-4" aria-hidden="true" />
-            {isEs ? 'Exportar CSV' : '导出 CSV'}
-          </Button>
+          {!isEmployeeRole && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleExportCsv}
+              className="bg-white"
+            >
+              <Download className="h-4 w-4" aria-hidden="true" />
+              {isEs ? 'Exportar CSV' : '导出 CSV'}
+            </Button>
+          )}
           {canManage && (
             <>
               <Button
@@ -589,12 +642,19 @@ export function EmployeesPage() {
       </div>
 
       {/* Top Primary Tabs: Personal | Organigrama */}
-      <div className="flex items-center gap-6 border-b border-slate-200">
+      <div
+        role="tablist"
+        aria-label={isEs ? 'Vistas de organización' : '组织与员工视图'}
+        className="flex items-center gap-6 overflow-x-auto border-b border-slate-200"
+      >
         <button
+          id="employees-tab-list"
           type="button"
+          role="tab"
+          aria-selected={primaryTab === 'list'}
           onClick={() => setPrimaryTab('list')}
           className={cn(
-            'inline-flex items-center gap-2 border-b-2 px-1 pb-2.5 text-sm font-medium transition-colors',
+            'inline-flex shrink-0 items-center gap-2 border-b-2 px-1 pb-2.5 text-sm font-medium whitespace-nowrap transition-colors',
             primaryTab === 'list'
               ? 'border-[#2563EB] text-[#2563EB]'
               : 'border-transparent text-slate-600 hover:text-slate-900',
@@ -604,10 +664,13 @@ export function EmployeesPage() {
           <span>{isEs ? 'Personal' : '员工列表'}</span>
         </button>
         <button
+          id="employees-tab-org"
           type="button"
+          role="tab"
+          aria-selected={primaryTab === 'org'}
           onClick={() => setPrimaryTab('org')}
           className={cn(
-            'inline-flex items-center gap-2 border-b-2 px-1 pb-2.5 text-sm font-medium transition-colors',
+            'inline-flex shrink-0 items-center gap-2 border-b-2 px-1 pb-2.5 text-sm font-medium whitespace-nowrap transition-colors',
             primaryTab === 'org'
               ? 'border-[#2563EB] text-[#2563EB]'
               : 'border-transparent text-slate-600 hover:text-slate-900',
@@ -627,8 +690,9 @@ export function EmployeesPage() {
         </div>
       )}
 
-      {/* Advanced Toolbar */}
-      <div className="relative space-y-2 rounded-xl border border-slate-200/75 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+      {/* List-specific Toolbar (hidden in Org Chart tab and simplified for employee Public Directory) */}
+      {primaryTab === 'list' && !isEmployeeRole && (
+        <div className="relative space-y-2 rounded-xl border border-slate-200/75 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
         <div className="flex flex-wrap items-center justify-between gap-2.5">
           <div className="flex flex-wrap items-center gap-2">
             {primaryTab === 'list' && (
@@ -982,21 +1046,134 @@ export function EmployeesPage() {
             </button>
           </div>
         )}
-      </div>
+        </div>
+      )}
 
       {/* Content Area */}
-      {primaryTab === 'org' ? (
-        loading ? (
-          <Skeleton className="h-64 w-full rounded-xl" />
-        ) : (
+      <div
+        role="tabpanel"
+        aria-labelledby={
+          primaryTab === 'org' ? 'employees-tab-org' : 'employees-tab-list'
+        }
+      >
+        {primaryTab === 'org' ? (
           <OrgChartView
-            employees={filteredEmployees}
-            employeeCountLabel={employeeCountLabel}
-            stores={stores}
-            onSelectEmployee={setSelectedEmployeeId}
+            key={activeTenant?.tenant_id ?? 'none'}
+            onOpenFullProfile={(employeeId) => setSelectedEmployeeId(employeeId)}
           />
-        )
-      ) : viewMode === 'card' ? (
+        ) : isEmployeeRole ? (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200/75 bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+              <div className="relative min-w-56 flex-1 sm:w-72 sm:flex-none">
+                <Search
+                  className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400"
+                  aria-hidden="true"
+                />
+                <Input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && isImeComposing(e)) {
+                      e.preventDefault()
+                    }
+                  }}
+                  placeholder={t('orgChart.toolbar.searchPlaceholder')}
+                  className="h-8 pl-9 text-xs"
+                />
+              </div>
+              {!loading && (
+                <span role="status" className="px-1 text-xs font-medium text-slate-600 tabular-nums">
+                  {t('orgChart.activeCount', {
+                    count: filteredPublicNodes.length,
+                  })}
+                </span>
+              )}
+            </div>
+
+            {loading ? (
+              <Skeleton className="h-64 w-full rounded-xl" />
+            ) : filteredPublicNodes.length === 0 ? (
+              <EmptyState icon={Users} title={t('employees.empty')} />
+            ) : (
+              <section className="overflow-hidden rounded-xl border border-slate-200/75 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader className="bg-slate-50/80">
+                      <TableRow className="border-slate-200">
+                        <TableHead className="h-10 px-4 text-xs font-semibold text-slate-600">
+                          {t('employees.columns.employee')}
+                        </TableHead>
+                        <TableHead className="h-10 px-4 text-xs font-semibold text-slate-600">
+                          {t('orgChart.fields.jobTitle')}
+                        </TableHead>
+                        <TableHead className="h-10 px-4 text-xs font-semibold text-slate-600">
+                          {t('orgChart.fields.department')}
+                        </TableHead>
+                        <TableHead className="h-10 px-4 text-xs font-semibold text-slate-600">
+                          {t('orgChart.fields.store')}
+                        </TableHead>
+                        <TableHead className="h-10 px-4 text-xs font-semibold text-slate-600">
+                          {t('orgChart.fields.workEmail')}
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredPublicNodes.map((node) => (
+                        <TableRow
+                          key={node.id}
+                          onClick={() => {
+                            setPublicDrawerNodeId(node.id)
+                            setPublicDrawerOpen(true)
+                          }}
+                          className="cursor-pointer border-slate-200 hover:bg-blue-50/30"
+                        >
+                          <TableCell className="px-4 py-2.5 text-sm whitespace-nowrap">
+                            <div className="flex items-center gap-2.5">
+                              <UserAvatar
+                                avatarUrl={node.avatar_url}
+                                name={node.full_name}
+                                size="sm"
+                              />
+                              <span className="font-medium text-slate-900">
+                                {node.full_name}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="px-4 py-2.5 text-xs whitespace-nowrap text-slate-700">
+                            {node.job_title || '—'}
+                          </TableCell>
+                          <TableCell className="px-4 py-2.5 text-xs whitespace-nowrap text-slate-700">
+                            {node.department_name || '—'}
+                          </TableCell>
+                          <TableCell className="px-4 py-2.5 text-xs whitespace-nowrap text-slate-700">
+                            {node.store_name || '—'}
+                          </TableCell>
+                          <TableCell className="px-4 py-2.5 text-xs whitespace-nowrap text-slate-600">
+                            {node.work_email || '—'}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </section>
+            )}
+
+            <OrgChartPublicDrawer
+              node={
+                publicDrawerNodeId
+                  ? (publicNodes.find((n) => n.id === publicDrawerNodeId) ??
+                    null)
+                  : null
+              }
+              allNodes={publicNodes}
+              open={publicDrawerOpen}
+              onOpenChange={setPublicDrawerOpen}
+              onSelectNode={(nodeId) => setPublicDrawerNodeId(nodeId)}
+            />
+          </div>
+        ) : viewMode === 'card' ? (
         loading ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -1124,6 +1301,7 @@ export function EmployeesPage() {
           </div>
         </section>
       )}
+      </div>
 
       {/* Right Slide-Over Create Drawer */}
       <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
@@ -1253,6 +1431,36 @@ export function EmployeesPage() {
                   placeholder="Cocina / Sala"
                 />
               </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="emp-manager">
+                {t('employees.fields.manager')}
+              </Label>
+              <Select
+                value={form.manager_id || '__none__'}
+                onValueChange={(val) =>
+                  setForm({
+                    ...form,
+                    manager_id: val === '__none__' ? '' : val,
+                  })
+                }
+              >
+                <SelectTrigger id="emp-manager" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">
+                    {t('employees.fields.noManager')}
+                  </SelectItem>
+                  {activeManagerOptions.map((mgr) => (
+                    <SelectItem key={mgr.id} value={mgr.id}>
+                      {mgr.full_name}
+                      {mgr.job_title ? ` · ${mgr.job_title}` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

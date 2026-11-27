@@ -31,6 +31,7 @@ from app.domain.employees import (
     validate_avatar_upload,
     validate_contracted_weekly_hours,
     validate_default_break_minutes,
+    validate_no_manager_cycle,
 )
 from app.domain.organization import (
     ConflictError,
@@ -49,6 +50,13 @@ from app.domain.security import (
 MUTABLE_STATUSES: frozenset[EmploymentStatus] = frozenset(
     {EmploymentStatus.ACTIVE, EmploymentStatus.ON_LEAVE}
 )
+
+
+class _UnsetType:
+    """Sentinel distinguishing omitted optional PATCH fields from explicit null."""
+
+
+UNSET = _UnsetType()
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,6 +78,7 @@ class CreateEmployeeCommand:
     contracted_weekly_hours: Decimal = Decimal("40.00")
     annual_vacation_days: int = 30
     default_break_minutes: int | None = None
+    manager_id: UUID | None = None
     hire_date: date = date(2026, 1, 1)
     nie_dni: str | None = field(default=None, repr=False)
     iban: str | None = field(default=None, repr=False)
@@ -95,6 +104,7 @@ class UpdateEmployeeCommand:
     contracted_weekly_hours: Decimal = Decimal("40.00")
     annual_vacation_days: int = 30
     default_break_minutes: int | None = None
+    manager_id: UUID | None | _UnsetType = UNSET
     hire_date: date = date(2026, 1, 1)
     employment_status: EmploymentStatus = EmploymentStatus.ACTIVE
     # None => keep existing encrypted value; "" => clear; non-empty => re-encrypt new value
@@ -229,6 +239,36 @@ class GetEmployeeSensitivePiiUseCase:
         )
 
 
+async def _validate_manager_assignment(
+    employee_repo: EmployeeRepository,
+    *,
+    tenant_id: UUID,
+    employee_id: UUID,
+    manager_id: UUID | None,
+) -> None:
+    if manager_id is None:
+        return
+    if manager_id == employee_id:
+        raise ValidationDomainError("An employee cannot be their own manager")
+
+    target = await employee_repo.get_by_id(tenant_id, manager_id)
+    if (
+        target is None
+        or target.deleted_at is not None
+        or target.employment_status not in MUTABLE_STATUSES
+    ):
+        raise ValidationDomainError(
+            "manager_id must reference an active or on-leave employee in this company"
+        )
+
+    active_employees = await employee_repo.list_by_tenant(
+        tenant_id,
+        allowed_statuses=MUTABLE_STATUSES,
+    )
+    manager_by_employee_id = {emp.id: emp.manager_id for emp in active_employees}
+    validate_no_manager_cycle(employee_id, manager_id, manager_by_employee_id)
+
+
 class CreateEmployeeUseCase:
     def __init__(
         self,
@@ -263,6 +303,12 @@ class CreateEmployeeUseCase:
             raise ConflictError(f"Employee code '{employee_code}' already exists in this company")
 
         employee_id = uuid4()
+        await _validate_manager_assignment(
+            self._employee_repo,
+            tenant_id=principal.tenant_id,
+            employee_id=employee_id,
+            manager_id=cmd.manager_id,
+        )
         nie_enc, nie_masked, nie_blind = _prepare_nie_dni(
             cmd.nie_dni,
             cipher=self._pii_cipher,
@@ -309,6 +355,7 @@ class CreateEmployeeUseCase:
             contracted_weekly_hours=weekly_hours,
             annual_vacation_days=vacation_days,
             default_break_minutes=default_break_minutes,
+            manager_id=cmd.manager_id,
             hire_date=cmd.hire_date,
             termination_date=None,
             nie_dni_enc=nie_enc,
@@ -366,6 +413,17 @@ class UpdateEmployeeUseCase:
 
         if await self._store_repo.get_by_id(principal.tenant_id, cmd.primary_store_id) is None:
             raise ValidationDomainError("primary_store_id does not exist in this company")
+
+        if isinstance(cmd.manager_id, _UnsetType):
+            resolved_manager_id = existing.manager_id
+        else:
+            await _validate_manager_assignment(
+                self._employee_repo,
+                tenant_id=principal.tenant_id,
+                employee_id=employee_id,
+                manager_id=cmd.manager_id,
+            )
+            resolved_manager_id = cmd.manager_id
 
         employee_code = normalize_employee_code(cmd.employee_code)
         full_name = validate_non_empty_text(cmd.full_name, field="full_name", max_length=160)
@@ -441,6 +499,7 @@ class UpdateEmployeeUseCase:
             contracted_weekly_hours=weekly_hours,
             annual_vacation_days=vacation_days,
             default_break_minutes=default_break_minutes,
+            manager_id=resolved_manager_id,
             hire_date=cmd.hire_date,
             employment_status=cmd.employment_status,
             nie_dni_enc=nie_enc,

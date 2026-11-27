@@ -370,6 +370,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/attendance/day-reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Batch Review Attendance Days */
+        post: operations["batchReviewAttendanceDays"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/attendance/export.csv": {
         parameters: {
             query?: never;
@@ -379,6 +396,23 @@ export interface paths {
         };
         /** Export Attendance Csv */
         get: operations["exportAttendanceCsv"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/attendance/export.pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export Attendance Pdf */
+        get: operations["exportAttendancePdf"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1056,6 +1090,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/organization/org-chart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get tenant interactive organization chart (GDPR-minimized, all active roles) */
+        get: operations["getOrganizationOrgChart"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/reports/executive-summary": {
         parameters: {
             query?: never;
@@ -1402,6 +1453,47 @@ export interface components {
             natural_days: number;
             status: components["schemas"]["LeaveStatus"];
         };
+        /** AttendanceDayReviewResponse */
+        AttendanceDayReviewResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Employee Id
+             * Format: uuid
+             */
+            employee_id: string;
+            /**
+             * Store Id
+             * Format: uuid
+             */
+            store_id: string;
+            /**
+             * Local Date
+             * Format: date
+             */
+            local_date: string;
+            status: components["schemas"]["AttendanceDayReviewStatus"];
+            /**
+             * Reviewed By User Id
+             * Format: uuid
+             */
+            reviewed_by_user_id: string;
+            /**
+             * Reviewed At Utc
+             * Format: date-time
+             */
+            reviewed_at_utc: string;
+            /** Note */
+            note: string;
+        };
+        /**
+         * AttendanceDayReviewStatus
+         * @enum {string}
+         */
+        AttendanceDayReviewStatus: "submitted" | "approved";
         /** AttendanceEventResponse */
         AttendanceEventResponse: {
             /**
@@ -1466,6 +1558,21 @@ export interface components {
             /** Items */
             items: components["schemas"]["EmployeeAttendanceLedgerResponse"][];
         };
+        /** AttendanceSegmentResponse */
+        AttendanceSegmentResponse: {
+            type: components["schemas"]["SegmentType"];
+            /**
+             * Start At
+             * Format: date-time
+             */
+            start_at: string;
+            /** End At */
+            end_at: string | null;
+            /** Duration Minutes */
+            duration_minutes: number;
+            /** Is Paid */
+            is_paid: boolean;
+        };
         /**
          * AttendanceSource
          * @enum {string}
@@ -1484,6 +1591,31 @@ export interface components {
             dev_auth_enabled: boolean;
             /** Tenants */
             tenants: components["schemas"]["TenantMembershipSummaryResponse"][];
+        };
+        /** BatchReviewAttendanceDaysRequest */
+        BatchReviewAttendanceDaysRequest: {
+            /**
+             * Employee Id
+             * Format: uuid
+             */
+            employee_id: string;
+            /** Dates */
+            dates: string[];
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "submit" | "approve";
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+        };
+        /** BatchReviewAttendanceDaysResponse */
+        BatchReviewAttendanceDaysResponse: {
+            /** Items */
+            items: components["schemas"]["AttendanceDayReviewResponse"][];
         };
         /** Body_bulkImportEmployees */
         Body_bulkImportEmployees: {
@@ -1929,6 +2061,19 @@ export interface components {
             has_corrections: boolean;
             /** Alerts */
             alerts: components["schemas"]["ComplianceAlertResponse"][];
+            /** Segments */
+            segments: components["schemas"]["AttendanceSegmentResponse"][];
+            /** Planned Minutes */
+            planned_minutes: number;
+            /** Is Locked */
+            is_locked: boolean;
+            /** Daily Limit Minutes */
+            daily_limit_minutes: number;
+            /** Total Paid Break Minutes */
+            total_paid_break_minutes: number;
+            /** Total Auto Deducted Break Minutes */
+            total_auto_deducted_break_minutes: number;
+            review_status: components["schemas"]["AttendanceDayReviewStatus"] | null;
         };
         /** DashboardAnnouncementSummaryResponse */
         DashboardAnnouncementSummaryResponse: {
@@ -2178,6 +2323,8 @@ export interface components {
             store_name: string;
             /** Store Timezone */
             store_timezone: string;
+            /** Contracted Weekly Hours */
+            contracted_weekly_hours: string;
             /** Total Net Hours */
             total_net_hours: string;
             /** Regular Hours */
@@ -2186,6 +2333,11 @@ export interface components {
             overtime_hours: string;
             /** Annual Overtime Hours */
             annual_overtime_hours: string;
+            /** Closed Months */
+            closed_months: string[];
+            effective_break_policy?: components["schemas"]["EffectiveBreakPolicyResponse"] | null;
+            /** Day Reviews */
+            day_reviews: components["schemas"]["AttendanceDayReviewResponse"][];
             /** Daily Summaries */
             daily_summaries: components["schemas"]["DailyAttendanceSummaryResponse"][];
             /** Sessions */
@@ -2293,6 +2445,8 @@ export interface components {
             annual_vacation_days: number;
             /** Default Break Minutes */
             default_break_minutes?: number | null;
+            /** Manager Id */
+            manager_id?: string | null;
             /**
              * Hire Date
              * Format: date
@@ -2410,6 +2564,8 @@ export interface components {
             annual_vacation_days: number;
             /** Default Break Minutes */
             default_break_minutes?: number | null;
+            /** Manager Id */
+            manager_id?: string | null;
             /** Is Overtime Prohibited */
             is_overtime_prohibited: boolean;
             /**
@@ -2555,6 +2711,8 @@ export interface components {
             annual_vacation_days: number;
             /** Default Break Minutes */
             default_break_minutes?: number | null;
+            /** Manager Id */
+            manager_id?: string | null;
             /**
              * Hire Date
              * Format: date
@@ -3195,6 +3353,55 @@ export interface components {
              */
             upcoming_anniversaries: components["schemas"]["UpcomingAnniversaryResponse"][];
         };
+        /**
+         * OrgChartNodePublic
+         * @description Strictly GDPR-minimized public org-chart node (exact 12 fields, no sensitive HR/PII).
+         */
+        OrgChartNodePublic: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Full Name */
+            full_name: string;
+            /** Avatar Url */
+            avatar_url?: string | null;
+            /** Job Title */
+            job_title: string;
+            /** Department Id */
+            department_id?: string | null;
+            /** Department Name */
+            department_name: string;
+            /**
+             * Store Id
+             * Format: uuid
+             */
+            store_id: string;
+            /** Store Name */
+            store_name: string;
+            /** Work Email */
+            work_email: string;
+            /** Manager Id */
+            manager_id?: string | null;
+            /** Direct Reports Count */
+            direct_reports_count: number;
+            /** Total Reports Count */
+            total_reports_count: number;
+        };
+        /** OrgChartResponse */
+        OrgChartResponse: {
+            /** Nodes */
+            nodes: components["schemas"]["OrgChartNodePublic"][];
+            /** Root Ids */
+            root_ids: string[];
+            /** Unassigned Ids */
+            unassigned_ids: string[];
+            /** Current Employee Id */
+            current_employee_id?: string | null;
+            /** Total Active Employees */
+            total_active_employees: number;
+        };
         /** PublishWeekRequest */
         PublishWeekRequest: {
             /**
@@ -3315,6 +3522,11 @@ export interface components {
             /** Limit Value */
             limit_value: string | null;
         };
+        /**
+         * SegmentType
+         * @enum {string}
+         */
+        SegmentType: "work" | "break";
         /** ShiftMutationResponse */
         ShiftMutationResponse: {
             shift: components["schemas"]["ShiftResponse"];
@@ -4986,6 +5198,41 @@ export interface operations {
             };
         };
     };
+    batchReviewAttendanceDays: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchReviewAttendanceDaysRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchReviewAttendanceDaysResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     exportAttendanceCsv: {
         parameters: {
             query?: {
@@ -5010,6 +5257,43 @@ export interface operations {
                 content: {
                     "application/json": unknown;
                     "text/csv": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    exportAttendancePdf: {
+        parameters: {
+            query?: {
+                store_id?: string | null;
+                employee_id?: string | null;
+                date_from?: string | null;
+                date_to?: string | null;
+            };
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description ITSS-compliant Spanish (es-ES) A4 attendance PDF export */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                    "application/pdf": unknown;
                 };
             };
             /** @description Validation Error */
@@ -6558,6 +6842,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MyDashboardResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    getOrganizationOrgChart: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgChartResponse"];
                 };
             };
             /** @description Validation Error */

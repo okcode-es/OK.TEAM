@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Annotated
+from typing import Annotated, Literal
+from urllib.parse import quote
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response, status
@@ -11,10 +12,13 @@ from pydantic import BaseModel, Field
 from app.application.attendance import (
     AppendCorrectionCommand,
     AppendCorrectionUseCase,
+    BatchReviewAttendanceDaysCommand,
+    BatchReviewAttendanceDaysUseCase,
     ClockAttendanceCommand,
     ClockAttendanceUseCase,
     EmployeeAttendanceLedgerItem,
     ExportAttendanceCsvUseCase,
+    ExportAttendancePdfUseCase,
     GetAttendanceLedgerUseCase,
     RecordManualDayCommand,
     RecordManualDayUseCase,
@@ -22,32 +26,48 @@ from app.application.attendance import (
 from app.domain.attendance import (
     AlertCode,
     AlertSeverity,
+    AttendanceDayReview,
+    AttendanceDayReviewStatus,
     AttendanceEvent,
     AttendanceEventType,
+    AttendanceSegment,
     AttendanceSource,
     ComplianceAlert,
     CorrectedEventType,
     DailyAttendanceSummary,
+    SegmentType,
     WorkMode,
     WorkSession,
 )
+from app.domain.payroll import AttendancePdfRendererPort
 from app.domain.repositories import (
+    AttendanceDayReviewRepository,
     AttendanceRepository,
     BreakPolicyRepository,
     EmployeeRepository,
+    LeaveRepository,
     PayrollClosingRepository,
+    ShiftRepository,
     StoreRepository,
     TenantRepository,
 )
 from app.domain.security import AuthenticatedPrincipal
+from app.interfaces.api.break_policies import (
+    EffectiveBreakPolicyResponse,
+    to_effective_policy_response,
+)
 from app.interfaces.api.deps import (
     CommitFn,
+    get_attendance_day_review_repository,
     get_attendance_repository,
     get_break_policy_repository,
     get_commit_fn,
     get_current_principal,
     get_employee_repository,
+    get_leave_repository,
     get_payroll_closing_repository,
+    get_pdf_renderer,
+    get_shift_repository,
     get_store_repository,
     get_tenant_repository,
     get_utc_now,
@@ -147,6 +167,36 @@ class WorkSessionResponse(BaseModel):
     source_event_ids: list[UUID]
 
 
+class AttendanceSegmentResponse(BaseModel):
+    type: SegmentType
+    start_at: datetime
+    end_at: datetime | None
+    duration_minutes: int
+    is_paid: bool
+
+
+class AttendanceDayReviewResponse(BaseModel):
+    id: UUID
+    employee_id: UUID
+    store_id: UUID
+    local_date: date
+    status: AttendanceDayReviewStatus
+    reviewed_by_user_id: UUID
+    reviewed_at_utc: datetime
+    note: str
+
+
+class BatchReviewAttendanceDaysRequest(BaseModel):
+    employee_id: UUID
+    dates: list[date] = Field(min_length=1, max_length=31)
+    action: Literal["submit", "approve"]
+    note: str = Field(default="", max_length=300)
+
+
+class BatchReviewAttendanceDaysResponse(BaseModel):
+    items: list[AttendanceDayReviewResponse]
+
+
 class DailyAttendanceSummaryResponse(BaseModel):
     employee_id: UUID
     store_id: UUID
@@ -158,6 +208,13 @@ class DailyAttendanceSummaryResponse(BaseModel):
     total_net_hours: Decimal
     has_corrections: bool
     alerts: list[ComplianceAlertResponse]
+    segments: list[AttendanceSegmentResponse]
+    planned_minutes: int
+    is_locked: bool
+    daily_limit_minutes: int
+    total_paid_break_minutes: int
+    total_auto_deducted_break_minutes: int
+    review_status: AttendanceDayReviewStatus | None
 
 
 class EmployeeAttendanceLedgerResponse(BaseModel):
@@ -168,10 +225,14 @@ class EmployeeAttendanceLedgerResponse(BaseModel):
     store_code: str
     store_name: str
     store_timezone: str
+    contracted_weekly_hours: Decimal
     total_net_hours: Decimal
     regular_hours: Decimal
     overtime_hours: Decimal
     annual_overtime_hours: Decimal
+    closed_months: list[str]
+    effective_break_policy: EffectiveBreakPolicyResponse | None = None
+    day_reviews: list[AttendanceDayReviewResponse]
     daily_summaries: list[DailyAttendanceSummaryResponse]
     sessions: list[WorkSessionResponse]
     alerts: list[ComplianceAlertResponse]
@@ -232,6 +293,29 @@ def _to_session_response(session: WorkSession) -> WorkSessionResponse:
     )
 
 
+def _to_segment_response(seg: AttendanceSegment) -> AttendanceSegmentResponse:
+    return AttendanceSegmentResponse(
+        type=seg.type,
+        start_at=seg.start_at,
+        end_at=seg.end_at,
+        duration_minutes=seg.duration_minutes,
+        is_paid=seg.is_paid,
+    )
+
+
+def _to_day_review_response(rev: AttendanceDayReview) -> AttendanceDayReviewResponse:
+    return AttendanceDayReviewResponse(
+        id=rev.id,
+        employee_id=rev.employee_id,
+        store_id=rev.store_id,
+        local_date=rev.local_date,
+        status=rev.status,
+        reviewed_by_user_id=rev.reviewed_by_user_id,
+        reviewed_at_utc=rev.reviewed_at_utc,
+        note=rev.note,
+    )
+
+
 def _to_daily_summary_response(summary: DailyAttendanceSummary) -> DailyAttendanceSummaryResponse:
     return DailyAttendanceSummaryResponse(
         employee_id=summary.employee_id,
@@ -244,6 +328,13 @@ def _to_daily_summary_response(summary: DailyAttendanceSummary) -> DailyAttendan
         total_net_hours=summary.total_net_hours,
         has_corrections=summary.has_corrections,
         alerts=[_to_alert_response(a) for a in summary.alerts],
+        segments=[_to_segment_response(seg) for seg in summary.segments],
+        planned_minutes=summary.planned_minutes,
+        is_locked=summary.is_locked,
+        daily_limit_minutes=summary.daily_limit_minutes,
+        total_paid_break_minutes=summary.total_paid_break_minutes,
+        total_auto_deducted_break_minutes=summary.total_auto_deducted_break_minutes,
+        review_status=summary.review_status,
     )
 
 
@@ -258,10 +349,18 @@ def _to_ledger_item_response(
         store_code=item.store.code,
         store_name=item.store.name,
         store_timezone=item.store.timezone,
+        contracted_weekly_hours=item.employee.contracted_weekly_hours,
         total_net_hours=item.report.total_net_hours,
         regular_hours=item.report.regular_hours,
         overtime_hours=item.report.overtime_hours,
         annual_overtime_hours=item.report.annual_overtime_hours,
+        closed_months=list(item.closed_months),
+        effective_break_policy=(
+            to_effective_policy_response(item.effective_break_policy)
+            if item.effective_break_policy is not None
+            else None
+        ),
+        day_reviews=[_to_day_review_response(r) for r in item.day_reviews],
         daily_summaries=[
             _to_daily_summary_response(d) for d in item.report.daily_summaries
         ],
@@ -410,6 +509,10 @@ async def get_attendance_ledger(
     store_repo: Annotated[StoreRepository, Depends(get_store_repository)],
     payroll_repo: Annotated[PayrollClosingRepository, Depends(get_payroll_closing_repository)],
     policy_repo: Annotated[BreakPolicyRepository, Depends(get_break_policy_repository)],
+    shift_repo: Annotated[ShiftRepository, Depends(get_shift_repository)],
+    day_review_repo: Annotated[
+        AttendanceDayReviewRepository, Depends(get_attendance_day_review_repository)
+    ],
     commit: Annotated[CommitFn, Depends(get_commit_fn)],
     now_utc: Annotated[datetime, Depends(get_utc_now)],
     store_id: Annotated[UUID | None, Query()] = None,
@@ -424,6 +527,8 @@ async def get_attendance_ledger(
         utc_now=lambda: now_utc,
         payroll_repo=payroll_repo,
         policy_repo=policy_repo,
+        shift_repo=shift_repo,
+        day_review_repo=day_review_repo,
     ).execute(
         principal,
         store_id=store_id,
@@ -435,6 +540,49 @@ async def get_attendance_ledger(
         await commit()
     return AttendanceLedgerResponse(
         items=[_to_ledger_item_response(item) for item in result.items]
+    )
+
+
+@router.post(
+    "/day-reviews",
+    response_model=BatchReviewAttendanceDaysResponse,
+    status_code=status.HTTP_200_OK,
+    operation_id="batchReviewAttendanceDays",
+)
+async def batch_review_attendance_days(
+    payload: BatchReviewAttendanceDaysRequest,
+    principal: Annotated[AuthenticatedPrincipal, Depends(get_current_principal)],
+    attendance_repo: Annotated[AttendanceRepository, Depends(get_attendance_repository)],
+    employee_repo: Annotated[EmployeeRepository, Depends(get_employee_repository)],
+    store_repo: Annotated[StoreRepository, Depends(get_store_repository)],
+    day_review_repo: Annotated[
+        AttendanceDayReviewRepository, Depends(get_attendance_day_review_repository)
+    ],
+    payroll_repo: Annotated[PayrollClosingRepository, Depends(get_payroll_closing_repository)],
+    policy_repo: Annotated[BreakPolicyRepository, Depends(get_break_policy_repository)],
+    commit: Annotated[CommitFn, Depends(get_commit_fn)],
+    now_utc: Annotated[datetime, Depends(get_utc_now)],
+) -> BatchReviewAttendanceDaysResponse:
+    reviews = await BatchReviewAttendanceDaysUseCase(
+        attendance_repo,
+        employee_repo,
+        store_repo,
+        day_review_repo,
+        utc_now=lambda: now_utc,
+        payroll_repo=payroll_repo,
+        policy_repo=policy_repo,
+    ).execute(
+        principal,
+        BatchReviewAttendanceDaysCommand(
+            employee_id=payload.employee_id,
+            dates=tuple(payload.dates),
+            action=payload.action,
+            note=payload.note,
+        ),
+    )
+    await commit()
+    return BatchReviewAttendanceDaysResponse(
+        items=[_to_day_review_response(r) for r in reviews]
     )
 
 
@@ -483,5 +631,76 @@ async def export_attendance_csv(
         media_type="text/csv; charset=utf-8",
         headers={
             "Content-Disposition": 'attachment; filename="registro_jornada_itss.csv"',
+        },
+    )
+
+
+@router.get(
+    "/export.pdf",
+    status_code=status.HTTP_200_OK,
+    operation_id="exportAttendancePdf",
+    responses={
+        200: {
+            "content": {"application/pdf": {}},
+            "description": "ITSS-compliant Spanish (es-ES) A4 attendance PDF export",
+        }
+    },
+)
+async def export_attendance_pdf(
+    principal: Annotated[AuthenticatedPrincipal, Depends(get_current_principal)],
+    attendance_repo: Annotated[AttendanceRepository, Depends(get_attendance_repository)],
+    employee_repo: Annotated[EmployeeRepository, Depends(get_employee_repository)],
+    store_repo: Annotated[StoreRepository, Depends(get_store_repository)],
+    tenant_repo: Annotated[TenantRepository, Depends(get_tenant_repository)],
+    payroll_repo: Annotated[PayrollClosingRepository, Depends(get_payroll_closing_repository)],
+    policy_repo: Annotated[BreakPolicyRepository, Depends(get_break_policy_repository)],
+    shift_repo: Annotated[ShiftRepository, Depends(get_shift_repository)],
+    day_review_repo: Annotated[
+        AttendanceDayReviewRepository, Depends(get_attendance_day_review_repository)
+    ],
+    leave_repo: Annotated[LeaveRepository, Depends(get_leave_repository)],
+    pdf_renderer: Annotated[AttendancePdfRendererPort, Depends(get_pdf_renderer)],
+    commit: Annotated[CommitFn, Depends(get_commit_fn)],
+    now_utc: Annotated[datetime, Depends(get_utc_now)],
+    store_id: Annotated[UUID | None, Query()] = None,
+    employee_id: Annotated[UUID | None, Query()] = None,
+    date_from: Annotated[date | None, Query()] = None,
+    date_to: Annotated[date | None, Query()] = None,
+) -> Response:
+    ledger_uc = GetAttendanceLedgerUseCase(
+        attendance_repo,
+        employee_repo,
+        store_repo,
+        utc_now=lambda: now_utc,
+        payroll_repo=payroll_repo,
+        policy_repo=policy_repo,
+        shift_repo=shift_repo,
+        day_review_repo=day_review_repo,
+    )
+    pdf_bytes, filename, has_mutations = await ExportAttendancePdfUseCase(
+        ledger_uc,
+        tenant_repo,
+        pdf_renderer,
+        leave_repo=leave_repo,
+        utc_now=lambda: now_utc,
+    ).execute(
+        principal,
+        store_id=store_id,
+        employee_id=employee_id,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    if has_mutations:
+        await commit()
+    encoded_filename = quote(filename)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+            "Content-Disposition": (
+                f'attachment; filename="{filename}"; filename*=UTF-8\'\'{encoded_filename}'
+            ),
         },
     )

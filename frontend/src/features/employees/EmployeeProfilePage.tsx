@@ -120,6 +120,9 @@ export function EmployeeProfilePage({
   const role = activeTenant?.role
 
   const [stores, setStores] = useState<StoreResponse[]>(propStores ?? [])
+  const [managerCandidates, setManagerCandidates] = useState<
+    EmployeeResponse[]
+  >([])
   const [employee, setEmployee] = useState<EmployeeResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -149,6 +152,7 @@ export function EmployeeProfilePage({
   const [weeklyHours, setWeeklyHours] = useState('40.00')
   const [vacationDays, setVacationDays] = useState('30')
   const [empStatus, setEmpStatus] = useState<EmploymentStatus>('active')
+  const [managerId, setManagerId] = useState('')
   const [emergencyContactName, setEmergencyContactName] = useState('')
   const [emergencyContactPhone, setEmergencyContactPhone] = useState('')
 
@@ -194,6 +198,7 @@ export function EmployeeProfilePage({
     setWeeklyHours(String(data.contracted_weekly_hours))
     setVacationDays(String(data.annual_vacation_days))
     setEmpStatus(data.employment_status)
+    setManagerId(data.manager_id ?? '')
     setEmergencyContactName(data.emergency_contact_name ?? '')
     setEmergencyContactPhone(data.emergency_contact_phone ?? '')
     setNewNieDni('')
@@ -205,13 +210,16 @@ export function EmployeeProfilePage({
     setLoading(true)
     setErrorBanner(null)
     try {
-      const [empRes, storeRes] = await Promise.all([
+      const [empRes, storeRes, allEmpsRes] = await Promise.all([
         apiClient.GET('/api/v1/employees/{employee_id}', {
           params: { path: { employee_id: employeeId } },
         }),
         propStores && propStores.length > 0
           ? Promise.resolve(null)
           : apiClient.GET('/api/v1/stores'),
+        role === 'owner' || role === 'hr'
+          ? apiClient.GET('/api/v1/employees')
+          : Promise.resolve(null),
       ])
       if (empRes.error || !empRes.data) {
         setErrorBanner(extractApiError(empRes.error, t('common.error')))
@@ -222,10 +230,13 @@ export function EmployeeProfilePage({
       if (storeRes && storeRes.data) {
         setStores(storeRes.data.items)
       }
+      if (allEmpsRes && allEmpsRes.data) {
+        setManagerCandidates(allEmpsRes.data.items)
+      }
     } finally {
       setLoading(false)
     }
-  }, [employeeId, propStores, t])
+  }, [employeeId, propStores, role, t])
 
   const loadPayslips = useCallback(async () => {
     setPayslipsLoading(true)
@@ -362,6 +373,7 @@ export function EmployeeProfilePage({
             contracted_weekly_hours: Number(weeklyHours),
             annual_vacation_days: Number(vacationDays),
             employment_status: empStatus,
+            manager_id: managerId || null,
             user_id: employee?.user_id ?? null,
             emergency_contact_name: emergencyContactName.trim(),
             emergency_contact_phone: emergencyContactPhone.trim(),
@@ -893,6 +905,57 @@ export function EmployeeProfilePage({
                                 </div>
                               )}
                             </div>
+
+                            {(role === 'owner' || role === 'hr') && (
+                              <div className="space-y-1.5">
+                                <Label className="text-xs text-slate-500">
+                                  {t('employees.fields.manager')}
+                                </Label>
+                                {isEditing ? (
+                                  <Select
+                                    value={managerId || '__none__'}
+                                    onValueChange={(val) =>
+                                      setManagerId(
+                                        val === '__none__' ? '' : val,
+                                      )
+                                    }
+                                  >
+                                    <SelectTrigger className="w-full">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="__none__">
+                                        {t('employees.fields.noManager')}
+                                      </SelectItem>
+                                      {managerCandidates
+                                        .filter(
+                                          (m) =>
+                                            m.id !== employee.id &&
+                                            (m.employment_status === 'active' ||
+                                              m.employment_status ===
+                                                'on_leave'),
+                                        )
+                                        .map((m) => (
+                                          <SelectItem key={m.id} value={m.id}>
+                                            {m.full_name}
+                                            {m.job_title
+                                              ? ` · ${m.job_title}`
+                                              : ''}
+                                          </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <div className="text-sm font-medium text-slate-900">
+                                    {employee.manager_id
+                                      ? (managerCandidates.find(
+                                          (m) => m.id === employee.manager_id,
+                                        )?.full_name ?? '—')
+                                      : t('employees.fields.noManager')}
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         )}
 

@@ -17,6 +17,7 @@ import {
   Menu,
   Pause,
   Play,
+  Square,
   Store as StoreIcon,
   Tablet,
   Users,
@@ -67,6 +68,14 @@ export type NavSection =
 
 const SIDEBAR_COLLAPSED_KEY = 'okteam.sidebar_collapsed'
 
+function formatClockHhMmSs(totalSeconds: number): string {
+  const safe = Math.max(0, Math.floor(totalSeconds))
+  const hours = Math.floor(safe / 3600)
+  const minutes = Math.floor((safe % 3600) / 60)
+  const seconds = safe % 60
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+}
+
 interface AppShellProps {
   activeSection: NavSection
   onNavigate: (section: NavSection) => void
@@ -85,6 +94,7 @@ export function AppShell({
     employee,
     clockState,
     clockBusy,
+    liveWorkedSeconds,
     performClockAction,
   } = useClockState()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -190,6 +200,21 @@ export function AppShell({
   const clockStatus = clockState?.status ?? 'not_clocked_in'
   const isWorking = clockStatus === 'working' || clockStatus === 'remote'
   const isOnBreak = clockStatus === 'on_break'
+  const showSidebarMiniClock =
+    hasEmployeeProfile && clockState && activeTenant?.role !== 'accountant'
+  const formattedLiveClock = formatClockHhMmSs(liveWorkedSeconds)
+  const quickClockActionLabel = isWorking
+    ? t('clock.actions.pause')
+    : isOnBreak
+      ? t('clock.actions.resume')
+      : t('clock.actions.clockIn')
+  const stopClockTitle = isOnBreak
+    ? isEs
+      ? 'Reanude antes de fichar salida'
+      : '请先恢复工作再签退'
+    : isEs
+      ? 'Fichar salida'
+      : '下班签退'
 
   const handleSidebarQuickClock = () => {
     if (!hasEmployeeProfile || !clockState || clockBusy) return
@@ -450,25 +475,13 @@ export function AppShell({
                   size="sm"
                 />
               </button>
-              {hasEmployeeProfile && clockState && (
+              {showSidebarMiniClock && (
                 <button
                   type="button"
                   disabled={clockBusy}
                   onClick={handleSidebarQuickClock}
-                  aria-label={
-                    isWorking
-                      ? t('clock.actions.pause')
-                      : isOnBreak
-                        ? t('clock.actions.resume')
-                        : t('clock.actions.clockIn')
-                  }
-                  title={
-                    isWorking
-                      ? t('clock.actions.pause')
-                      : isOnBreak
-                        ? t('clock.actions.resume')
-                        : t('clock.actions.clockIn')
-                  }
+                  aria-label={`${quickClockActionLabel} (${formattedLiveClock})`}
+                  title={`${formattedLiveClock} · ${quickClockActionLabel}`}
                   className={cn(
                     'flex h-8 w-8 items-center justify-center rounded-lg text-white transition-colors disabled:opacity-50',
                     isWorking
@@ -494,7 +507,7 @@ export function AppShell({
               </button>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <div className="flex items-center justify-between gap-2 px-1">
                 <button
                   type="button"
@@ -519,31 +532,21 @@ export function AppShell({
                     )}
                   </div>
                 </button>
+              </div>
 
-                {hasEmployeeProfile && clockState && (
+              {showSidebarMiniClock && (
+                <div className="flex items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-900/95 px-2.5 py-2">
                   <button
                     type="button"
                     disabled={clockBusy}
                     onClick={handleSidebarQuickClock}
-                    aria-label={
-                      isWorking
-                        ? t('clock.actions.pause')
-                        : isOnBreak
-                          ? t('clock.actions.resume')
-                          : t('clock.actions.clockIn')
-                    }
-                    title={
-                      isWorking
-                        ? t('clock.actions.pause')
-                        : isOnBreak
-                          ? t('clock.actions.resume')
-                          : t('clock.actions.clockIn')
-                    }
+                    aria-label={quickClockActionLabel}
+                    title={quickClockActionLabel}
                     className={cn(
-                      'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white transition-colors disabled:opacity-50',
+                      'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:outline-none disabled:opacity-50',
                       isWorking
                         ? 'bg-amber-500 text-slate-950 hover:bg-amber-400'
-                        : 'bg-[#2563EB] hover:bg-blue-500',
+                        : 'bg-[#2563EB] text-white hover:bg-blue-500',
                     )}
                   >
                     {isWorking ? (
@@ -552,8 +555,41 @@ export function AppShell({
                       <Play className="h-3.5 w-3.5" aria-hidden="true" />
                     )}
                   </button>
-                )}
-              </div>
+
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <span
+                      className={cn(
+                        'h-1.5 w-1.5 shrink-0 rounded-full',
+                        isWorking
+                          ? 'bg-emerald-400'
+                          : isOnBreak
+                            ? 'bg-amber-400'
+                            : 'bg-slate-500',
+                      )}
+                      aria-hidden="true"
+                    />
+                    <span className="font-mono text-xs font-semibold tracking-wider text-white tabular-nums">
+                      {formattedLiveClock}
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={clockBusy || !isWorking}
+                    onClick={() => void performClockAction('clock_out')}
+                    aria-label={stopClockTitle}
+                    title={stopClockTitle}
+                    className={cn(
+                      'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:outline-none',
+                      isWorking && !clockBusy
+                        ? 'bg-rose-600/20 text-rose-400 hover:bg-rose-600 hover:text-white'
+                        : 'cursor-not-allowed text-slate-600 opacity-50',
+                    )}
+                  >
+                    <Square className="h-3 w-3 fill-current" aria-hidden="true" />
+                  </button>
+                </div>
+              )}
 
               <div className="flex items-center justify-between gap-1">
                 <button

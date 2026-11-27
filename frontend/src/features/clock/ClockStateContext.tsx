@@ -31,6 +31,7 @@ interface ClockStateContextValue {
   workMode: WorkMode
   setWorkMode: (mode: WorkMode) => void
   liveWorkedMinutes: number
+  liveWorkedSeconds: number
   liveBreakMinutes: number
   autoBreakRemainingSeconds: number | null
   autoBreakCompleted: boolean
@@ -176,17 +177,23 @@ export function ClockStateProvider({ children }: { children: ReactNode }) {
     return () => window.clearInterval(timer)
   }, [isTimerActive])
 
-  const liveWorkedMinutes = useMemo(() => {
-    const base = myDashboard?.clock_state?.worked_minutes_today ?? 0
-    if (!isWorkingStatus) return base
-    const elapsedMin = Math.max(0, Math.floor((nowMs - fetchedAtMs) / 60000))
-    return base + elapsedMin
+  const liveWorkedSeconds = useMemo(() => {
+    const baseSeconds =
+      (myDashboard?.clock_state?.worked_minutes_today ?? 0) * 60
+    if (!isWorkingStatus) return baseSeconds
+    const elapsedSec = Math.max(0, Math.floor((nowMs - fetchedAtMs) / 1000))
+    return baseSeconds + elapsedSec
   }, [
     myDashboard?.clock_state?.worked_minutes_today,
     isWorkingStatus,
     nowMs,
     fetchedAtMs,
   ])
+
+  const liveWorkedMinutes = useMemo(
+    () => Math.floor(liveWorkedSeconds / 60),
+    [liveWorkedSeconds],
+  )
 
   const liveBreakMinutes = useMemo(() => {
     const base = myDashboard?.clock_state?.break_minutes_today ?? 0
@@ -291,6 +298,7 @@ export function ClockStateProvider({ children }: { children: ReactNode }) {
       workMode,
       setWorkMode,
       liveWorkedMinutes,
+      liveWorkedSeconds,
       liveBreakMinutes,
       autoBreakRemainingSeconds,
       autoBreakCompleted,
@@ -307,6 +315,7 @@ export function ClockStateProvider({ children }: { children: ReactNode }) {
       myDashboard,
       workMode,
       liveWorkedMinutes,
+      liveWorkedSeconds,
       liveBreakMinutes,
       autoBreakRemainingSeconds,
       autoBreakCompleted,

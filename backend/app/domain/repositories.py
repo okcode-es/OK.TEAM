@@ -12,7 +12,7 @@ from typing import Protocol
 from uuid import UUID
 
 from app.domain.announcements import Announcement, AnnouncementAcknowledgement, AnnouncementCategory
-from app.domain.attendance import AttendanceEvent
+from app.domain.attendance import AttendanceDayReview, AttendanceEvent
 from app.domain.break_policies import BreakPolicy, BreakScopeType
 from app.domain.documents import ComplianceDocument, DocumentCategory, DocumentReceipt
 from app.domain.employees import (
@@ -226,6 +226,7 @@ class EmployeeRepository(Protocol):
         emergency_contact_name: str = "",
         emergency_contact_phone: str = "",
         default_break_minutes: int | None = None,
+        manager_id: UUID | None = None,
     ) -> Employee | None: ...
 
     async def update_avatar(
@@ -558,3 +559,28 @@ class BreakPolicyRepository(Protocol):
         deleted_at: datetime,
         updated_by_user_id: UUID,
     ) -> BreakPolicy | None: ...
+
+
+class AttendanceDayReviewRepository(Protocol):
+    async def list_by_employee(
+        self,
+        tenant_id: UUID,
+        employee_id: UUID,
+        *,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> list[AttendanceDayReview]: ...
+
+    async def list_by_tenant(
+        self,
+        tenant_id: UUID,
+        *,
+        employee_ids: Sequence[UUID] | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> list[AttendanceDayReview]: ...
+
+    async def upsert_many(
+        self,
+        reviews: Sequence[AttendanceDayReview],
+    ) -> list[AttendanceDayReview]: ...

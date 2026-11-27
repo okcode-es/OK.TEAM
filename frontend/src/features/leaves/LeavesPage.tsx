@@ -131,21 +131,29 @@ function getMondayFirstCells(year: number, monthIndex: number): Array<number | n
   return cells
 }
 
-export function LeavesPage() {
+export type TimeManagementTab = 'team' | 'absences' | 'attendance'
+
+export function LeavesPage({
+  initialTab = 'team',
+}: {
+  initialTab?: TimeManagementTab
+}) {
   const { activeTenant, profile } = useAuth()
-  const scope = `${activeTenant?.tenant_id}:${activeTenant?.role}:${profile?.user_id}`
-  return <LeavesWorkspace key={scope} />
+  const scope = `${activeTenant?.tenant_id}:${activeTenant?.role}:${profile?.user_id}:${initialTab}`
+  return <LeavesWorkspace key={scope} initialTab={initialTab} />
 }
 
-function LeavesWorkspace() {
+function LeavesWorkspace({
+  initialTab = 'team',
+}: {
+  initialTab?: TimeManagementTab
+}) {
   const { t, i18n } = useTranslation()
   const { activeTenant, profile } = useAuth()
   const locale = i18n.language || 'zh-CN'
   const isEs = locale.startsWith('es')
 
-  const [activeTab, setActiveTab] = useState<'team' | 'absences' | 'attendance'>(
-    'team',
-  )
+  const [activeTab, setActiveTab] = useState<TimeManagementTab>(initialTab)
 
   const role = activeTenant?.role
   const canReview =
@@ -714,9 +722,15 @@ function LeavesWorkspace() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
           <h1 className="text-xl font-semibold tracking-tight text-slate-900">
-            {isEs ? 'Gestión del tiempo' : '时间与假期管理'}
+            {isEs ? 'Gestión del tiempo' : '时间管理'}
           </h1>
-          <p className="text-sm text-slate-600">{t('leaves.subtitle')}</p>
+          <p className="text-sm text-slate-600">
+            {activeTab === 'attendance'
+              ? isEs
+                ? 'Gestiona el calendario del equipo, las ausencias y el registro diario de jornada (RDL 8/2019).'
+                : '统一管理团队日历、休假申请与符合西班牙 RDL 8/2019 的每日考勤记录。'
+              : t('leaves.subtitle')}
+          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -746,7 +760,7 @@ function LeavesWorkspace() {
             </div>
           )}
 
-          {canReview && (
+          {canReview && activeTab !== 'attendance' && (
             <>
               <Button
                 type="button"
@@ -791,12 +805,18 @@ function LeavesWorkspace() {
       </div>
 
       {/* Unified Time Management Tabs */}
-      <div className="flex items-center gap-6 overflow-x-auto border-b border-slate-200">
+      <div
+        role="tablist"
+        aria-label={isEs ? 'Gestión del tiempo' : '时间管理'}
+        className="flex items-center gap-6 overflow-x-auto border-b border-slate-200"
+      >
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === 'team'}
           onClick={() => setActiveTab('team')}
           className={cn(
-            'inline-flex shrink-0 items-center gap-2 border-b-2 px-1 pb-2.5 text-sm font-medium whitespace-nowrap transition-colors',
+            'inline-flex shrink-0 items-center gap-2 border-b-2 px-1 pb-2.5 text-sm font-medium whitespace-nowrap transition-colors focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:outline-none',
             activeTab === 'team'
               ? 'border-[#2563EB] text-[#2563EB]'
               : 'border-transparent text-slate-600 hover:text-slate-900',
@@ -808,23 +828,27 @@ function LeavesWorkspace() {
         {canViewAbsences && (
           <button
             type="button"
+            role="tab"
+            aria-selected={activeTab === 'absences'}
             onClick={() => setActiveTab('absences')}
             className={cn(
-              'inline-flex shrink-0 items-center gap-2 border-b-2 px-1 pb-2.5 text-sm font-medium whitespace-nowrap transition-colors',
+              'inline-flex shrink-0 items-center gap-2 border-b-2 px-1 pb-2.5 text-sm font-medium whitespace-nowrap transition-colors focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:outline-none',
               activeTab === 'absences'
                 ? 'border-[#2563EB] text-[#2563EB]'
                 : 'border-transparent text-slate-600 hover:text-slate-900',
             )}
           >
             <CalendarClock className="h-4 w-4" aria-hidden="true" />
-            <span>{isEs ? 'Ausencias' : '假期管理'}</span>
+            <span>{isEs ? 'Ausencia' : '假期'}</span>
           </button>
         )}
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === 'attendance'}
           onClick={() => setActiveTab('attendance')}
           className={cn(
-            'inline-flex shrink-0 items-center gap-2 border-b-2 px-1 pb-2.5 text-sm font-medium whitespace-nowrap transition-colors',
+            'inline-flex shrink-0 items-center gap-2 border-b-2 px-1 pb-2.5 text-sm font-medium whitespace-nowrap transition-colors focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:outline-none',
             activeTab === 'attendance'
               ? 'border-[#2563EB] text-[#2563EB]'
               : 'border-transparent text-slate-600 hover:text-slate-900',
@@ -837,7 +861,7 @@ function LeavesWorkspace() {
 
       {activeTab === 'team' && <TeamCalendarGantt stores={stores} />}
 
-      {activeTab === 'attendance' && <AttendancePage />}
+      {activeTab === 'attendance' && <AttendancePage embedded />}
 
       {activeTab === 'absences' && (
         <>

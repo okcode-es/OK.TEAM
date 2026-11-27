@@ -33,6 +33,7 @@ from app.domain.security import MembershipStatus, UserRole
 from app.infrastructure.config import Settings
 from app.infrastructure.supabase_jwt import SupabaseJWTVerifier, sign_dev_hs256_token
 from app.interfaces.api.deps import (
+    get_attendance_day_review_repository,
     get_attendance_repository,
     get_break_policy_repository,
     get_commit_fn,
@@ -40,6 +41,7 @@ from app.interfaces.api.deps import (
     get_jwt_verifier,
     get_membership_repository,
     get_payroll_closing_repository,
+    get_shift_repository,
     get_store_repository,
     get_tenant_repository,
     get_utc_now,
@@ -842,14 +844,36 @@ def _build_phase3_test_app():
         ) -> bool:
             return False
 
-    class _EmptyBreakPolicyRepo:
-        async def list_by_tenant(self, _tenant_id: UUID) -> list[object]:
-            return []
-
         async def list_closed_months_for_store(
             self, _tenant_id: UUID, _store_id: UUID, _period_months: object
         ) -> set[str]:
             return set()
+
+    class _EmptyBreakPolicyRepo:
+        async def list_by_tenant(self, _tenant_id: UUID) -> list[object]:
+            return []
+
+    class _EmptyShiftRepo:
+        async def list_by_employee_window(
+            self,
+            _tenant_id: UUID,
+            _employee_id: UUID,
+            *,
+            window_start_utc: datetime,
+            window_end_utc: datetime,
+        ) -> list[object]:
+            return []
+
+    class _EmptyDayReviewRepo:
+        async def list_by_tenant(
+            self,
+            _tenant_id: UUID,
+            *,
+            employee_ids: object = None,
+            date_from: object = None,
+            date_to: object = None,
+        ) -> list[object]:
+            return []
 
     app.dependency_overrides[get_jwt_verifier] = lambda: verifier
     app.dependency_overrides[get_tenant_repository] = lambda: tenant_repo
@@ -859,6 +883,8 @@ def _build_phase3_test_app():
     app.dependency_overrides[get_attendance_repository] = lambda: attendance_repo
     app.dependency_overrides[get_payroll_closing_repository] = lambda: _OpenPayrollRepo()
     app.dependency_overrides[get_break_policy_repository] = lambda: _EmptyBreakPolicyRepo()
+    app.dependency_overrides[get_shift_repository] = lambda: _EmptyShiftRepo()
+    app.dependency_overrides[get_attendance_day_review_repository] = lambda: _EmptyDayReviewRepo()
     app.dependency_overrides[get_commit_fn] = lambda: _noop_commit
     app.dependency_overrides[get_utc_now] = lambda: clock_state["now"]
 

@@ -148,6 +148,7 @@ class AttendancePdfDocumentInput:
     violation_alerts_count: int
     daily_rows: tuple[AttendancePdfDayRow, ...]
     generated_at_utc: datetime
+    redact_health: bool = False
 
 
 @dataclass(frozen=True, slots=True)

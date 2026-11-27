@@ -1,52 +1,42 @@
-# okTeam Handoff Snapshot (2026-11-27)
+# okTeam Handoff Snapshot (2026-11-27 — Phase 5I + 5H)
 
-## HR and role isolation follow-up (2026-11-27)
+## Phase 5I: Interactive Organization Chart (`Organigrama`) + `employees.manager_id`
 
-- An accountant with an active or on-leave employee profile may read that profile's own raw leaves and year calendar. An unlinked or frozen account receives an empty raw list and cannot open a personal calendar. Other people's non-vacation absences are redacted in the team calendar and weekly schedule. The existing block on medical file access is preserved.
-- Manager directory combines linked employees' operational scope with shared membership stores. The caller can see their own membership. Tenant-wide readers retain their existing directory access.
-- Membership mutations serialize on the tenant row and re-read the active caller before authorization. Two sessions using the repository in a disposable PostgreSQL 16 database attempted overlapping changes to two synthetic owners. One committed, one was protected, and one active owner remained.
-- Executive summary counts one outstanding announcement if an eligible employee in the report scope still needs to sign. The API regression covers a department with no recipients and a two-recipient notice counted once.
-- In Chrome with synthetic data, HR saved an entitlement from 32 to 35 in the employee profile and saw the audit reason after reopening. Department names differing in case or surrounding spaces formed one group and the filtered count showed 2 of 3. At widths 390 and 1440, both languages showed all four KPI titles and the legal text on the login form measured 7.58:1.
-- In the same attendance tab, changing the inherited 60-minute break to a 45-minute employee override refreshed net time from 7h00 to 7h15. Restoring inheritance returned it to 7h00.
-- All 83 backend tests, Ruff, mypy (64 files), Domain purity (16), TypeScript checks, ESLint and production build passed. The 66-path development OpenAPI and generated TS contract gained `absence_redacted` in the weekly schedule. Independent Red Team passed six relevant API tests and cleared its findings on historical employment status and weekly schedule privacy.
-- Non-blocking diagnostics were a Starlette TestClient deprecation, the Vite bundle-size warning and an isolated UI favicon 404. Browser QA used a real FastAPI instance backed by synthetic in-memory repositories. The database concurrency check used a separate PostgreSQL 16 container. No commit, push or deployment was requested.
+### 1. Backend Deliverables (`backend/`, Alembic head `0012_employee_manager_id`)
+- **Migration & Persistence (`0012_employee_manager_id.py`, `models.py`, `repositories.py`)**:
+  - Added nullable `employees.manager_id` FK (`employees.id`, `ON DELETE SET NULL`), `ck_employees_no_self_manager`, and `ix_employees_tenant_manager` (`tenant_id, manager_id`).
+  - Updated `SqlAlchemyEmployeeRepository.anonymize()` to clear `model.manager_id = None` and bulk-clear `manager_id` on active subordinates in the same tenant (GDPR Art. 17).
+- **Pure Domain (`backend/app/domain/org_chart.py`, `backend/app/domain/employees.py`)**:
+  - Added `Employee.manager_id` and iterative `validate_no_manager_cycle(...)`.
+  - Added stdlib-only `OrgChartNode`, `OrgChartResult`, and iterative O(N) `build_org_chart(...)` with 3-color deterministic cycle breaking, BFS + reverse-topological `direct_reports_count`/`total_reports_count`, and `root_ids`/`unassigned_ids` partitioning.
+- **Application & API (`backend/app/application/org_chart.py`, `backend/app/interfaces/api/organization.py`, `employees.py`, `main.py`)**:
+  - Added `GET /api/v1/organization/org-chart` (`operation_id="getOrganizationOrgChart"`) open read-only to all active tenant roles (`owner`, `hr`, `store_manager`, `accountant`, `employee`).
+  - Enforced strict 12-field GDPR projection `OrgChartNodePublic` (`ConfigDict(extra="forbid")`: `id`, `full_name`, `avatar_url`, `job_title`, `department_id`, `department_name`, `store_id`, `store_name`, `work_email`, `manager_id`, `direct_reports_count`, `total_reports_count`) and `OrgChartResponse` (`ConfigDict(extra="forbid")`) with `Cache-Control: no-store` & `X-Content-Type-Options: nosniff`.
+  - Updated `PATCH /api/v1/employees/{id}` with `UNSET` sentinel + `model_fields_set` so omitting `manager_id` preserves existing reporting lines while explicit `null` clears it; validates same-tenant active manager and rejects cycles (422).
+  - Updated dev-only `backend/scripts/seed_demo_accounts.py` with realistic reporting lines (`EMP-003` -> `EMP-004` Carlos Manager -> 7 direct reports, plus standalone `EMP-010`).
+- **Tests, Contracts & Red Team**:
+  - Added `backend/tests/test_phase5i_org_chart.py` (95/95 total pytest passing).
+  - Synced `contracts/openapi.json` and `frontend/src/api/generated/schema.d.ts`.
+  - **Red Team Gatekeeper Round 2/2**: `APPROVE` (0 P0 / 0 P1 / 0 P2).
 
-## Current Git State (2026-11-26)
-- Branch `main`; local `origin/main` = `705e048`. Phases 5A–5G are committed.
-- Three `AGENTS.md` files are untracked. Phase 01 form changes and this round's memory updates are uncommitted. No commit or push was made in this round.
-- `.ai/memory/DECISIONS.md` is unchanged.
+### 2. Frontend Deliverables (`frontend/`)
+- **Generated Types (`frontend/src/api/types.ts`)**: Aliased `OrgChartNodePublic` & `OrgChartResponse` from `schema.d.ts` (zero hand-written DTOs).
+- **Layout & Export Engines (`orgChartLayout.ts`, `orgChartExport.ts`)**:
+  - Pure TypeScript deterministic layout engine supporting multi-root trees, filter ancestor bridge nodes, anti-explosion 5-column compact grid (`> 5` direct reports with none expanded), crisp `#CBD5E1` orthogonal connectors, and collapsible unassigned reporting-line section.
+  - Zero-dependency programmatic UTF-8 SVG & 2× Retina PNG export (`#F3F5F9` background).
+- **Interactive Org Chart & Public Drawer (`OrgChartView.tsx`, `OrgChartPublicDrawer.tsx`)**:
+  - Top `role="toolbar"` with IME-safe search & locate, customize card fields, highlight by department/store, focus branch (`我的直属团队` / selected node / reset), store+department filter, and PNG/SVG export.
+  - `#F3F5F9` dot-grid pan/zoom canvas (`25%`–`200%`), pure white cards with `direct (total)` expand/collapse capsule, bottom-right floating control bar (`−/%/+`, Fit, Locate Me, Expand/Collapse level, Home).
+  - Role-graded right-side Public Card Drawer showing strictly public fields, clickable direct manager & direct reports, and cobalt `查看完整人事档案` button visible ONLY to `owner`, `hr`, or in-scope `store_manager` (never rendered for `employee`/`accountant`).
+- **Navigation & HR Manager Editing (`EmployeesPage.tsx`, `EmployeeProfilePage.tsx`, `zh-CN.json`, `es-ES.json`)**:
+  - Renamed sidebar nav `employees` to `组织与员工 / Organización`, accessible to all roles; ordinary `employee` defaults directly to `组织架构` and sees a public-only directory under `员工列表`.
+  - Added optional `直属主管 / Responsable directo` selector for HR/Owner in Create/Edit Employee flows.
 
-## Previous round on 2026-11-26 — verified results
-1. **01 Break policy form**: Added recovery for failed policy reads with Chinese/Spanish retry; writes are blocked until a successful read. Isolated Chrome against simulated API verified 403, 404, exception, retry, tenant switch, stale response, save, and restoration inheritance.
-2. **02 Dashboard/navigation**: Chinese and Spanish at 1440×900, 1440×500, and 390×844; all 24 KPI navigation checks passed. Three navigation groups and bottom pinning for short windows passed. No console or local HTTP errors. Spanish displays preferred name 林娜 and `RR.HH.`; no Spanish full-name switching. Mobile truncates the Chinese attendance KPI and four Spanish titles.
-3. **03 Leave entitlements / assignment — PARTIAL**: Isolated API and PostgreSQL verification: entitlement 30→37; direct assignment of 3 days→34; both identities refreshed; overlapping assignment returned 409. Employee/store/company break calculations yielded 450/420/460 minutes. Browser: employee B used Leave management to change entitlement 30→32, then directly assigned 1 day; the employee profile showed approved, used 1, balance 31. **Profile's Adjust Entitlement entry is blocked**: the required-reason input disappears on entry and cannot be saved; `LeaveEntitlementDialog` defaults `employees=[]`, causing its clearing effect to run on every render. **Attendance profile ledger does not refresh after saving an employee override or restoring inheritance**. The policy is persisted; the ledger reflects it after leaving and re-entering the tab (store 60 min→employee 45 min→restore store yielded 7h00→7h15→7h00 on re-entry). Do not mark 03 fully passed until these are fixed and rechecked.
-4. **04 Login browser — visual checks passed; contrast issue open**: Chinese/Spanish desktop (1440×900) and mobile (390×844); all four combinations showed no horizontal overflow and complete copy, forms, and buttons. Desktop SVG wave worked; mobile rendered form-only. Simulated `prefers-reduced-motion` changed wave and fade-in animation to `none`/`0s`. Chrome had no console errors. Estimated contrast for white-page legal fine print was 2.56:1, below 4.5:1; form helper copy was about 4.76:1 and primary button 5.17:1.
-5. **Service cleanup**: Isolated 03 services were stopped; demo frontend `5173` and backend `8001` returned 200; PostgreSQL was healthy.
-
-### Current Quality Gates (2026-11-26; reported for this round)
-- Backend pytest: 80 passed; one Starlette/httpx deprecation warning.
-- Ruff passed; mypy passed on 64 files; Domain purity passed on 16 files.
-- `tsc` and ESLint passed.
-- Online OpenAPI matches the repository contract: 66 paths.
-
-## Historical Delivery Record (prior handoff, 2026-11-26; not a claim of current re-verification)
-### Phases 5A–5D
-Workspace Ops, Private Avatars, dual-view Personio-grade light enterprise UI, Employee 360° Profile, GDPR Art. 9 Team Calendar Gantt, Zero-Leak Error Control, UX and i18n polish.
-
-### Phase 5E + Enterprise Login
-Five demo accounts (`owner@dragon.es`, `hr@dragon.es`, `manager@dragon.es`, `zhou@dragon.es`, `gestoria@asesoria.es`); self-selectable clock times and `ManualDayClockSheet`; two-stage leave approval (`0008`); management CSV/PDF reports; employee RBAC nav guards; dark sidebar scrollbar; Fluid Split-Screen Login (`LoginFluidBackdrop.tsx`).
-
-### Phases 5F/5G — HR Workbench, Dashboard, Leave Entitlements/Assignment, Break Policies
-- **P0 fixes**: Sidebar sticky flex layout with no bottom clipping; single Sign Out in sidebar; accurate `hr@dragon.es` identity (`Elena Chen / 林娜`, `人事主管 / RR. HH.`); `organization` restricted to `owner`; `ManualDayClockSheet` error visibility and open-shift banner.
-- **HR dashboard**: Four clickable KPI alert cards (`pending_leaves_count`, `attendance_alerts_count`, `pending_justificantes_count` neutral `0` for accountant, scoped `unacknowledged_announcements_count`); three-group sidebar; Department `<Select>`; announcements empty-state CTA; compact `Celebraciones`; clean `Who's in`; two-tier holiday tiles.
-- **HR leaves (`0010`)**: Custom annual entitlements (>=30 natural days, Art. 38 ET floor, immutable adjustment audit triggers) with `LeaveEntitlementDialog`; HR/scoped-manager direct assignment (`POST /api/v1/leaves/assign`, published-shift, balance, and closed-month guarded) with `AssignLeaveSheet`.
-- **Three-tier break policies (`0009`, `0010`)**: `employee > store > tenant > system_default`; `fixed_duration` and `fixed_window` (*jornada partida*); `is_paid`; `manual_punch` with server-authoritative auto-end and live countdown versus `auto_deduct`; integrated across ledger, dashboard, payroll closing, and reports. `BreakPolicyForm` in `StoresPage` and `ProfileAttendanceTab`.
-
-### Historical Gates and Local Services (prior handoff, 2026-11-26)
-- Red Team Round 2/2: **APPROVE**, 0 P0/P1/P2 remaining.
-- `quality-gate.ps1 -Scope all`: Domain purity 16 files/0 violations; Ruff 0; mypy 64 files/0; pytest **80/80**; `tsc --noEmit` 0; ESLint 0; `vite build` passed; **893/893 i18n keys, 0 missing**.
-- Historical Chrome DevTools audit: `1440×900`, `zh-CN` and `es-ES`, Dashboard, `AssignLeaveSheet`, Employee 360° Custom Break Policy; 0 console errors/warnings, `overflowX=false`, `asideBottomClipped=false`.
-- Historical local Docker endpoints: frontend `http://localhost:5173`; backend `http://localhost:8001` (`/api/v1/health` 200); PostgreSQL 16 `localhost:5433`, migrated to `0010_hr_leave_break_policies`.
-
-## Next
-- Committed and pushed 2026-11-27 follow-up fixes (role/concurrency safeguards, report scope fix, HR UI/break-policy fixes, calm 3-column Dashboard KPI strip removing unacknowledged announcements KPI, and `.ai/` rules/skills hardening) to `origin/main`. Ready for the next iteration phase.
+### 3. Verification & Visual Spot-Check Routes
+- **Quality Gates**: `scripts/quality-gate.ps1 -Scope all` PASS (Domain purity 17/0, Ruff 0, Mypy 67/0, Pytest 95/95, `tsc --noEmit` 0, ESLint 0), Vite build PASS, **1037/1037 i18n keys**.
+- **Local Services**: Rebuilt & running (`http://localhost:5173` 200, `http://localhost:8001/api/v1/health` 200, Postgres `localhost:5433` rev `0012`).
+- **Routes for Browser Visual Spot-Check**:
+  1. `http://localhost:5173` -> Sidebar `组织与员工 / Organización` -> Tab `组织架构 / Organigrama` as HR (`hr@dragon.es`): expand Carlos Manager (`7 (7)`) to verify 5-column compact grid, unassigned group (`未分配汇报线`), Search/Customize/Highlight/Focus/Filter/Export PNG+SVG, and Public Drawer -> `查看完整人事档案`.
+  2. `http://localhost:5173` -> Dev Login as Employee (`zhou@dragon.es`) -> Sidebar `组织与员工`: verify default `组织架构` tab, `定位到我`, Public Drawer with zero full-profile button, and public-only `员工列表`.
+  3. Mobile `390×844` (`es-ES`): `Apps -> Organización -> Organigrama` (`overflowX=false`, clean subtitle & full-width search bar).
+  4. Phase 5H routes (also in working tree): `attendance` (`时间管理 -> 考勤记录`), `leaves`, `payroll` (`月度关账`).
