@@ -204,7 +204,7 @@ export function ProfileLeavesTab({ employee }: ProfileLeavesTabProps) {
                       {isEs ? 'días naturales' : '自然日'}
                     </div>
                   </div>
-                  {lv.medical_document_id && (
+                  {role !== 'accountant' && lv.medical_document_id && (
                     <Button
                       type="button"
                       size="xs"

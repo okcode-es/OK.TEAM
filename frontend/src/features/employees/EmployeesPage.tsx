@@ -73,6 +73,7 @@ import {
 } from '@/components/ui/table'
 import { useAuth } from '@/features/auth/AuthContext'
 import { BulkImportSheet } from '@/features/employees/BulkImportSheet'
+import { normalizeDepartment } from '@/features/employees/department'
 import { EmployeeProfilePage } from '@/features/employees/EmployeeProfilePage'
 import { OrgChartView } from '@/features/employees/OrgChartView'
 import { isImeComposing } from '@/lib/ime'
@@ -129,7 +130,8 @@ const DEFAULT_CREATE_FORM: CreateEmployeeForm = {
 export function EmployeesPage() {
   const { t, i18n } = useTranslation()
   const { activeTenant } = useAuth()
-  const isEs = (i18n.language || 'zh-CN').startsWith('es')
+  const locale = i18n.language || 'zh-CN'
+  const isEs = locale.startsWith('es')
   const canManage =
     activeTenant?.role === 'owner' || activeTenant?.role === 'hr'
 
@@ -142,7 +144,7 @@ export function EmployeesPage() {
   const [viewMode, setViewMode] = useState<'table' | 'card'>('table')
   const [searchQuery, setSearchQuery] = useState('')
   const [storeFilter, setStoreFilter] = useState<string>('all')
-  const [departmentFilter, setDepartmentFilter] = useState<string>('all')
+  const [departmentFilter, setDepartmentFilter] = useState<string>()
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [contractFilter, setContractFilter] = useState<string>('all')
 
@@ -200,12 +202,17 @@ export function EmployeesPage() {
   )
 
   const departments = useMemo(() => {
-    const set = new Set<string>()
+    const labels = new Map<string, string>()
     for (const e of employees) {
-      if (e.department?.trim()) set.add(e.department.trim())
+      const key = normalizeDepartment(e.department)
+      if (key && !labels.has(key)) labels.set(key, e.department.trim())
     }
-    return Array.from(set).sort()
+    return labels
   }, [employees])
+  const departmentOptions = useMemo(
+    () => [...departments].sort((a, b) => a[1].localeCompare(b[1], locale)),
+    [departments, locale],
+  )
 
   const filteredEmployees = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
@@ -214,8 +221,8 @@ export function EmployeesPage() {
         return false
       }
       if (
-        departmentFilter !== 'all' &&
-        (item.department?.trim() || '') !== departmentFilter
+        departmentFilter !== undefined &&
+        normalizeDepartment(item.department) !== departmentFilter
       ) {
         return false
       }
@@ -246,13 +253,22 @@ export function EmployeesPage() {
 
   const activeFiltersCount =
     (storeFilter !== 'all' ? 1 : 0) +
-    (departmentFilter !== 'all' ? 1 : 0) +
+    (departmentFilter !== undefined ? 1 : 0) +
     (statusFilter !== 'all' ? 1 : 0) +
     (contractFilter !== 'all' ? 1 : 0)
 
+  const formatCount = new Intl.NumberFormat(locale).format
+  const employeeCountLabel =
+    activeFiltersCount > 0 || searchQuery.trim()
+      ? t('employees.filteredCount', {
+          shown: formatCount(filteredEmployees.length),
+          total: formatCount(employees.length),
+        })
+      : t('employees.count', { count: filteredEmployees.length })
+
   const clearAllFilters = () => {
     setStoreFilter('all')
-    setDepartmentFilter('all')
+    setDepartmentFilter(undefined)
     setStatusFilter('all')
     setContractFilter('all')
     setSearchQuery('')
@@ -688,9 +704,11 @@ export function EmployeesPage() {
               )}
             </Button>
 
-            <span className="px-1 text-xs font-medium text-slate-500 tabular-nums">
-              {t('employees.count', { count: filteredEmployees.length })}
-            </span>
+            {!loading && (
+              <span role="status" className="px-1 text-xs font-medium text-slate-500 tabular-nums">
+                {employeeCountLabel}
+              </span>
+            )}
           </div>
 
           {primaryTab === 'list' && viewMode === 'table' && (
@@ -802,8 +820,10 @@ export function EmployeesPage() {
                 {t('employees.fields.department')}
               </Label>
               <Select
-                value={departmentFilter}
-                onValueChange={setDepartmentFilter}
+                value={departmentFilter === undefined ? 'all' : `department:${departmentFilter}`}
+                onValueChange={(value) =>
+                  setDepartmentFilter(value === 'all' ? undefined : value.slice('department:'.length))
+                }
               >
                 <SelectTrigger className="h-8 bg-white text-xs">
                   <SelectValue />
@@ -812,9 +832,9 @@ export function EmployeesPage() {
                   <SelectItem value="all">
                     {isEs ? 'Todos los departamentos' : '全部部门'}
                   </SelectItem>
-                  {departments.map((d) => (
-                    <SelectItem key={d} value={d}>
-                      {d}
+                  {departmentOptions.map(([key, label]) => (
+                    <SelectItem key={key} value={`department:${key}`}>
+                      {label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -900,17 +920,17 @@ export function EmployeesPage() {
                 </button>
               </Badge>
             )}
-            {departmentFilter !== 'all' && (
+            {departmentFilter !== undefined && (
               <Badge
                 variant="outline"
                 className="gap-1 border-blue-200 bg-blue-50 text-xs text-[#2563EB]"
               >
                 <span>
-                  {t('employees.fields.department')}: {departmentFilter}
+                  {t('employees.fields.department')}: {departments.get(departmentFilter) ?? departmentFilter}
                 </span>
                 <button
                   type="button"
-                  onClick={() => setDepartmentFilter('all')}
+                  onClick={() => setDepartmentFilter(undefined)}
                   aria-label="Remove department filter"
                 >
                   <X className="h-3 w-3" aria-hidden="true" />
@@ -971,6 +991,7 @@ export function EmployeesPage() {
         ) : (
           <OrgChartView
             employees={filteredEmployees}
+            employeeCountLabel={employeeCountLabel}
             stores={stores}
             onSelectEmployee={setSelectedEmployeeId}
           />

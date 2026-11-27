@@ -634,15 +634,16 @@ export function DashboardPage({
       {/* ADMIN VIEW */}
       {viewMode === 'admin' && !isEmployeeRole && (
         <div className="space-y-4">
-          {/* 4 Top Compact KPI Alert Cards */}
-          <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
+          {/* 3 Top Compact KPI Strip */}
+          <div className="grid grid-cols-1 divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200/75 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
             {[
               {
                 key: 'pending_leaves',
                 label: isEs ? 'Solicitudes pendientes' : '待审批请假',
                 count: adminData?.pending_leaves_count ?? 0,
                 icon: CalendarClock,
-                tone: 'amber' as const,
+                dotClass: 'bg-amber-500',
+                alertLabel: isEs ? 'Pendiente' : '待处理',
                 onClick: () => onNavigate('leaves'),
                 disabled: false,
               },
@@ -651,7 +652,8 @@ export function DashboardPage({
                 label: isEs ? 'Alertas de jornada' : '考勤异常 / 法规预警',
                 count: adminData?.attendance_alerts_count ?? 0,
                 icon: AlertTriangle,
-                tone: 'rose' as const,
+                dotClass: 'bg-rose-500',
+                alertLabel: isEs ? 'Revisar' : '需核查',
                 onClick: () => onNavigate('attendance'),
                 disabled: false,
               },
@@ -663,32 +665,14 @@ export function DashboardPage({
                     ? 0
                     : (adminData?.pending_justificantes_count ?? 0),
                 icon: FileCheck2,
-                tone: 'amber' as const,
+                dotClass: 'bg-amber-500',
+                alertLabel: isEs ? 'Pendiente' : '待处理',
                 onClick: () => onNavigate('leaves'),
                 disabled: role === 'accountant',
-              },
-              {
-                key: 'unack_announcements',
-                label: isEs ? 'Lecturas pendientes' : '公告未签收人数',
-                count: adminData?.unacknowledged_announcements_count ?? 0,
-                icon: Bell,
-                tone: 'amber' as const,
-                onClick: () => onNavigate('announcements'),
-                disabled: false,
               },
             ].map((kpi) => {
               const Icon = kpi.icon
               const hasAlert = kpi.count > 0 && !kpi.disabled
-              const highlightCls = hasAlert
-                ? kpi.tone === 'rose'
-                  ? 'border-rose-200 bg-rose-50/35 hover:border-rose-300'
-                  : 'border-amber-200 bg-amber-50/35 hover:border-amber-300'
-                : 'border-slate-200/75 bg-white hover:border-slate-300'
-              const badgeCls = hasAlert
-                ? kpi.tone === 'rose'
-                  ? 'border-rose-200 bg-rose-50 text-rose-700'
-                  : 'border-amber-200 bg-amber-50 text-amber-800'
-                : 'border-slate-200 bg-slate-100 text-slate-600'
 
               return (
                 <button
@@ -696,36 +680,57 @@ export function DashboardPage({
                   type="button"
                   disabled={kpi.disabled}
                   onClick={kpi.onClick}
-                  className={cn(
-                    'flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-colors focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:outline-none disabled:cursor-default disabled:opacity-80',
-                    highlightCls,
-                  )}
+                  className="group flex w-full flex-col justify-between gap-2.5 px-5 py-4 text-left transition-colors hover:bg-slate-50/80 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#2563EB] focus-visible:outline-none disabled:cursor-default disabled:opacity-65 disabled:hover:bg-transparent"
                 >
-                  <div className="min-w-0 space-y-1">
-                    <div className="truncate text-xs font-medium text-slate-600">
-                      {kpi.label}
+                  <div className="flex w-full items-start justify-between gap-2">
+                    <div className="flex min-w-0 items-start gap-2">
+                      <Icon
+                        className={cn(
+                          'mt-0.5 h-4 w-4 shrink-0 text-slate-400 transition-colors',
+                          !kpi.disabled && 'group-hover:text-[#2563EB]',
+                        )}
+                        aria-hidden="true"
+                      />
+                      <span className="text-xs leading-snug font-medium text-slate-600">
+                        {kpi.label}
+                      </span>
                     </div>
-                    <div
+                    {!kpi.disabled && (
+                      <ArrowRight
+                        className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-300 transition-all group-hover:translate-x-0.5 group-hover:text-[#2563EB]"
+                        aria-hidden="true"
+                      />
+                    )}
+                  </div>
+                  <div className="flex w-full items-baseline justify-between gap-2">
+                    <span
                       className={cn(
-                        'text-2xl font-bold tracking-tight tabular-nums',
-                        hasAlert
-                          ? kpi.tone === 'rose'
-                            ? 'text-rose-700'
-                            : 'text-amber-800'
-                          : 'text-slate-700',
+                        'text-2xl font-semibold tracking-tight tabular-nums',
+                        hasAlert ? 'text-slate-900' : 'text-slate-500',
                       )}
                     >
                       {kpi.count}
-                    </div>
-                  </div>
-                  <span
-                    className={cn(
-                      'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border',
-                      badgeCls,
+                    </span>
+                    {hasAlert ? (
+                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600">
+                        <span
+                          className={cn('h-1.5 w-1.5 rounded-full', kpi.dotClass)}
+                          aria-hidden="true"
+                        />
+                        {kpi.alertLabel}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-slate-600">
+                        {kpi.disabled
+                          ? isEs
+                            ? 'Solo RR. HH.'
+                            : '仅 HR 核验'
+                          : isEs
+                            ? 'Al día'
+                            : '无待办'}
+                      </span>
                     )}
-                  >
-                    <Icon className="h-4 w-4" aria-hidden="true" />
-                  </span>
+                  </div>
                 </button>
               )
             })}

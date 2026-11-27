@@ -5,10 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from typing import Literal
 from uuid import UUID, uuid4
 
+from app.application.employees import MUTABLE_STATUSES
 from app.domain.employees import Employee, EmploymentStatus, FrozenRecordError
-from app.domain.leaves import LeaveRequest, LeaveStatus, check_shift_leave_conflict
+from app.domain.leaves import LeaveRequest, LeaveStatus, LeaveType, check_shift_leave_conflict
 from app.domain.organization import (
     EntityNotFoundError,
     ValidationDomainError,
@@ -38,13 +40,24 @@ from app.domain.security import AuthenticatedPrincipal, UserRole
 _SCHEDULE_WRITE_ROLES: frozenset[UserRole] = frozenset(
     {UserRole.OWNER, UserRole.HR, UserRole.STORE_MANAGER}
 )
+ScheduleLeaveType = LeaveType | Literal["absence_redacted"]
+
+
+@dataclass(frozen=True, slots=True)
+class ApprovedScheduleLeave:
+    id: UUID
+    leave_type: ScheduleLeaveType
+    start_date: date
+    end_date: date
+    natural_days: int
+    status: LeaveStatus
 
 
 @dataclass(frozen=True, slots=True)
 class EmployeeWeeklyScheduleRow:
     employee: Employee
     shifts: list[Shift]
-    approved_leaves: list[LeaveRequest]
+    approved_leaves: list[ApprovedScheduleLeave]
     weekly_net_hours: Decimal
     alerts: list[ScheduleAlert]
 
@@ -198,6 +211,9 @@ class GetWeeklyScheduleUseCase:
 
         rows: list[EmployeeWeeklyScheduleRow] = []
         for emp in employees:
+            redact_leave_types = principal.role == UserRole.ACCOUNTANT and (
+                emp.user_id != principal.user_id or emp.employment_status not in MUTABLE_STATUSES
+            )
             emp_shifts = shifts_by_emp.get(emp.id, [])
             week_shifts = [
                 s
@@ -216,7 +232,21 @@ class GetWeeklyScheduleUseCase:
                 EmployeeWeeklyScheduleRow(
                     employee=emp,
                     shifts=week_shifts,
-                    approved_leaves=leaves_by_emp.get(emp.id, []),
+                    approved_leaves=[
+                        ApprovedScheduleLeave(
+                            id=leave.id,
+                            leave_type=(
+                                "absence_redacted"
+                                if redact_leave_types and leave.leave_type != LeaveType.VACATION
+                                else leave.leave_type
+                            ),
+                            start_date=leave.start_date,
+                            end_date=leave.end_date,
+                            natural_days=leave.natural_days,
+                            status=leave.status,
+                        )
+                        for leave in leaves_by_emp.get(emp.id, [])
+                    ],
                     weekly_net_hours=weekly_hours,
                     alerts=alerts,
                 )

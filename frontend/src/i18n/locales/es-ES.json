@@ -191,6 +191,7 @@
     "filterStatus": "Todos los estados",
     "addButton": "Nuevo empleado",
     "count": "{{count}} empleados",
+    "filteredCount": "Se muestran {{shown}} de {{total}} empleados",
     "readOnlyHint": "Su rol solo permite consultar fichas enmascaradas de su alcance.",
     "empty": "No hay empleados registrados todavía.",
     "overtimeProhibited": "Parcial · Sin horas extra",
@@ -581,6 +582,7 @@
       "vacation": "Vacaciones",
       "sick_leave": "Baja IT",
       "medical_appointment": "Consulta médica",
+      "absence_redacted": "Ausencia",
       "day_off": "Día libre",
       "paid_leave": "Permiso retribuido (Art. 37.3 ET)",
       "unpaid_leave": "Permiso sin sueldo"

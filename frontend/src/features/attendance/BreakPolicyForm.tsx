@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Coffee, Plus, RotateCcw, Save, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { apiClient, extractApiError } from '@/api/client'
@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useAuth } from '@/features/auth/AuthContext'
 import { cn } from '@/lib/utils'
 
 interface BreakPolicyFormProps {
@@ -27,7 +28,20 @@ interface BreakPolicyFormProps {
 
 const DURATION_PRESETS = [15, 30, 45, 60, 90]
 
-export function BreakPolicyForm({
+export function BreakPolicyForm(props: BreakPolicyFormProps) {
+  const { activeTenant } = useAuth()
+  const { scopeType, storeId, employeeId } = props
+  const scopeId = scopeType === 'store' ? storeId : employeeId
+
+  return (
+    <ScopedBreakPolicyForm
+      key={JSON.stringify([activeTenant?.tenant_id, scopeType, scopeId])}
+      {...props}
+    />
+  )
+}
+
+function ScopedBreakPolicyForm({
   scopeType,
   storeId,
   employeeId,
@@ -37,7 +51,10 @@ export function BreakPolicyForm({
   const { t, i18n } = useTranslation()
   const isEs = (i18n.language || 'zh-CN').startsWith('es')
 
-  const [loading, setLoading] = useState(true)
+  const [loadStatus, setLoadStatus] = useState<'loading' | 'ready' | 'failed'>(
+    'loading',
+  )
+  const loadRequest = useRef<AbortController | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -96,52 +113,70 @@ export function BreakPolicyForm({
   )
 
   const loadPolicy = useCallback(async () => {
-    setLoading(true)
+    loadRequest.current?.abort()
+    const request = new AbortController()
+    loadRequest.current = request
+    const { signal } = request
+    setLoadStatus('loading')
     setError(null)
+
     try {
-      const listRes = await apiClient.GET('/api/v1/break-policies')
-
-      let matched: BreakPolicyResponse | null = null
-      if (listRes.data) {
-        matched =
-          listRes.data.items.find((p) => {
-            if (p.scope_type !== scopeType) return false
-            if (scopeType === 'store') return p.store_id === storeId
-            if (scopeType === 'employee') return p.employee_id === employeeId
-            return true
-          }) ?? null
+      if (
+        (scopeType === 'employee' && !employeeId) ||
+        (scopeType === 'store' && !storeId)
+      ) {
+        setLoadStatus('failed')
+        return
       }
-      setExistingPolicy(matched)
 
+      const listRes = await apiClient.GET('/api/v1/break-policies', { signal })
+      if (signal.aborted) return
+      if (!listRes.response.ok || !listRes.data) {
+        setLoadStatus('failed')
+        return
+      }
+
+      const matched =
+        listRes.data.items.find((p) => {
+          if (p.scope_type !== scopeType) return false
+          if (scopeType === 'store') return p.store_id === storeId
+          if (scopeType === 'employee') return p.employee_id === employeeId
+          return true
+        }) ?? null
+
+      let effective: EffectiveBreakPolicyResponse | null = null
       if (scopeType === 'employee' && employeeId) {
         const effRes = await apiClient.GET(
           '/api/v1/break-policies/effective/{employee_id}',
-          { params: { path: { employee_id: employeeId } } },
+          { params: { path: { employee_id: employeeId } }, signal },
         )
-        if (effRes.data) {
-          setEffectivePolicy(effRes.data)
-          applyPolicyValues(matched ?? effRes.data)
-        } else {
-          setEffectivePolicy(null)
-          applyPolicyValues(matched)
+        if (signal.aborted) return
+        if (!effRes.response.ok || !effRes.data) {
+          setLoadStatus('failed')
+          return
         }
-      } else {
-        setEffectivePolicy(null)
-        applyPolicyValues(matched)
+        effective = effRes.data
       }
-    } catch (err) {
-      setError(extractApiError(err, t('errors.GENERIC')))
-    } finally {
-      setLoading(false)
+
+      setExistingPolicy(matched)
+      setEffectivePolicy(effective)
+      applyPolicyValues(matched ?? effective)
+      setLoadStatus('ready')
+    } catch {
+      if (!signal.aborted) setLoadStatus('failed')
     }
-  }, [scopeType, storeId, employeeId, applyPolicyValues, t])
+  }, [scopeType, storeId, employeeId, applyPolicyValues])
 
   useEffect(() => {
     void loadPolicy()
+    return () => loadRequest.current?.abort()
   }, [loadPolicy])
 
+  const canWrite = loadStatus === 'ready' && !readOnly && !saving
+
   const handleSave = async () => {
-    if (readOnly) return
+    const signal = loadRequest.current?.signal
+    if (!canWrite || !signal || signal.aborted) return
     setError(null)
     setNotice(null)
 
@@ -192,6 +227,7 @@ export function BreakPolicyForm({
       if (scopeType === 'tenant') {
         const res = await apiClient.PUT('/api/v1/break-policies/tenant', {
           body,
+          signal,
         })
         if (res.error) {
           setError(extractApiError(res.error, t('errors.GENERIC')))
@@ -203,6 +239,7 @@ export function BreakPolicyForm({
           {
             params: { path: { store_id: storeId } },
             body,
+            signal,
           },
         )
         if (res.error) {
@@ -215,6 +252,7 @@ export function BreakPolicyForm({
           {
             params: { path: { employee_id: employeeId } },
             body,
+            signal,
           },
         )
         if (res.error) {
@@ -223,6 +261,7 @@ export function BreakPolicyForm({
         }
       }
 
+      if (signal.aborted) return
       setNotice(
         isEs ? 'Regla de descanso guardada.' : '休息规则已保存并生效。',
       )
@@ -236,18 +275,21 @@ export function BreakPolicyForm({
   }
 
   const handleResetToInherited = async () => {
-    if (!existingPolicy || readOnly) return
+    const signal = loadRequest.current?.signal
+    if (!canWrite || !existingPolicy || !signal || signal.aborted) return
     setSaving(true)
     setError(null)
     setNotice(null)
     try {
       const res = await apiClient.DELETE('/api/v1/break-policies/{policy_id}', {
         params: { path: { policy_id: existingPolicy.id } },
+        signal,
       })
       if (res.error) {
         setError(extractApiError(res.error, t('errors.GENERIC')))
         return
       }
+      if (signal.aborted) return
       setNotice(
         isEs
           ? 'Restablecido a la regla heredada.'
@@ -262,8 +304,41 @@ export function BreakPolicyForm({
     }
   }
 
-  if (loading) {
+  if (loadStatus === 'loading') {
     return <Skeleton className="h-44 w-full rounded-xl" />
+  }
+
+  const noticeAlert = notice && (
+    <div
+      role="status"
+      className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700"
+    >
+      {notice}
+    </div>
+  )
+
+  if (loadStatus === 'failed') {
+    return (
+      <div className="space-y-2">
+        {noticeAlert}
+        <p
+          role="alert"
+          className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700"
+        >
+          {isEs ? 'No se pudo cargar la regla de descanso.' : '无法加载休息规则。'}
+        </p>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={saving}
+          onClick={() => void loadPolicy()}
+        >
+          <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+          {isEs ? 'Reintentar' : '重试'}
+        </Button>
+      </div>
+    )
   }
 
   const inheritanceBadgeLabel = (() => {
@@ -311,14 +386,7 @@ export function BreakPolicyForm({
         </div>
       )}
 
-      {notice && (
-        <div
-          role="status"
-          className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700"
-        >
-          {notice}
-        </div>
-      )}
+      {noticeAlert}
 
       {/* Break Mode Selector */}
       <div className="space-y-1.5">
@@ -574,7 +642,7 @@ export function BreakPolicyForm({
               type="button"
               size="sm"
               variant="outline"
-              disabled={saving}
+              disabled={!canWrite}
               onClick={() => void handleResetToInherited()}
               className="text-xs text-slate-600"
             >
@@ -587,7 +655,7 @@ export function BreakPolicyForm({
           <Button
             type="button"
             size="sm"
-            disabled={saving}
+            disabled={!canWrite}
             onClick={() => void handleSave()}
             className="bg-[#2563EB] text-xs text-white hover:bg-blue-700"
           >

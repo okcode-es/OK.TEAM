@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   CalendarDays,
   ChevronDown,
@@ -76,6 +76,7 @@ export function ProfileAttendanceTab({ employee }: ProfileAttendanceTabProps) {
     role === 'owner' || role === 'hr' || role === 'store_manager'
 
   const [breakPolicyOpen, setBreakPolicyOpen] = useState(false)
+  const [ledgerRevision, setLedgerRevision] = useState(0)
 
   const [weekStart, setWeekStart] = useState<string>(() =>
     getMondayIso(new Date()),
@@ -90,50 +91,67 @@ export function ProfileAttendanceTab({ employee }: ProfileAttendanceTabProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const loadWeek = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const [ledgerRes, shiftRes] = await Promise.all([
-        apiClient.GET('/api/v1/attendance/ledger', {
-          params: {
-            query: {
-              employee_id: employee.id,
-              date_from: weekStart,
-              date_to: weekEnd,
-            },
-          },
-        }),
-        apiClient.GET('/api/v1/shifts/weekly', {
-          params: {
-            query: {
-              week_start: weekStart,
-              store_id: employee.primary_store_id,
-            },
-          },
-        }),
-      ])
-      if (ledgerRes.error) {
-        setError(extractApiError(ledgerRes.error, t('common.error')))
-        return
-      }
-      const empRow = ledgerRes.data?.items.find(
-        (e) => e.employee_id === employee.id,
-      )
-      setSummaries(empRow?.daily_summaries ?? [])
-
-      const shiftRow = shiftRes.data?.rows.find(
-        (r) => r.employee_id === employee.id,
-      )
-      setShifts(shiftRow?.shifts ?? [])
-    } finally {
-      setLoading(false)
-    }
-  }, [employee.id, employee.primary_store_id, weekStart, weekEnd, t])
-
   useEffect(() => {
+    const request = new AbortController()
+    const { signal } = request
+
+    async function loadWeek() {
+      setLoading(true)
+      setError(null)
+      try {
+        const [ledgerRes, shiftRes] = await Promise.all([
+          apiClient.GET('/api/v1/attendance/ledger', {
+            params: {
+              query: {
+                employee_id: employee.id,
+                date_from: weekStart,
+                date_to: weekEnd,
+              },
+            },
+            signal,
+          }),
+          apiClient.GET('/api/v1/shifts/weekly', {
+            params: {
+              query: {
+                week_start: weekStart,
+                store_id: employee.primary_store_id,
+              },
+            },
+            signal,
+          }),
+        ])
+        if (signal.aborted) return
+        if (ledgerRes.error) {
+          setError(extractApiError(ledgerRes.error, t('common.error')))
+          return
+        }
+        const empRow = ledgerRes.data?.items.find(
+          (e) => e.employee_id === employee.id,
+        )
+        setSummaries(empRow?.daily_summaries ?? [])
+
+        const shiftRow = shiftRes.data?.rows.find(
+          (r) => r.employee_id === employee.id,
+        )
+        setShifts(shiftRow?.shifts ?? [])
+      } catch (err) {
+        if (!signal.aborted) setError(extractApiError(err, t('common.error')))
+      } finally {
+        if (!signal.aborted) setLoading(false)
+      }
+    }
+
     void loadWeek()
-  }, [loadWeek])
+    return () => request.abort()
+  }, [
+    activeTenant?.tenant_id,
+    employee.id,
+    employee.primary_store_id,
+    ledgerRevision,
+    weekStart,
+    weekEnd,
+    t,
+  ])
 
   const weekDays = useMemo(
     () => Array.from({ length: 7 }, (_, i) => addDaysIso(weekStart, i)),
@@ -203,6 +221,7 @@ export function ProfileAttendanceTab({ employee }: ProfileAttendanceTabProps) {
               scopeType="employee"
               employeeId={employee.id}
               readOnly={!canEditBreakPolicy}
+              onSaved={() => setLedgerRevision((revision) => revision + 1)}
             />
           </CardContent>
         )}

@@ -283,6 +283,59 @@ def _build_env(tmp_path: Path, now_utc: datetime | None = None):
     }
 
 
+def test_report_counts_pending_announcements_for_target_department(tmp_path: Path) -> None:
+    env = _build_env(tmp_path)
+    client: TestClient = env["client"]
+    hr_headers = env["headers"](env["hr_id"])
+    report = "/api/v1/reports/executive-summary?from_date=2026-11-01&to_date=2026-11-30"
+    created = client.post(
+        "/api/v1/announcements",
+        headers=hr_headers,
+        data={
+            "category": "policy",
+            "title": "Training",
+            "body": "Read the updated training policy.",
+            "store_id": str(env["store_a_id"]),
+            "department_scope": "sala",
+            "requires_acknowledgement": "true",
+        },
+    )
+    assert created.status_code == 201
+    assert client.get(report, headers=hr_headers).json()["announcements_pending_ack_count"] == 1
+    assert client.get(report + "&department=Cocina", headers=hr_headers).json()[
+        "announcements_pending_ack_count"
+    ] == 0
+
+    announcement = "/api/v1/announcements/" + created.json()["id"]
+    acknowledged = client.post(
+        announcement + "/acknowledge", headers=env["headers"](env["emp1_uid"])
+    )
+    assert acknowledged.status_code == 201
+    assert client.get(announcement + "/acknowledgements", headers=hr_headers).json()[
+        "pending_count"
+    ] == 0
+    assert client.get(report, headers=hr_headers).json()["announcements_pending_ack_count"] == 0
+
+    # A store-wide notice has two recipients here, but is counted once per notice.
+    store_notice = client.post(
+        "/api/v1/announcements",
+        headers=hr_headers,
+        data={
+            "category": "policy",
+            "title": "Store training",
+            "body": "Training for both departments.",
+            "store_id": str(env["store_a_id"]),
+            "requires_acknowledgement": "true",
+        },
+    )
+    assert store_notice.status_code == 201
+    notice_url = "/api/v1/announcements/" + store_notice.json()["id"]
+    assert client.get(notice_url + "/acknowledgements", headers=hr_headers).json()[
+        "pending_count"
+    ] == 2
+    assert client.get(report, headers=hr_headers).json()["announcements_pending_ack_count"] == 1
+
+
 def test_self_selectable_clock_and_manual_day_workflows(tmp_path: Path) -> None:
     env = _build_env(tmp_path, now_utc=datetime(2026, 11, 26, 18, 0, tzinfo=UTC))
     client: TestClient = env["client"]

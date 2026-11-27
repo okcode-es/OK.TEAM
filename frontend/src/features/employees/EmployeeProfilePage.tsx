@@ -126,7 +126,7 @@ export function EmployeeProfilePage({
   const [errorBanner, setErrorBanner] = useState<string | null>(null)
   const [savedNotice, setSavedNotice] = useState(false)
 
-  const [primaryTab, setPrimaryTab] = useState<PrimaryTab>('personal')
+  const [selectedPrimaryTab, setPrimaryTab] = useState<PrimaryTab>('personal')
   const [personalSubTab, setPersonalSubTab] =
     useState<PersonalSubTab>('public')
   const [isEditing, setIsEditing] = useState(false)
@@ -292,6 +292,16 @@ export function EmployeeProfilePage({
 
   const canManage = (role === 'owner' || role === 'hr') && !isFrozen
   const canManageLifecycle = role === 'owner' || role === 'hr'
+  const canViewLeaves =
+    role !== 'accountant' ||
+    (profile != null &&
+      employee?.user_id === profile.user_id &&
+      (employee.employment_status === 'active' ||
+        employee.employment_status === 'on_leave'))
+  const primaryTab =
+    selectedPrimaryTab === 'leaves' && !canViewLeaves
+      ? 'personal'
+      : selectedPrimaryTab
   const canEditAvatar =
     canManage ||
     (employee?.user_id !== null && employee?.user_id === profile?.user_id)
@@ -585,6 +595,7 @@ export function EmployeeProfilePage({
               {/* Horizontal Primary Tabs */}
               <div className="mt-5 -mb-5 flex items-center gap-5 overflow-x-auto border-t border-slate-100 pt-1">
                 {primaryTabs.map((tab) => {
+                  if (tab.id === 'leaves' && !canViewLeaves) return null
                   const Icon = tab.icon
                   const isActive = primaryTab === tab.id
                   return (

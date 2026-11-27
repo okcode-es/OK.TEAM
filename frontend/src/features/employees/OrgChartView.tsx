@@ -10,10 +10,12 @@ import { EmptyState } from '@/components/common/EmptyState'
 import { UserAvatar } from '@/components/common/UserAvatar'
 import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/features/auth/AuthContext'
+import { normalizeDepartment } from '@/features/employees/department'
 import { cn } from '@/lib/utils'
 
 interface OrgChartViewProps {
   employees: EmployeeResponse[]
+  employeeCountLabel: string
   stores: StoreResponse[]
   onSelectEmployee: (employeeId: string) => void
 }
@@ -28,6 +30,7 @@ const STATUS_PILL: Record<EmploymentStatus, string> = {
 
 export function OrgChartView({
   employees,
+  employeeCountLabel,
   stores,
   onSelectEmployee,
 }: OrgChartViewProps) {
@@ -46,7 +49,7 @@ export function OrgChartView({
       {
         storeId: string
         storeLabel: string
-        departments: Map<string, EmployeeResponse[]>
+        departments: Map<string, { label: string; members: EmployeeResponse[] }>
       }
     >()
 
@@ -66,10 +69,16 @@ export function OrgChartView({
         }
         byStore.set(emp.primary_store_id, storeGroup)
       }
-      const deptKey = emp.department?.trim() || (isEs ? 'General' : '综合部门')
-      const list = storeGroup.departments.get(deptKey) ?? []
-      list.push(emp)
-      storeGroup.departments.set(deptKey, list)
+      const deptKey = normalizeDepartment(emp.department)
+      const group = storeGroup.departments.get(deptKey)
+      if (group) {
+        group.members.push(emp)
+      } else {
+        storeGroup.departments.set(deptKey, {
+          label: emp.department?.trim() || (isEs ? 'Sin departamento' : '未分配部门'),
+          members: [emp],
+        })
+      }
     }
 
     return Array.from(byStore.values())
@@ -102,8 +111,8 @@ export function OrgChartView({
               {activeTenant?.tenant_trade_name ?? t('brand')}
             </div>
             <div className="text-xs text-slate-500 tabular-nums">
-              {activeTenant?.tenant_legal_name} · {employees.length}{' '}
-              {isEs ? 'personas' : '人'}
+              {activeTenant?.tenant_legal_name && `${activeTenant.tenant_legal_name} · `}
+              {employeeCountLabel}
             </div>
           </div>
         </div>
@@ -114,7 +123,7 @@ export function OrgChartView({
         {tree.map((storeNode) => {
           const totalInStore = Array.from(
             storeNode.departments.values(),
-          ).reduce((acc, arr) => acc + arr.length, 0)
+          ).reduce((acc, group) => acc + group.members.length, 0)
 
           return (
             <div
@@ -141,11 +150,11 @@ export function OrgChartView({
 
               <div className="space-y-4">
                 {Array.from(storeNode.departments.entries()).map(
-                  ([deptName, members]) => (
-                    <div key={deptName} className="space-y-2">
+                  ([deptKey, { label, members }]) => (
+                    <div key={deptKey} className="space-y-2">
                       <div className="flex items-center justify-between px-1">
                         <span className="text-xs font-semibold tracking-wide text-slate-600 uppercase">
-                          {deptName}
+                          {label}
                         </span>
                         <span className="text-[11px] text-slate-400 tabular-nums">
                           {members.length}

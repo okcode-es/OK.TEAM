@@ -10,6 +10,11 @@
 2. **双重校验红线（P0）**：
    - 所有业务读写必须在查询条件中强制绑定 `tenant_id`；涉及门店资源时必须同时校验操作人的授权 `store_ids`（或本人 `employee_id`）。
    - **Supabase 安全边界**：前端仅可使用 Supabase Auth 获取 JWT；**严禁前端直连任何 Supabase 业务表或 Storage Bucket**。所有业务访问必须经 FastAPI 校验 JWT 后执行。
+3. **跨接口一致脱敏、目录交集与并发改权硬规则（P0/P1）**：
+   - **GDPR Art. 9 跨接口一致性**：涉及健康/缺勤类型的数据（如 `sick_leave`、`medical_appointment`），必须对**所有暴露入口**（`/leaves`、`/leaves/calendar`、`/leaves/team-calendar`、`/shifts/weekly`、`/reports/*`）执行统一收口。`accountant` 仅在关联了在职/休假中（`MUTABLE_STATUSES`）本人档案时可看本人原始记录；他人及已离职/冻结记录的非年假缺勤一律脱敏为 `absence_redacted`，并持续封禁医疗证明下载。
+   - **受限经理目录交集**：`store_manager` 查询成员/组织目录时，必须联合校验关联员工表的 `primary_store_id`、`department` 与 `MUTABLE_STATUSES`，且返回的同行 `store_ids` 必须与调用方授权门店取交集，防止越权窥探跨店/跨部门信息。
+   - **关键权限变更串行化**：成员角色/状态变更（如降级或归档 `owner`）必须在事务内对租户行加 PostgreSQL 行锁 `FOR NO KEY UPDATE`（SQLAlchemy `with_for_update(key_share=True)`），并使用 `populate_existing=True` 重新读取调用方当前有效角色后再执行鉴权与“禁止移除最后一位 Owner”等不变量校验，杜绝并发竞态。
+   - **报表作用域单一真源**：Dashboard 与 Management Reports 统计必须直接复用 Domain 作用域谓词（如 `is_employee_in_announcement_scope`）并采用批量查询，严禁在应用层重复手写简化过滤或产生 N+1 查询。
 
 ## 地基 2：全库时间统一 UTC + 门店时区（防夏令时错算）
 - 数据库所有时间列统一使用 `TIMESTAMPTZ`（UTC 存储）；后端严禁使用 naive `datetime` 或 `datetime.utcnow()`，统一使用 `datetime.now(timezone.utc)`。

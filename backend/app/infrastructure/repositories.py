@@ -363,6 +363,15 @@ class SqlAlchemyMembershipRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    async def lock_tenant_for_membership_changes(self, tenant_id: UUID) -> None:
+        # PostgreSQL FOR NO KEY UPDATE serializes writers without blocking foreign-key checks.
+        stmt = (
+            select(TenantModel.id)
+            .where(TenantModel.id == tenant_id)
+            .with_for_update(key_share=True)
+        )
+        await self._session.execute(stmt)
+
     async def list_summaries_for_user(self, user_id: UUID) -> list[TenantMembershipSummary]:
         stmt = (
             select(MembershipModel, TenantModel)
@@ -404,6 +413,7 @@ class SqlAlchemyMembershipRepository:
             select(MembershipModel)
             .join(TenantModel, TenantModel.id == MembershipModel.tenant_id)
             .options(selectinload(MembershipModel.store_links))
+            .execution_options(populate_existing=True)
             .where(
                 MembershipModel.tenant_id == tenant_id,
                 MembershipModel.user_id == user_id,
@@ -420,6 +430,7 @@ class SqlAlchemyMembershipRepository:
         stmt = (
             select(MembershipModel)
             .options(selectinload(MembershipModel.store_links))
+            .execution_options(populate_existing=True)
             .where(
                 MembershipModel.tenant_id == tenant_id,
                 MembershipModel.id == membership_id,
@@ -652,6 +663,7 @@ class SqlAlchemyEmployeeRepository:
         allowed_store_ids: frozenset[UUID] | None = None,
         allowed_statuses: frozenset[EmploymentStatus] | None = None,
         only_user_id: UUID | None = None,
+        user_ids: frozenset[UUID] | None = None,
         store_id: UUID | None = None,
         status: EmploymentStatus | None = None,
     ) -> list[Employee]:
@@ -670,6 +682,8 @@ class SqlAlchemyEmployeeRepository:
             )
         if only_user_id is not None:
             stmt = stmt.where(EmployeeModel.user_id == only_user_id)
+        if user_ids is not None:
+            stmt = stmt.where(EmployeeModel.user_id.in_(user_ids))
         if store_id is not None:
             stmt = stmt.where(EmployeeModel.primary_store_id == store_id)
         if status is not None:

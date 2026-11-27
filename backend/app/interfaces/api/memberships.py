@@ -16,12 +16,13 @@ from app.application.memberships import (
     UpdateMembershipUseCase,
 )
 from app.domain.organization import Membership
-from app.domain.repositories import MembershipRepository, StoreRepository
+from app.domain.repositories import EmployeeRepository, MembershipRepository, StoreRepository
 from app.domain.security import AuthenticatedPrincipal, MembershipStatus, UserRole
 from app.interfaces.api.deps import (
     CommitFn,
     get_commit_fn,
     get_current_principal,
+    get_employee_repository,
     get_membership_repository,
     get_store_repository,
 )
@@ -91,8 +92,9 @@ class MembershipListResponse(BaseModel):
 async def list_memberships(
     principal: Annotated[AuthenticatedPrincipal, Depends(get_current_principal)],
     membership_repo: Annotated[MembershipRepository, Depends(get_membership_repository)],
+    employee_repo: Annotated[EmployeeRepository, Depends(get_employee_repository)],
 ) -> MembershipListResponse:
-    use_case = ListMembershipsUseCase(membership_repo)
+    use_case = ListMembershipsUseCase(membership_repo, employee_repo)
     items = await use_case.execute(principal)
     return MembershipListResponse(
         items=[MembershipResponse.from_domain(item) for item in items],

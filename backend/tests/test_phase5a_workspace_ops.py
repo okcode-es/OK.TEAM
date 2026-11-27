@@ -858,6 +858,136 @@ def test_justificantes_security_red_line_and_leave_calendar(tmp_path: Path) -> N
     assert summary.paid_leave_days == 1
 
 
+def test_accountant_leave_details_are_personal(tmp_path: Path) -> None:
+    client, state, _ = _build_env(tmp_path)
+    ids = _seed_org(state)
+    tenant_id = ids["tenant_id"]
+    accountant = _auth(ids["acc"], "acc@dragon.es", tenant_id)
+    other_employee = _auth(ids["emp_cocina"], "cocina@dragon.es", tenant_id)
+    manager = _auth(ids["mgr_cocina"], "mgr@dragon.es", tenant_id)
+    hr = _auth(ids["hr"], "hr@dragon.es", tenant_id)
+    leaves = "/api/v1/leaves"
+    calendar = f"{leaves}/calendar"
+    own_employee_id = ids["emp_sala_id"]
+    other_employee_id = ids["emp_cocina_id"]
+
+    leave = client.post(
+        leaves,
+        headers=other_employee,
+        json={
+            "leave_type": "medical_appointment",
+            "start_date": "2026-11-26",
+            "end_date": "2026-11-26",
+            "reason": "Consulta médica",
+        },
+    )
+    assert leave.status_code == 201
+    own_leave = client.post(
+        leaves,
+        headers=hr,
+        json={
+            "employee_id": str(own_employee_id),
+            "leave_type": "sick_leave",
+            "start_date": "2026-11-27",
+            "end_date": "2026-11-28",
+            "reason": "Justificado",
+        },
+    )
+    assert own_leave.status_code == 201
+
+    unlinked_list = client.get(leaves, headers=accountant)
+    assert unlinked_list.status_code == 200
+    assert unlinked_list.json()["items"] == []
+    assert client.get(calendar, headers=accountant).status_code == 403
+
+    state.emp_repo.employees[own_employee_id] = replace(
+        state.emp_repo.employees[own_employee_id], user_id=ids["acc"]
+    )
+    own_items = client.get(leaves, headers=accountant, params={"year": 2026})
+    assert own_items.status_code == 200
+    assert own_items.json()["items"] == [own_leave.json()]
+    personal = client.get(calendar, headers=accountant, params={"year": 2026})
+    assert personal.status_code == 200
+    assert personal.json()["employee_id"] == str(own_employee_id)
+    assert personal.json()["leaves"] == [own_leave.json()]
+    assert personal.json()["type_counts"]["sick_leave"] == 2
+    assert personal.json()["type_counts"]["medical_appointment"] == 0
+    own_params = {"employee_id": str(own_employee_id), "year": 2026}
+    for path in (leaves, calendar):
+        assert client.get(path, headers=accountant, params=own_params).status_code == 200
+
+    other_params = {"employee_id": str(other_employee_id), "year": 2026}
+    for path in (leaves, calendar):
+        assert client.get(path, headers=accountant, params=other_params).status_code == 403
+    for allowed in (other_employee, manager, hr):
+        result = client.get(calendar, headers=allowed, params=other_params)
+        assert result.status_code == 200
+        assert result.json()["leaves"] == [leave.json()]
+        assert result.json()["type_counts"]["medical_appointment"] == 1
+
+    approved_other, approved_own = (
+        replace(request, status=LeaveStatus.APPROVED) for request in state.leave_repo.leaves
+    )
+    other_day_off = replace(
+        approved_other,
+        id=uuid4(),
+        leave_type=LeaveType.DAY_OFF,
+        start_date=date(2026, 11, 25),
+        end_date=date(2026, 11, 25),
+    )
+    other_vacation = replace(
+        approved_other,
+        id=uuid4(),
+        leave_type=LeaveType.VACATION,
+        start_date=date(2026, 11, 27),
+        end_date=date(2026, 11, 27),
+    )
+    state.leave_repo.leaves = [approved_other, approved_own, other_day_off, other_vacation]
+    schedule_url = "/api/v1/shifts/weekly"
+    schedule_params = {"store_id": str(ids["store_mad"]), "week_start": "2026-11-23"}
+    expected_types = {
+        "unauthorized": ["absence_redacted", "absence_redacted", "vacation"],
+        "authorized": ["medical_appointment", "day_off", "vacation"],
+    }
+    for headers, visibility in ((accountant, "unauthorized"), (hr, "authorized")):
+        schedule = client.get(schedule_url, headers=headers, params=schedule_params)
+        assert schedule.status_code == 200
+        rows = {row["employee_id"]: row["approved_leaves"] for row in schedule.json()["rows"]}
+        assert [entry["leave_type"] for entry in rows[str(other_employee_id)]] == (
+            expected_types[visibility]
+        )
+        assert [entry["leave_type"] for entry in rows[str(own_employee_id)]] == ["sick_leave"]
+
+    state.emp_repo.employees[own_employee_id] = replace(
+        state.emp_repo.employees[own_employee_id],
+        employment_status=EmploymentStatus.LEGAL_HOLD,
+        termination_date=date(2026, 11, 28),
+    )
+    held_list = client.get(leaves, headers=accountant, params={"year": 2026})
+    assert held_list.status_code == 200
+    assert held_list.json()["items"] == []
+    assert client.get(calendar, headers=accountant).status_code == 403
+    for path in (leaves, calendar):
+        assert client.get(path, headers=accountant, params=own_params).status_code == 403
+
+    team = client.get(
+        f"{leaves}/team-calendar",
+        headers=accountant,
+        params={"from_date": "2026-11-23", "to_date": "2026-11-29"},
+    )
+    assert team.status_code == 200
+    team_entries = {member["employee_id"]: member["entries"] for member in team.json()["members"]}
+    assert str(own_employee_id) not in team_entries
+    assert [entry["display_type"] for entry in team_entries[str(other_employee_id)]] == (
+        expected_types["unauthorized"]
+    )
+
+    schedule = client.get(schedule_url, headers=accountant, params=schedule_params)
+    assert schedule.status_code == 200
+    rows = {row["employee_id"]: row["approved_leaves"] for row in schedule.json()["rows"]}
+    assert [entry["leave_type"] for entry in rows[str(own_employee_id)]] == ["absence_redacted"]
+
+
 def test_announcements_payslips_and_bulk_import(tmp_path: Path) -> None:
     client, state, _ = _build_env(tmp_path)
     ids = _seed_org(state)

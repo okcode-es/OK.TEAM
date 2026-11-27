@@ -352,7 +352,7 @@ export function LoginPage() {
               </div>
             </form>
 
-            <p className="mt-6 text-center text-xs leading-relaxed text-slate-400">
+            <p className="mt-6 text-center text-xs leading-relaxed text-slate-600">
               {t('auth.termsNotice')}
             </p>
           </div>

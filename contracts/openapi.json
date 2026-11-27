@@ -6331,7 +6331,16 @@
             "title": "Id"
           },
           "leave_type": {
-            "$ref": "#/components/schemas/LeaveType"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LeaveType"
+              },
+              {
+                "type": "string",
+                "const": "absence_redacted"
+              }
+            ],
+            "title": "Leave Type"
           },
           "start_date": {
             "type": "string",

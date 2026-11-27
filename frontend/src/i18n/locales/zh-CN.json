@@ -191,6 +191,7 @@
     "filterStatus": "全部状态",
     "addButton": "新建员工",
     "count": "共 {{count}} 位员工",
+    "filteredCount": "显示 {{shown}} 位员工，共 {{total}} 位",
     "readOnlyHint": "当前角色仅可查看授权范围内的脱敏档案。",
     "empty": "暂无员工档案，请点击右上角新建首位员工。",
     "overtimeProhibited": "兼职 · 禁常规加班",
@@ -581,6 +582,7 @@
       "vacation": "带薪年假",
       "sick_leave": "医疗病假 (Baja IT)",
       "medical_appointment": "就医预约",
+      "absence_redacted": "缺勤",
       "day_off": "调休 / 休息日",
       "paid_leave": "法定带薪假 (Art. 37.3 ET)",
       "unpaid_leave": "无薪事假"

@@ -11,19 +11,21 @@ from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, Field
 
 from app.application.scheduling import (
+    ApprovedScheduleLeave,
     CancelShiftUseCase,
     CreateShiftCommand,
     CreateShiftUseCase,
     EmployeeWeeklyScheduleRow,
     GetWeeklyScheduleUseCase,
     PublishWeeklyShiftsUseCase,
+    ScheduleLeaveType,
     ShiftMutationResult,
     UpdateShiftCommand,
     UpdateShiftUseCase,
 )
 from app.domain.attendance import AlertSeverity
 from app.domain.employees import WorkScheduleType
-from app.domain.leaves import LeaveRequest, LeaveStatus, LeaveType
+from app.domain.leaves import LeaveStatus
 from app.domain.repositories import (
     EmployeeRepository,
     LeaveRepository,
@@ -77,7 +79,7 @@ class ScheduleAlertResponse(BaseModel):
 
 class ApprovedLeaveSummaryResponse(BaseModel):
     id: UUID
-    leave_type: LeaveType
+    leave_type: ScheduleLeaveType
     start_date: date
     end_date: date
     natural_days: int
@@ -171,7 +173,7 @@ def _to_alert_response(alert: ScheduleAlert) -> ScheduleAlertResponse:
     )
 
 
-def _to_leave_summary(lv: LeaveRequest) -> ApprovedLeaveSummaryResponse:
+def _to_leave_summary(lv: ApprovedScheduleLeave) -> ApprovedLeaveSummaryResponse:
     return ApprovedLeaveSummaryResponse(
         id=lv.id,
         leave_type=lv.leave_type,

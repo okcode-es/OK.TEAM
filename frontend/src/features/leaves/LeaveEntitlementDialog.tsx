@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { AlertCircle, CalendarCog, History } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { apiClient, extractApiError } from '@/api/client'
@@ -45,8 +45,8 @@ interface LeaveEntitlementDialogProps {
 export function LeaveEntitlementDialog({
   open,
   onOpenChange,
-  employees = [],
-  stores = [],
+  employees,
+  stores,
   lockedEmployee,
   defaultYear,
   onSuccess,
@@ -56,16 +56,19 @@ export function LeaveEntitlementDialog({
   const locale = i18n.language || 'zh-CN'
   const isEs = locale.startsWith('es')
   const role = activeTenant?.role
+  const lockedEmployeeId = lockedEmployee?.id
   const canBulk =
-    !lockedEmployee && (role === 'owner' || role === 'hr')
+    !lockedEmployeeId && (role === 'owner' || role === 'hr')
 
-  const [mode, setMode] = useState<'single' | 'bulk'>('single')
-  const [year, setYear] = useState<number>(
-    () => defaultYear ?? new Date().getUTCFullYear(),
+  const [requestedMode, setMode] = useState<'single' | 'bulk'>('single')
+  const mode = canBulk ? requestedMode : 'single'
+  const [yearInput, setYearInput] = useState(
+    () => String(defaultYear ?? new Date().getUTCFullYear()),
   )
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>(
-    lockedEmployee?.id ?? '',
-  )
+  const year = Number(yearInput)
+  const validYear = Number.isInteger(year) && year >= 2020 && year <= 2100
+  const [employeeId, setSelectedEmployeeId] = useState('')
+  const selectedEmployeeId = lockedEmployeeId ?? (employeeId || employees?.[0]?.id || '')
   const [bulkStoreId, setBulkStoreId] = useState<string>('all')
 
   const [baseDays, setBaseDays] = useState<string>('30')
@@ -73,79 +76,78 @@ export function LeaveEntitlementDialog({
   const [compOffDays, setCompOffDays] = useState<string>('0')
   const [reason, setReason] = useState<string>('')
 
-  const [entitlements, setEntitlements] = useState<
-    EmployeeEntitlementResponse[]
-  >([])
-  const [loading, setLoading] = useState(false)
+  const [entitlement, setEntitlement] = useState<{
+    key: string
+    data: EmployeeEntitlementResponse | undefined
+  }>()
+  const [loadError, setLoadError] = useState<{ key: string; message: string }>()
+  const [loadAttempt, setLoadAttempt] = useState(0)
   const [submitting, setSubmitting] = useState(false)
   const [submitAttempted, setSubmitAttempted] = useState(false)
   const [apiError, setApiError] = useState<string | null>(null)
+
+  const targetId = mode === 'single' && validYear ? selectedEmployeeId : ''
+  const loadKey = targetId ? `${activeTenant?.tenant_id}/${targetId}/${year}/${loadAttempt}` : ''
+  const loaded = entitlement?.key === loadKey
+  const currentEntitlement = loaded ? entitlement.data : undefined
+  const currentLoadError = loadError?.key === loadKey ? loadError.message : null
+  const loading = Boolean(loadKey && !loaded && !currentLoadError)
+  const waitingForEntitlement = mode === 'single' && !loaded
 
   useEffect(() => {
     if (!open) return
     setSubmitAttempted(false)
     setApiError(null)
     setReason('')
-    if (defaultYear) setYear(defaultYear)
-    if (lockedEmployee) {
-      setMode('single')
-      setSelectedEmployeeId(lockedEmployee.id)
-    } else if (!selectedEmployeeId && employees.length > 0) {
-      setSelectedEmployeeId(employees[0].id)
-    }
-  }, [open, defaultYear, lockedEmployee, employees, selectedEmployeeId])
-
-  const loadEntitlements = useCallback(async () => {
-    if (!open) return
-    setLoading(true)
-    setApiError(null)
-    try {
-      const targetId = lockedEmployee?.id ?? (mode === 'single' ? selectedEmployeeId : undefined)
-      const res = await apiClient.GET('/api/v1/leaves/entitlements', {
-        params: {
-          query: {
-            year,
-            employee_id: targetId || undefined,
-          },
-        },
-      })
-      if (res.error || !res.data) {
-        setApiError(extractApiError(res.error, t('errors.GENERIC')))
-        return
-      }
-      setEntitlements(res.data.items)
-      if (mode === 'single' && targetId) {
-        const current = res.data.items.find((item) => item.employee_id === targetId)
-        if (current) {
-          setBaseDays(String(current.base_vacation_days))
-          setCarryoverDays(String(current.carryover_days))
-          setCompOffDays(String(current.comp_off_days))
-        } else {
-          setBaseDays('30')
-          setCarryoverDays('0')
-          setCompOffDays('0')
-        }
-      }
-    } finally {
-      setLoading(false)
-    }
-  }, [open, year, mode, selectedEmployeeId, lockedEmployee?.id, t])
+    setYearInput(String(defaultYear ?? new Date().getUTCFullYear()))
+  }, [open, defaultYear, lockedEmployeeId])
 
   useEffect(() => {
-    void loadEntitlements()
-  }, [loadEntitlements])
+    setEntitlement(undefined)
+    setLoadError(undefined)
+    if (!open || !targetId) return
+    const request = new AbortController()
+    const { signal } = request
 
-  const currentEntitlement = useMemo(() => {
-    const targetId = lockedEmployee?.id ?? selectedEmployeeId
-    if (!targetId) return null
-    return entitlements.find((item) => item.employee_id === targetId) ?? null
-  }, [entitlements, lockedEmployee?.id, selectedEmployeeId])
+    async function loadEntitlement() {
+      try {
+        const res = await apiClient.GET('/api/v1/leaves/entitlements', {
+          params: {
+            query: { year, employee_id: targetId },
+          },
+          signal,
+        })
+        if (signal.aborted) return
+        if (res.error || !res.data) {
+          setLoadError({
+            key: loadKey,
+            message: extractApiError(res.error, t('errors.GENERIC')),
+          })
+          return
+        }
+        const current = res.data.items.find((item) => item.employee_id === targetId)
+        setBaseDays(String(current?.base_vacation_days ?? 30))
+        setCarryoverDays(String(current?.carryover_days ?? 0))
+        setCompOffDays(String(current?.comp_off_days ?? 0))
+        setEntitlement({ key: loadKey, data: current })
+      } catch (err) {
+        if (!signal.aborted) {
+          setLoadError({
+            key: loadKey,
+            message: extractApiError(err, t('errors.GENERIC')),
+          })
+        }
+      }
+    }
+
+    void loadEntitlement()
+    return () => request.abort()
+  }, [open, year, targetId, loadKey, t])
 
   const parsedBase = Number(baseDays)
   const parsedCarryover = Number(carryoverDays)
   const parsedCompOff = Number(compOffDays)
 
-  const missingEmployee = mode === 'single' && !selectedEmployeeId && !lockedEmployee?.id
   const invalidBaseDays = !Number.isFinite(parsedBase) || parsedBase < 30
   const invalidCarryover = !Number.isFinite(parsedCarryover) || parsedCarryover < 0
   const invalidCompOff = !Number.isFinite(parsedCompOff) || parsedCompOff < 0
@@ -161,7 +163,9 @@ export function LeaveEntitlementDialog({
     setSubmitAttempted(true)
     setApiError(null)
     if (
-      missingEmployee ||
+      submitting ||
+      !validYear ||
+      waitingForEntitlement ||
       invalidBaseDays ||
       invalidCarryover ||
       invalidCompOff ||
@@ -188,11 +192,10 @@ export function LeaveEntitlementDialog({
           return
         }
       } else {
-        const targetId = lockedEmployee?.id ?? selectedEmployeeId
         const res = await apiClient.PUT(
           '/api/v1/leaves/entitlements/{employee_id}',
           {
-            params: { path: { employee_id: targetId } },
+            params: { path: { employee_id: selectedEmployeeId } },
             body: {
               year,
               base_vacation_days: parsedBase,
@@ -278,9 +281,10 @@ export function LeaveEntitlementDialog({
                 id="ent-year"
                 type="number"
                 min={2020}
-                max={2099}
-                value={year}
-                onChange={(e) => setYear(Number(e.target.value) || new Date().getUTCFullYear())}
+                max={2100}
+                value={yearInput}
+                onChange={(e) => setYearInput(e.target.value)}
+                aria-invalid={!validYear}
                 className="tabular-nums"
               />
             </div>
@@ -305,7 +309,7 @@ export function LeaveEntitlementDialog({
                       <SelectValue placeholder={isEs ? 'Seleccionar' : '选择员工'} />
                     </SelectTrigger>
                     <SelectContent>
-                      {employees.map((emp) => (
+                      {employees?.map((emp) => (
                         <SelectItem key={emp.id} value={emp.id}>
                           {emp.employee_code} · {emp.full_name}
                         </SelectItem>
@@ -327,7 +331,7 @@ export function LeaveEntitlementDialog({
                     <SelectItem value="all">
                       {isEs ? 'Toda la empresa' : '全企业所有员工'}
                     </SelectItem>
-                    {stores.map((s) => (
+                    {stores?.map((s) => (
                       <SelectItem key={s.id} value={s.id}>
                         {s.code} · {s.name}
                       </SelectItem>
@@ -348,7 +352,8 @@ export function LeaveEntitlementDialog({
                 type="number"
                 min={30}
                 step="0.5"
-                value={baseDays}
+                value={waitingForEntitlement ? '' : baseDays}
+                disabled={waitingForEntitlement}
                 onChange={(e) => setBaseDays(e.target.value)}
                 aria-invalid={submitAttempted && invalidBaseDays}
                 className={cn(
@@ -370,7 +375,8 @@ export function LeaveEntitlementDialog({
                 type="number"
                 min={0}
                 step="0.5"
-                value={carryoverDays}
+                value={waitingForEntitlement ? '' : carryoverDays}
+                disabled={waitingForEntitlement}
                 onChange={(e) => setCarryoverDays(e.target.value)}
                 className="tabular-nums"
               />
@@ -385,7 +391,8 @@ export function LeaveEntitlementDialog({
                 type="number"
                 min={0}
                 step="0.5"
-                value={compOffDays}
+                value={waitingForEntitlement ? '' : compOffDays}
+                disabled={waitingForEntitlement}
                 onChange={(e) => setCompOffDays(e.target.value)}
                 className="tabular-nums"
               />
@@ -397,7 +404,7 @@ export function LeaveEntitlementDialog({
               {isEs ? 'Total asignado previsto' : '调整后总可用额度'}
             </span>
             <span className="text-base font-bold text-[#2563EB] tabular-nums">
-              {totalPreview} {isEs ? 'días' : '天'}
+              {waitingForEntitlement ? '—' : `${totalPreview} ${isEs ? 'días' : '天'}`}
             </span>
           </div>
 
@@ -443,16 +450,26 @@ export function LeaveEntitlementDialog({
             </div>
           )}
 
-          {apiError && (
+          {(currentLoadError || apiError) && (
             <div
               role="alert"
               className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700"
             >
-              {apiError}
+              {currentLoadError || apiError}
+              {currentLoadError && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setLoadAttempt((attempt) => attempt + 1)}
+                >
+                  {isEs ? 'Reintentar' : '重试'}
+                </Button>
+              )}
             </div>
           )}
 
-          {mode === 'single' && (
+          {targetId && !currentLoadError && (
             <>
               <Separator />
               <div className="space-y-2">
@@ -510,7 +527,7 @@ export function LeaveEntitlementDialog({
             </Button>
             <Button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || !validYear || waitingForEntitlement}
               className="bg-[#2563EB] text-white hover:bg-blue-700"
             >
               {submitting

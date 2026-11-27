@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from uuid import UUID, uuid4
 
-from app.application.employees import mint_avatar_url
+from app.application.employees import MUTABLE_STATUSES, mint_avatar_url
 from app.domain.documents import (
     ComplianceDocument,
     DocumentCategory,
@@ -103,6 +103,22 @@ async def _resolve_self_employee(
     return matches[0]
 
 
+async def _resolve_accountant_employee(
+    employee_repo: EmployeeRepository,
+    principal: AuthenticatedPrincipal,
+    employee_id: UUID | None,
+) -> Employee | None:
+    matches = await employee_repo.list_by_tenant(
+        principal.tenant_id,
+        only_user_id=principal.user_id,
+        allowed_statuses=MUTABLE_STATUSES,
+    )
+    employee = matches[0] if matches else None
+    if employee_id is not None and (employee is None or employee.id != employee_id):
+        raise ForbiddenScopeError("Accountants may only view their own leave details")
+    return employee
+
+
 class ListLeavesUseCase:
     def __init__(
         self,
@@ -121,6 +137,14 @@ class ListLeavesUseCase:
         status: LeaveStatus | None = None,
         year: int | None = None,
     ) -> list[LeaveRequest]:
+        if principal.role == UserRole.ACCOUNTANT:
+            self_emp = await _resolve_accountant_employee(
+                self._employee_repo, principal, employee_id
+            )
+            if self_emp is None:
+                return []
+            employee_id = self_emp.id
+
         if principal.role == UserRole.EMPLOYEE:
             self_emp = await _resolve_self_employee(
                 self._employee_repo, principal.tenant_id, principal.user_id
@@ -867,7 +891,14 @@ class GetLeaveCalendarUseCase:
         year: int,
         employee_id: UUID | None = None,
     ) -> LeaveCalendarResult:
-        if principal.role == UserRole.EMPLOYEE:
+        if principal.role == UserRole.ACCOUNTANT:
+            self_emp = await _resolve_accountant_employee(
+                self._employee_repo, principal, employee_id
+            )
+            if self_emp is None:
+                raise ForbiddenScopeError("Accountants may only view their own leave calendar")
+            emp = self_emp
+        elif principal.role == UserRole.EMPLOYEE:
             self_emp = await _resolve_self_employee(
                 self._employee_repo, principal.tenant_id, principal.user_id
             )
@@ -1028,13 +1059,8 @@ class GetTeamCalendarUseCase:
                 raise ForbiddenScopeError(
                     "Requested department is outside your authorized department_scope"
                 )
-        else:
-            # owner, hr, accountant: check if caller has an employee record (self unredaction)
-            self_matches = await self._employee_repo.list_by_tenant(
-                principal.tenant_id, only_user_id=principal.user_id
-            )
-            if self_matches:
-                self_emp = self_matches[0]
+        elif principal.role == UserRole.ACCOUNTANT:
+            self_emp = await _resolve_accountant_employee(self._employee_repo, principal, None)
 
         stores = await self._store_repo.list_by_tenant(principal.tenant_id, include_inactive=True)
         store_map = {s.id: s for s in stores}

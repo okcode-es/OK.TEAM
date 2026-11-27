@@ -203,9 +203,6 @@ export function TeamCalendarGantt({ stores }: TeamCalendarGanttProps) {
   }
 
   const getEntryLabel = (displayType: string): string => {
-    if (displayType === 'absence_redacted') {
-      return isEs ? 'Ausencia' : '缺勤'
-    }
     return t(`leaves.types.${displayType}`, { defaultValue: displayType })
   }
 

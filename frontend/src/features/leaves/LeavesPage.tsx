@@ -132,6 +132,12 @@ function getMondayFirstCells(year: number, monthIndex: number): Array<number | n
 }
 
 export function LeavesPage() {
+  const { activeTenant, profile } = useAuth()
+  const scope = `${activeTenant?.tenant_id}:${activeTenant?.role}:${profile?.user_id}`
+  return <LeavesWorkspace key={scope} />
+}
+
+function LeavesWorkspace() {
   const { t, i18n } = useTranslation()
   const { activeTenant, profile } = useAuth()
   const locale = i18n.language || 'zh-CN'
@@ -144,8 +150,10 @@ export function LeavesPage() {
   const role = activeTenant?.role
   const canReview =
     role === 'owner' || role === 'hr' || role === 'store_manager'
-  const canCreate = role !== 'accountant'
+  const isAccountantRole = role === 'accountant'
+  const canCreate = !isAccountantRole
   const isEmployeeRole = role === 'employee'
+  const selfOnlyCalendar = isEmployeeRole || isAccountantRole
 
   const currentYear = new Date().getUTCFullYear()
 
@@ -163,6 +171,15 @@ export function LeavesPage() {
   )
   const [loading, setLoading] = useState(true)
   const [errorBanner, setErrorBanner] = useState<string | null>(null)
+  const canViewAbsences =
+    !isAccountantRole ||
+    (profile != null &&
+      employees.some(
+        (emp) =>
+          emp.user_id === profile.user_id &&
+          (emp.employment_status === 'active' ||
+            emp.employment_status === 'on_leave'),
+      ))
 
   // Create Sheet state
   const [createOpen, setCreateOpen] = useState(false)
@@ -184,6 +201,11 @@ export function LeavesPage() {
   // Detail & Review Sheet state
   const [selectedRequest, setSelectedRequest] =
     useState<LeaveRequestResponse | null>(null)
+  const canAccessJustificante =
+    !isAccountantRole &&
+    (selectedRequest?.leave_type === 'sick_leave' ||
+      selectedRequest?.leave_type === 'medical_appointment' ||
+      Boolean(selectedRequest?.medical_document_id))
   const [reviewNote, setReviewNote] = useState<string>('')
   const [processingAction, setProcessingAction] = useState(false)
   const [detailError, setDetailError] = useState<string | null>(null)
@@ -199,7 +221,7 @@ export function LeavesPage() {
     if (storeRes.data) setStores(storeRes.data.items)
     if (empRes.data) {
       setEmployees(empRes.data.items)
-      if (!isEmployeeRole && empRes.data.items.length > 0) {
+      if (!selfOnlyCalendar && empRes.data.items.length > 0) {
         setCalendarEmployeeId((prev) =>
           prev && empRes.data.items.some((e) => e.id === prev)
             ? prev
@@ -212,9 +234,10 @@ export function LeavesPage() {
         )
       }
     }
-  }, [isEmployeeRole])
+  }, [selfOnlyCalendar])
 
   const loadData = useCallback(async () => {
+    if (!canViewAbsences) return
     setLoading(true)
     setErrorBanner(null)
     try {
@@ -232,12 +255,12 @@ export function LeavesPage() {
       })
 
       const calendarPromise =
-        isEmployeeRole || calendarEmployeeId
+        selfOnlyCalendar || calendarEmployeeId
           ? apiClient.GET('/api/v1/leaves/calendar', {
               params: {
                 query: {
                   year,
-                  employee_id: isEmployeeRole ? undefined : calendarEmployeeId,
+                  employee_id: selfOnlyCalendar ? undefined : calendarEmployeeId,
                 },
               },
             })
@@ -261,7 +284,15 @@ export function LeavesPage() {
     } finally {
       setLoading(false)
     }
-  }, [year, storeFilter, statusFilter, isEmployeeRole, calendarEmployeeId, t])
+  }, [
+    canViewAbsences,
+    year,
+    storeFilter,
+    statusFilter,
+    selfOnlyCalendar,
+    calendarEmployeeId,
+    t,
+  ])
 
   useEffect(() => {
     setStoreFilter('all')
@@ -652,13 +683,17 @@ export function LeavesPage() {
   })
 
   const canCancelSelected = useMemo(() => {
-    if (!selectedRequest || !isPendingLeaveStatus(selectedRequest.status)) {
+    if (
+      isAccountantRole ||
+      !selectedRequest ||
+      !isPendingLeaveStatus(selectedRequest.status)
+    ) {
       return false
     }
     if (canReview) return true
     const emp = employeeMap.get(selectedRequest.employee_id)
     return Boolean(emp && emp.user_id && emp.user_id === profile?.user_id)
-  }, [selectedRequest, canReview, employeeMap, profile?.user_id])
+  }, [isAccountantRole, selectedRequest, canReview, employeeMap, profile?.user_id])
 
   const canActOnSelectedStage = useMemo(() => {
     if (!selectedRequest) return false
@@ -770,19 +805,21 @@ export function LeavesPage() {
           <CalendarDays className="h-4 w-4" aria-hidden="true" />
           <span>{isEs ? 'Calendario del equipo' : '团队日历'}</span>
         </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab('absences')}
-          className={cn(
-            'inline-flex shrink-0 items-center gap-2 border-b-2 px-1 pb-2.5 text-sm font-medium whitespace-nowrap transition-colors',
-            activeTab === 'absences'
-              ? 'border-[#2563EB] text-[#2563EB]'
-              : 'border-transparent text-slate-600 hover:text-slate-900',
-          )}
-        >
-          <CalendarClock className="h-4 w-4" aria-hidden="true" />
-          <span>{isEs ? 'Ausencias' : '假期管理'}</span>
-        </button>
+        {canViewAbsences && (
+          <button
+            type="button"
+            onClick={() => setActiveTab('absences')}
+            className={cn(
+              'inline-flex shrink-0 items-center gap-2 border-b-2 px-1 pb-2.5 text-sm font-medium whitespace-nowrap transition-colors',
+              activeTab === 'absences'
+                ? 'border-[#2563EB] text-[#2563EB]'
+                : 'border-transparent text-slate-600 hover:text-slate-900',
+            )}
+          >
+            <CalendarClock className="h-4 w-4" aria-hidden="true" />
+            <span>{isEs ? 'Ausencias' : '假期管理'}</span>
+          </button>
+        )}
         <button
           type="button"
           onClick={() => setActiveTab('attendance')}
@@ -871,7 +908,7 @@ export function LeavesPage() {
             </div>
           </div>
 
-          {!isEmployeeRole && employees.length > 0 && (
+          {!selfOnlyCalendar && employees.length > 0 && (
             <div className="rounded-md border border-slate-200 bg-white p-2.5">
               <Label className="mb-1.5 block text-[11px] text-slate-500">
                 {t('leaves.employeeLabel')}
@@ -1529,9 +1566,7 @@ export function LeavesPage() {
               </div>
 
               {/* Justificante Section */}
-              {(selectedRequest.leave_type === 'sick_leave' ||
-                selectedRequest.leave_type === 'medical_appointment' ||
-                selectedRequest.medical_document_id) && (
+              {canAccessJustificante && (
                 <div className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3">
                   <div className="flex items-center justify-between text-xs font-medium text-slate-700">
                     <span className="flex items-center gap-1.5">

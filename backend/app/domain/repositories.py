@@ -111,6 +111,10 @@ class StoreRepository(Protocol):
 
 
 class MembershipRepository(Protocol):
+    async def lock_tenant_for_membership_changes(self, tenant_id: UUID) -> None:
+        """Serialize membership writes for this tenant until the transaction ends."""
+        ...
+
     async def list_summaries_for_user(self, user_id: UUID) -> list[TenantMembershipSummary]: ...
 
     async def get_active_for_user_in_tenant(
@@ -165,6 +169,7 @@ class EmployeeRepository(Protocol):
         allowed_store_ids: frozenset[UUID] | None = None,
         allowed_statuses: frozenset[EmploymentStatus] | None = None,
         only_user_id: UUID | None = None,
+        user_ids: frozenset[UUID] | None = None,
         store_id: UUID | None = None,
         status: EmploymentStatus | None = None,
     ) -> list[Employee]: ...

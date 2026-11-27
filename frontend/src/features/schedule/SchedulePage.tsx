@@ -127,6 +127,12 @@ const SHIFT_CHIP_STYLE: Record<ShiftStatus, string> = {
 }
 
 export function SchedulePage() {
+  const { activeTenant, profile } = useAuth()
+  const scope = `${activeTenant?.tenant_id}:${activeTenant?.role}:${profile?.user_id}`
+  return <ScheduleWorkspace key={scope} />
+}
+
+function ScheduleWorkspace() {
   const { t, i18n } = useTranslation()
   const { activeTenant } = useAuth()
   const locale = i18n.language || 'zh-CN'

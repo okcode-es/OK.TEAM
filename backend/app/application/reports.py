@@ -8,6 +8,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from app.application.break_policies import build_break_policy_lookup, resolve_policy_for_employee
+from app.domain.announcements import is_employee_in_announcement_scope
 from app.domain.attendance import evaluate_attendance_ledger
 from app.domain.employees import Employee, EmploymentStatus, WorkScheduleType
 from app.domain.leaves import (
@@ -239,22 +240,25 @@ class GetExecutiveSummaryUseCase:
                         approved_sick_days += days
 
         # Announcements pending acknowledgement count
-        anns = await self._announcement_repo.list_by_tenant(principal.tenant_id)
-        pending_ack_count = 0
-        for ann in anns:
-            if ann.deleted_at is not None or not ann.requires_acknowledgement:
-                continue
-            if store_id is not None and ann.store_id is not None and ann.store_id != store_id:
-                continue
-            acks = await self._announcement_repo.list_acknowledgements_for_announcement(
-                principal.tenant_id, ann.id
+        announcements = await self._announcement_repo.list_by_tenant(principal.tenant_id)
+        requiring_ack = [
+            ann
+            for ann in announcements
+            if ann.deleted_at is None
+            and ann.requires_acknowledgement
+            and (store_id is None or ann.store_id in (None, store_id))
+        ]
+        acknowledgements = await self._announcement_repo.list_acknowledgements_for_announcements(
+            principal.tenant_id, [ann.id for ann in requiring_ack]
+        )
+        signed = {(ack.announcement_id, ack.employee_id) for ack in acknowledgements}
+        pending_ack_count = sum(
+            any(
+                is_employee_in_announcement_scope(ann, emp) and (ann.id, emp.id) not in signed
+                for emp in employees
             )
-            acked_emp_ids = {a.employee_id for a in acks}
-            target_emps = [
-                e for e in employees if ann.store_id is None or e.primary_store_id == ann.store_id
-            ]
-            if any(e.id not in acked_emp_ids for e in target_emps):
-                pending_ack_count += 1
+            for ann in requiring_ack
+        )
 
         by_store: list[StoreReportSummary] = []
         for sid, s in sorted(store_map.items(), key=lambda kv: kv[1].name):

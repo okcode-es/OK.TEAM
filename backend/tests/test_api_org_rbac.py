@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
-from datetime import datetime
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
@@ -14,6 +14,7 @@ from app.infrastructure.config import Settings
 from app.infrastructure.supabase_jwt import SupabaseJWTVerifier, sign_dev_hs256_token
 from app.interfaces.api.deps import (
     get_commit_fn,
+    get_employee_repository,
     get_jwt_verifier,
     get_membership_repository,
     get_store_repository,
@@ -24,6 +25,16 @@ from app.main import create_app
 DEV_SECRET = "phase1-api-test-secret-minimum-32-bytes-key"
 
 
+@dataclass(frozen=True)
+class DirectoryEmployee:
+    tenant_id: UUID
+    user_id: UUID
+    primary_store_id: UUID
+    department: str
+    employment_status: str = "active"
+    deleted_at: datetime | None = None
+
+
 class InMemoryOrgRepos:
     """Deterministic in-memory repositories implementing domain Protocols for fast API tests."""
 
@@ -31,6 +42,7 @@ class InMemoryOrgRepos:
         self.tenants: dict[UUID, Tenant] = {}
         self.stores: dict[UUID, Store] = {}
         self.memberships: dict[UUID, Membership] = {}
+        self.directory_employees: list[DirectoryEmployee] = []
 
     # --- TenantRepository ---
     async def get_by_id(self, tenant_id: UUID) -> Tenant | None:
@@ -198,6 +210,9 @@ class InMemoryMembershipRepo:
     def __init__(self, state: InMemoryOrgRepos) -> None:
         self._state = state
 
+    async def lock_tenant_for_membership_changes(self, tenant_id: UUID) -> None:
+        assert tenant_id in self._state.tenants
+
     async def list_summaries_for_user(self, user_id: UUID) -> list[TenantMembershipSummary]:
         summaries: list[TenantMembershipSummary] = []
         for m in self._state.memberships.values():
@@ -333,6 +348,20 @@ class InMemoryMembershipRepo:
         return True
 
 
+class DirectoryEmployeeRepo:
+    def __init__(self, state: InMemoryOrgRepos) -> None:
+        self._state = state
+
+    async def list_by_tenant(
+        self, tenant_id: UUID, *, user_ids: frozenset[UUID]
+    ) -> list[DirectoryEmployee]:
+        return [
+            employee
+            for employee in self._state.directory_employees
+            if employee.tenant_id == tenant_id and employee.user_id in user_ids
+        ]
+
+
 def _build_test_client(
     *,
     app_env: str = "development",
@@ -359,6 +388,7 @@ def _build_test_client(
     app.dependency_overrides[get_tenant_repository] = lambda: state
     app.dependency_overrides[get_store_repository] = lambda: store_repo
     app.dependency_overrides[get_membership_repository] = lambda: membership_repo
+    app.dependency_overrides[get_employee_repository] = lambda: DirectoryEmployeeRepo(state)
     app.dependency_overrides[get_commit_fn] = lambda: _noop_commit
     return TestClient(app), state
 
@@ -887,3 +917,85 @@ def test_membership_scoping_employee_isolation_and_privilege_escalation_guards()
         ).status_code
         == 403
     )
+
+
+def test_member_directory_uses_employee_department_and_shared_stores() -> None:
+    client, state = _build_test_client()
+    owner_id = uuid4()
+    owner_email = "owner@directory.es"
+    company = client.post(
+        "/api/v1/tenants",
+        headers=_auth_headers(owner_id, owner_email),
+        json={"legal_name": "Directory S.L.", "trade_name": "Directory", "cif_nif": "B11112222"},
+    )
+    assert company.status_code == 201
+    tenant_id = UUID(company.json()["id"])
+    now = datetime.now(UTC)
+    madrid, tenerife = uuid4(), uuid4()
+    manager_id, service_id, kitchen_id, remote_id, unlinked_id = (uuid4() for _ in range(5))
+
+    for user_id, role, stores, account_department in [
+        (manager_id, UserRole.STORE_MANAGER, {madrid}, "  Atención  "),
+        (service_id, UserRole.EMPLOYEE, {madrid, tenerife}, None),
+        (kitchen_id, UserRole.EMPLOYEE, {madrid}, None),
+        (remote_id, UserRole.EMPLOYEE, {madrid, tenerife}, None),
+        (unlinked_id, UserRole.EMPLOYEE, {madrid}, None),
+    ]:
+        member = Membership(
+            id=uuid4(),
+            tenant_id=tenant_id,
+            user_id=user_id,
+            email=f"{user_id}@directory.es",
+            display_name=str(user_id),
+            role=role,
+            status=MembershipStatus.ACTIVE,
+            store_ids=frozenset(stores),
+            department_scope=account_department,
+            created_at=now,
+            updated_at=now,
+        )
+        state.memberships[member.id] = member
+
+    state.directory_employees.extend(
+        [
+            DirectoryEmployee(tenant_id, service_id, madrid, "atención"),
+            DirectoryEmployee(tenant_id, kitchen_id, madrid, "Cocina"),
+            DirectoryEmployee(tenant_id, remote_id, tenerife, "Atención"),
+        ]
+    )
+    manager_view = client.get(
+        "/api/v1/memberships",
+        headers=_auth_headers(manager_id, f"{manager_id}@directory.es", str(tenant_id)),
+    )
+    assert manager_view.status_code == 200
+    assert manager_view.json()["total"] == 2
+    assert {item["user_id"]: item["store_ids"] for item in manager_view.json()["items"]} == {
+        str(manager_id): [str(madrid)],
+        str(service_id): [str(madrid)],
+    }
+
+    owner_view = client.get(
+        "/api/v1/memberships",
+        headers=_auth_headers(owner_id, owner_email, str(tenant_id)),
+    )
+    assert owner_view.status_code == 200
+    assert owner_view.json()["total"] == 6
+    employee_account = next(
+        item for item in owner_view.json()["items"] if item["user_id"] == str(service_id)
+    )
+    assert set(employee_account["store_ids"]) == {str(madrid), str(tenerife)}
+
+    manager = next(member for member in state.memberships.values() if member.user_id == manager_id)
+    state.memberships[manager.id] = replace(manager, department_scope=None)
+    headers = _auth_headers(manager_id, manager.email, str(tenant_id))
+    for status, deleted_at in [
+        ("terminated", None), ("legal_hold", None), ("active", now), ("anonymized", None)
+    ]:
+        state.directory_employees[0] = replace(
+            state.directory_employees[0], employment_status=status, deleted_at=deleted_at
+        )
+        store_view = client.get("/api/v1/memberships", headers=headers)
+        assert store_view.status_code == 200
+        assert {item["user_id"] for item in store_view.json()["items"]} == {
+            str(manager_id), str(kitchen_id), str(unlinked_id)
+        }

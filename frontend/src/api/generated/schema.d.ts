@@ -1386,7 +1386,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
-            leave_type: components["schemas"]["LeaveType"];
+            /** Leave Type */
+            leave_type: components["schemas"]["LeaveType"] | "absence_redacted";
             /**
              * Start Date
              * Format: date
