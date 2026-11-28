@@ -159,6 +159,8 @@ class InMemoryEmployeeRepo:
         emergency_contact_phone: str = "",
         default_break_minutes: int | None = None,
         manager_id: UUID | None = None,
+        work_permit_expiry_date: date | None = None,
+        contract_end_date: date | None = None,
     ) -> Employee | None:
         existing = await self.get_by_id(tenant_id, employee_id)
         if existing is None or existing.deleted_at is not None:
@@ -176,6 +178,8 @@ class InMemoryEmployeeRepo:
             emergency_contact_phone=emergency_contact_phone,
             default_break_minutes=default_break_minutes,
             manager_id=manager_id,
+            work_permit_expiry_date=work_permit_expiry_date,
+            contract_end_date=contract_end_date,
             email=email,
             phone=phone,
             birth_date=birth_date,
@@ -192,6 +196,25 @@ class InMemoryEmployeeRepo:
             iban_masked=iban_masked,
             naf_enc=naf_enc,
             naf_masked=naf_masked,
+            updated_at=updated_at,
+        )
+        self.employees[employee_id] = updated
+        return updated
+
+    async def set_kiosk_pin_hash(
+        self,
+        tenant_id: UUID,
+        employee_id: UUID,
+        *,
+        kiosk_pin_hash: str | None,
+        updated_at: datetime,
+    ) -> Employee | None:
+        existing = await self.get_by_id(tenant_id, employee_id)
+        if existing is None or existing.deleted_at is not None:
+            return None
+        updated = replace(
+            existing,
+            kiosk_pin_hash=kiosk_pin_hash,
             updated_at=updated_at,
         )
         self.employees[employee_id] = updated
@@ -274,6 +297,9 @@ class InMemoryEmployeeRepo:
             iban_masked=None,
             naf_enc=None,
             naf_masked=None,
+            work_permit_expiry_date=None,
+            contract_end_date=None,
+            kiosk_pin_hash=None,
             employment_status=EmploymentStatus.ANONYMIZED,
             anonymized_at=anonymized_at,
             deleted_at=anonymized_at,

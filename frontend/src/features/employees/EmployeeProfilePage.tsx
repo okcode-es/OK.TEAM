@@ -151,6 +151,8 @@ export function EmployeeProfilePage({
     useState<WorkScheduleType>('full_time')
   const [weeklyHours, setWeeklyHours] = useState('40.00')
   const [vacationDays, setVacationDays] = useState('30')
+  const [workPermitExpiryDate, setWorkPermitExpiryDate] = useState('')
+  const [contractEndDate, setContractEndDate] = useState('')
   const [empStatus, setEmpStatus] = useState<EmploymentStatus>('active')
   const [managerId, setManagerId] = useState('')
   const [emergencyContactName, setEmergencyContactName] = useState('')
@@ -166,6 +168,12 @@ export function EmployeeProfilePage({
     useState<EmployeeSensitivePiiResponse | null>(null)
   const [revealSecondsLeft, setRevealSecondsLeft] = useState(0)
   const [revealing, setRevealing] = useState(false)
+
+  // Kiosk PIN management (owner / hr / in-scope store_manager)
+  const [kioskPinInput, setKioskPinInput] = useState('')
+  const [kioskPinSaving, setKioskPinSaving] = useState(false)
+  const [kioskPinNotice, setKioskPinNotice] = useState<string | null>(null)
+  const [kioskPinError, setKioskPinError] = useState<string | null>(null)
 
   // Payslips (Nóminas) inside HR info
   const [payslips, setPayslips] = useState<DocumentListItemResponse[]>([])
@@ -197,6 +205,8 @@ export function EmployeeProfilePage({
     setScheduleType(data.work_schedule_type)
     setWeeklyHours(String(data.contracted_weekly_hours))
     setVacationDays(String(data.annual_vacation_days))
+    setWorkPermitExpiryDate(data.work_permit_expiry_date ?? '')
+    setContractEndDate(data.contract_end_date ?? '')
     setEmpStatus(data.employment_status)
     setManagerId(data.manager_id ?? '')
     setEmergencyContactName(data.emergency_contact_name ?? '')
@@ -372,6 +382,8 @@ export function EmployeeProfilePage({
             work_schedule_type: scheduleType,
             contracted_weekly_hours: Number(weeklyHours),
             annual_vacation_days: Number(vacationDays),
+            work_permit_expiry_date: workPermitExpiryDate || null,
+            contract_end_date: contractEndDate || null,
             employment_status: empStatus,
             manager_id: managerId || null,
             user_id: employee?.user_id ?? null,
@@ -395,6 +407,40 @@ export function EmployeeProfilePage({
       setSavedNotice(true)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleSaveKioskPin = async (clearPin: boolean) => {
+    if (!employee) return
+    setKioskPinError(null)
+    setKioskPinNotice(null)
+    const trimmed = kioskPinInput.trim()
+    if (!clearPin && !/^\d{4,6}$/.test(trimmed)) {
+      setKioskPinError(t('employees.profile.kioskPin.formatError'))
+      return
+    }
+    setKioskPinSaving(true)
+    try {
+      const { data, error } = await apiClient.PUT(
+        '/api/v1/employees/{employee_id}/kiosk-pin',
+        {
+          params: { path: { employee_id: employee.id } },
+          body: { pin: clearPin ? null : trimmed },
+        },
+      )
+      if (error || !data) {
+        setKioskPinError(extractApiError(error, t('errors.GENERIC')))
+        return
+      }
+      setEmployee(data)
+      setKioskPinInput('')
+      setKioskPinNotice(
+        clearPin
+          ? t('employees.profile.kioskPin.clearedNotice')
+          : t('employees.profile.kioskPin.savedNotice'),
+      )
+    } finally {
+      setKioskPinSaving(false)
     }
   }
 
@@ -1161,8 +1207,143 @@ export function EmployeeProfilePage({
                                     </div>
                                   )}
                                 </div>
+
+                                <div className="space-y-1.5">
+                                  <Label className="text-xs text-slate-500">
+                                    {t('employees.fields.workPermitExpiryDate')}
+                                  </Label>
+                                  {isEditing ? (
+                                    <Input
+                                      type="date"
+                                      className="bg-white tabular-nums"
+                                      value={workPermitExpiryDate}
+                                      onChange={(e) =>
+                                        setWorkPermitExpiryDate(e.target.value)
+                                      }
+                                    />
+                                  ) : (
+                                    <div className="text-sm font-medium text-slate-900 tabular-nums">
+                                      {employee.work_permit_expiry_date || '—'}
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="space-y-1.5">
+                                  <Label className="text-xs text-slate-500">
+                                    {t('employees.fields.contractEndDate')}
+                                  </Label>
+                                  {isEditing ? (
+                                    <Input
+                                      type="date"
+                                      className="bg-white tabular-nums"
+                                      value={contractEndDate}
+                                      onChange={(e) =>
+                                        setContractEndDate(e.target.value)
+                                      }
+                                    />
+                                  ) : (
+                                    <div className="text-sm font-medium text-slate-900 tabular-nums">
+                                      {employee.contract_end_date || '—'}
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                             </section>
+
+                            {(role === 'owner' ||
+                              role === 'hr' ||
+                              role === 'store_manager') && (
+                              <section className="space-y-3 rounded-xl border border-slate-200/80 bg-slate-50/40 p-4">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <h3 className="text-xs font-semibold tracking-wide text-slate-700 uppercase">
+                                    {t('employees.profile.kioskPin.title')}
+                                  </h3>
+                                  <Badge
+                                    variant="outline"
+                                    className={
+                                      employee.has_kiosk_pin
+                                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                        : 'border-slate-200 bg-slate-100 text-slate-600'
+                                    }
+                                  >
+                                    {employee.has_kiosk_pin
+                                      ? t('employees.profile.kioskPin.configured')
+                                      : t('employees.profile.kioskPin.notConfigured')}
+                                  </Badge>
+                                </div>
+                                <p className="text-xs text-slate-600">
+                                  {t('employees.profile.kioskPin.description')}
+                                </p>
+                                {kioskPinError && (
+                                  <div
+                                    role="alert"
+                                    className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700"
+                                  >
+                                    {kioskPinError}
+                                  </div>
+                                )}
+                                {kioskPinNotice && (
+                                  <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+                                    {kioskPinNotice}
+                                  </div>
+                                )}
+                                {employee.employment_status !== 'terminated' &&
+                                  !employee.anonymized_at &&
+                                  !employee.retention_until && (
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <Input
+                                        type="password"
+                                        inputMode="numeric"
+                                        maxLength={6}
+                                        autoComplete="new-password"
+                                        placeholder={t(
+                                          'employees.profile.kioskPin.inputPlaceholder',
+                                        )}
+                                        value={kioskPinInput}
+                                        disabled={kioskPinSaving}
+                                        onChange={(e) => {
+                                          setKioskPinInput(
+                                            e.target.value
+                                              .replace(/\D/g, '')
+                                              .slice(0, 6),
+                                          )
+                                          if (kioskPinError)
+                                            setKioskPinError(null)
+                                        }}
+                                        className="w-44 bg-white font-mono tabular-nums"
+                                      />
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        disabled={
+                                          kioskPinSaving || !kioskPinInput
+                                        }
+                                        onClick={() =>
+                                          void handleSaveKioskPin(false)
+                                        }
+                                        className="bg-[#2563EB] text-white hover:bg-blue-700"
+                                      >
+                                        {employee.has_kiosk_pin
+                                          ? t('employees.profile.kioskPin.reset')
+                                          : t('employees.profile.kioskPin.set')}
+                                      </Button>
+                                      {employee.has_kiosk_pin && (
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="outline"
+                                          disabled={kioskPinSaving}
+                                          onClick={() =>
+                                            void handleSaveKioskPin(true)
+                                          }
+                                        >
+                                          {t('employees.profile.kioskPin.clear')}
+                                        </Button>
+                                      )}
+                                    </div>
+                                  )}
+                              </section>
+                            )}
 
                             {/* Section 2: Payroll, Payslips & Social Security */}
                             <section className="space-y-4 rounded-xl border border-slate-200/80 bg-slate-50/40 p-4">

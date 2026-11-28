@@ -23,7 +23,7 @@ from app.domain.documents import (
     build_storage_key,
     compute_document_retention_until,
 )
-from app.domain.employees import EmploymentStatus
+from app.domain.employees import EmploymentStatus, PiiCipher
 from app.domain.leaves import LeaveRequest
 from app.domain.organization import (
     ConflictError,
@@ -787,17 +787,59 @@ class ExportGestoriaPayrollCsvUseCase:
         tenant_repo: TenantRepository,
         store_repo: StoreRepository,
         doc_repo: DocumentRepository,
+        employee_repo: EmployeeRepository | None = None,
+        pii_cipher: PiiCipher | None = None,
     ) -> None:
         self._payroll_repo = payroll_repo
         self._tenant_repo = tenant_repo
         self._store_repo = store_repo
         self._doc_repo = doc_repo
+        self._employee_repo = employee_repo
+        self._pii_cipher = pii_cipher
+
+    async def _decrypt_identifiers(
+        self,
+        principal: AuthenticatedPrincipal,
+        employee_ids: list[UUID],
+    ) -> dict[UUID, tuple[str, str]]:
+        """Return {employee_id: (nie_dni, naf)}; empty strings when erased/missing."""
+        if self._employee_repo is None or self._pii_cipher is None:
+            raise RuntimeError("Full identifier export requires employee repository and PII cipher")
+        result: dict[UUID, tuple[str, str]] = {}
+        for employee_id in dict.fromkeys(employee_ids):
+            emp = await self._employee_repo.get_by_id(principal.tenant_id, employee_id)
+            if emp is None or emp.employment_status == EmploymentStatus.ANONYMIZED:
+                result[employee_id] = ("", "")
+                continue
+            nie_dni = (
+                self._pii_cipher.decrypt(
+                    emp.nie_dni_enc,
+                    tenant_id=principal.tenant_id,
+                    employee_id=emp.id,
+                    field_name="nie_dni",
+                )
+                if emp.nie_dni_enc
+                else ""
+            )
+            naf = (
+                self._pii_cipher.decrypt(
+                    emp.naf_enc,
+                    tenant_id=principal.tenant_id,
+                    employee_id=emp.id,
+                    field_name="naf",
+                )
+                if emp.naf_enc
+                else ""
+            )
+            result[employee_id] = (nie_dni, naf)
+        return result
 
     async def execute(
         self,
         principal: AuthenticatedPrincipal,
         *,
         closing_id: UUID,
+        include_full_identifiers: bool = False,
     ) -> GestoriaExportResult:
         if principal.role not in _GESTORIA_EXPORT_ROLES:
             raise ForbiddenScopeError(
@@ -834,6 +876,10 @@ class ExportGestoriaPayrollCsvUseCase:
         receipts = await self._doc_repo.list_receipts_for_documents(principal.tenant_id, doc_ids)
         receipt_by_doc = {r.document_id: r for r in receipts}
 
+        full_ids: dict[UUID, tuple[str, str]] = {}
+        if include_full_identifiers:
+            full_ids = await self._decrypt_identifiers(principal, [it.employee_id for it in items])
+
         buffer = io.StringIO()
         buffer.write("\ufeff")
         writer = csv.writer(buffer, lineterminator="\n")
@@ -847,7 +893,11 @@ class ExportGestoriaPayrollCsvUseCase:
                 "Revisión",
                 "Código Empleado",
                 "Nombre Completo",
-                "NIE/DNI (Enmascarado)",
+                *(
+                    ["NIE/DNI", "NAF (Nº Afiliación SS)"]
+                    if include_full_identifiers
+                    else ["NIE/DNI (Enmascarado)"]
+                ),
                 "Tipo Contrato",
                 "Jornada",
                 "Horas Semanales Pactadas",
@@ -884,7 +934,14 @@ class ExportGestoriaPayrollCsvUseCase:
                     str(closing.revision_number),
                     _sanitize_csv_cell(it.employee_code),
                     _sanitize_csv_cell(it.employee_full_name),
-                    _sanitize_csv_cell(it.nie_dni_masked or ""),
+                    *(
+                        [
+                            _sanitize_csv_cell(full_ids.get(it.employee_id, ("", ""))[0]),
+                            _sanitize_csv_cell(full_ids.get(it.employee_id, ("", ""))[1]),
+                        ]
+                        if include_full_identifiers
+                        else [_sanitize_csv_cell(it.nie_dni_masked or "")]
+                    ),
                     _sanitize_csv_cell(it.contract_type.value),
                     _sanitize_csv_cell(it.work_schedule_type.value),
                     f"{it.contracted_weekly_hours:.2f}",

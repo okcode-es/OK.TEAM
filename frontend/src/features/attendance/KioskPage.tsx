@@ -83,6 +83,7 @@ export function KioskPage({
     () => lockedRecord?.storeId ?? '',
   )
   const [employeeCode, setEmployeeCode] = useState('')
+  const [kioskPin, setKioskPin] = useState('')
   const [submittingAction, setSubmittingAction] = useState<KioskAction | null>(
     null,
   )
@@ -106,6 +107,7 @@ export function KioskPage({
 
   const clearKioskState = useCallback(() => {
     setEmployeeCode('')
+    setKioskPin('')
     setReceipt(null)
     setErrorMessage(null)
     setCountdown(0)
@@ -297,6 +299,11 @@ export function KioskPage({
       setErrorMessage(t('kiosk.employeeCodeRequired'))
       return
     }
+    const trimmedPin = kioskPin.trim()
+    if (trimmedPin && !/^\d{4,6}$/.test(trimmedPin)) {
+      setErrorMessage(t('kiosk.kioskPinFormatError'))
+      return
+    }
 
     setSubmittingAction(action)
     try {
@@ -306,17 +313,23 @@ export function KioskPage({
           source: 'kiosk',
           store_id: effectiveStoreId,
           employee_code: trimmedCode,
+          kiosk_pin: trimmedPin || null,
           work_mode: 'onsite',
         },
       })
 
       if (res.error || !res.data) {
-        setErrorMessage(extractApiError(res.error, t('errors.GENERIC')))
+        if (res.response?.status === 403) {
+          setErrorMessage(t('kiosk.kioskPinInvalid'))
+        } else {
+          setErrorMessage(extractApiError(res.error, t('errors.GENERIC')))
+        }
         return
       }
 
       setReceipt(res.data)
       setEmployeeCode('')
+      setKioskPin('')
     } catch (err) {
       setErrorMessage(extractApiError(err, t('errors.GENERIC')))
     } finally {
@@ -710,6 +723,38 @@ export function KioskPage({
                         }
                       }}
                       placeholder={t('kiosk.employeeCodePlaceholder')}
+                      className="h-11 font-mono text-base tabular-nums"
+                      disabled={
+                        (!isLocked && stores.length === 0) ||
+                        lockedStoreUnavailable ||
+                        submittingAction !== null
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="kiosk-employee-pin">
+                      {t('kiosk.kioskPinLabel')}
+                    </Label>
+                    <Input
+                      id="kiosk-employee-pin"
+                      name="kiosk_pin"
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={6}
+                      autoComplete="off"
+                      aria-label={t('kiosk.kioskPinLabel')}
+                      value={kioskPin}
+                      onChange={(e) => {
+                        setKioskPin(e.target.value.replace(/\D/g, '').slice(0, 6))
+                        if (errorMessage) setErrorMessage(null)
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && isImeComposing(e)) {
+                          e.preventDefault()
+                        }
+                      }}
+                      placeholder={t('kiosk.kioskPinPlaceholder')}
                       className="h-11 font-mono text-base tabular-nums"
                       disabled={
                         (!isLocked && stores.length === 0) ||

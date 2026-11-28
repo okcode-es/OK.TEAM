@@ -239,7 +239,9 @@
       "naf": "NAF 社保号 12 位（加密存储）",
       "status": "在职状态",
       "manager": "直属主管",
-      "noManager": "无直属主管"
+      "noManager": "无直属主管",
+      "workPermitExpiryDate": "居留 (NIE/TIE) 到期日",
+      "contractEndDate": "合同到期日"
     },
     "drawer": {
       "createTitle": "新建员工档案",
@@ -347,6 +349,19 @@
         "description": "将永久清除姓名、联系方式及全部加密证件（NIE/IBAN/NAF），仅保留去标识化聚合记录。",
         "confirm": "确认匿名化",
         "cancel": "取消"
+      },
+      "kioskPin": {
+        "title": "门店平板打卡 PIN (Kiosk)",
+        "configured": "已设置",
+        "notConfigured": "未设置",
+        "description": "为员工设置 4–6 位纯数字打卡 PIN 后，门店平板打卡时需输入该 PIN 验证身份。系统仅保存加密哈希，不回显明文。",
+        "inputPlaceholder": "输入 4–6 位数字 PIN",
+        "set": "设置 PIN",
+        "reset": "重置 PIN",
+        "clear": "清除 PIN",
+        "formatError": "PIN 必须为 4 至 6 位纯数字。",
+        "savedNotice": "打卡 PIN 已更新。",
+        "clearedNotice": "打卡 PIN 已清除。"
       }
     },
     "pii": {
@@ -417,8 +432,10 @@
         "breakAfterIn": "开始休息时间必须晚于上班时间",
         "breakEndAfterStart": "结束休息时间必须晚于开始休息时间",
         "outAfterBreak": "下班时间必须晚于结束休息时间",
-        "outAfterIn": "下班时间必须晚于上班时间"
-      }
+        "outAfterIn": "下班时间必须晚于上班时间",
+        "max16Hours": "单次补录班次总时长不能超过 16 小时。"
+      },
+      "overnightHint": "次日 (+1d) · 共 {{hours}} 小时"
     },
     "actions": {
       "clock_in": "上班打卡",
@@ -584,7 +601,11 @@
     "invalidPinError": "解锁码不正确，请重试。",
     "confirmExit": "验证并退出",
     "verifying": "正在验证…",
-    "lockedStoreUnavailable": "当前锁定的门店已停用或不可用，请先验证解锁码退出后重新配置。"
+    "lockedStoreUnavailable": "当前锁定的门店已停用或不可用，请先验证解锁码退出后重新配置。",
+    "kioskPinLabel": "员工打卡 PIN（如已设置）",
+    "kioskPinPlaceholder": "4–6 位数字",
+    "kioskPinFormatError": "打卡 PIN 须为 4 至 6 位纯数字。",
+    "kioskPinInvalid": "员工打卡 PIN 不正确或未提供，请核对后重试。"
   },
   "schedule": {
     "title": "门店周排班日历",
@@ -640,8 +661,15 @@
       "saving": "正在保存…",
       "cancelShift": "取消该班次",
       "cancelling": "正在取消…",
-      "close": "关闭"
-    }
+      "close": "关闭",
+      "targetStore": "排班门店（支援门店）"
+    },
+    "filterDepartment": "按部门筛选",
+    "allDepartments": "全部部门",
+    "copyPrevWeek": "复制上周排班到本周（草稿）",
+    "copyingPrevWeek": "正在复制上周排班...",
+    "copyPrevWeekEmpty": "上周暂无可复制的有效班次。",
+    "copyPrevWeekSummary": "已复制 {{created}} 条草稿班次，跳过 {{skipped}} 条冲突或受限班次。"
   },
   "leaves": {
     "title": "年假与请假管理",
@@ -686,7 +714,9 @@
       "hint": "支持 PDF / JPG / PNG / WebP，最大 10 MB",
       "attached": "已附证明文件",
       "preview60s": "查看证明文件（60秒临时链接）",
-      "uploadNew": "上传 / 替换证明文件"
+      "uploadNew": "上传 / 替换证明文件",
+      "retryUploadHint": "请假单已创建，上次附件上传失败。点击下方按钮仅重试上传附件，不会重复创建请假单。",
+      "retryUploadAction": "重试上传附件"
     },
     "statuses": {
       "pending": "待审批",
@@ -860,7 +890,8 @@
       "exportCsv": "导出律师楼核算包 CSV",
       "exporting": "正在导出…",
       "reopenMonth": "重新开启本月",
-      "reopening": "正在重开…"
+      "reopening": "正在重开…",
+      "includeFullIdentifiers": "导出完整 NIE/NAF"
     },
     "statuses": {
       "open": "未关账（实时预览）",
@@ -971,13 +1002,26 @@
       "reasonRequired": "请填写重新开启月度关账的原因。",
       "cancel": "取消",
       "confirm": "确认重开本月"
+    },
+    "closeDialog": {
+      "title": "确认月度结账？",
+      "description": "结账后将锁定 {{month}} 的考勤与请假记录，无法再随意修改。请核对以下汇总数据：",
+      "employeeCountLabel": "锁定员工人数",
+      "totalHoursLabel": "汇总净工时",
+      "cancel": "取消",
+      "confirm": "确认结账"
     }
   },
   "common": {
     "loading": "加载中…",
     "error": "操作失败，请稍后重试。",
     "cancel": "取消",
-    "close": "关闭"
+    "close": "关闭",
+    "allEmployees": "全部员工",
+    "selectEmployee": "选择员工",
+    "searchEmployeePlaceholder": "搜索姓名、常用名或工号...",
+    "noMatchingEmployees": "未找到匹配员工",
+    "clearSelection": "清除选择"
   },
   "clock": {
     "workModeLabel": "工作模式",
@@ -1089,6 +1133,15 @@
       "title": "个人文档与工资单",
       "empty": "暂无个人文档。",
       "sign": "签收"
+    },
+    "expiryAlerts": {
+      "title": "60 天内到期预警",
+      "expired": "已到期",
+      "daysRemaining": "剩 {{count}} 天",
+      "kinds": {
+        "work_permit": "居留 NIE/TIE",
+        "contract_end": "合同到期"
+      }
     }
   },
   "announcements": {

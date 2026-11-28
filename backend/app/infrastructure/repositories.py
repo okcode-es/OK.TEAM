@@ -649,6 +649,9 @@ def _to_employee(model: EmployeeModel) -> Employee:
         avatar_updated_at=model.avatar_updated_at,
         default_break_minutes=model.default_break_minutes,
         manager_id=model.manager_id,
+        work_permit_expiry_date=model.work_permit_expiry_date,
+        contract_end_date=model.contract_end_date,
+        kiosk_pin_hash=model.kiosk_pin_hash,
         retention_until=model.retention_until,
         anonymized_at=model.anonymized_at,
         created_at=model.created_at,
@@ -765,6 +768,9 @@ class SqlAlchemyEmployeeRepository:
             manager_id=employee.manager_id,
             hire_date=employee.hire_date,
             termination_date=employee.termination_date,
+            work_permit_expiry_date=employee.work_permit_expiry_date,
+            contract_end_date=employee.contract_end_date,
+            kiosk_pin_hash=employee.kiosk_pin_hash,
             nie_dni_enc=employee.nie_dni_enc,
             nie_dni_masked=employee.nie_dni_masked,
             nie_dni_blind_index=employee.nie_dni_blind_index,
@@ -825,6 +831,8 @@ class SqlAlchemyEmployeeRepository:
         emergency_contact_phone: str = "",
         default_break_minutes: int | None = None,
         manager_id: UUID | None = None,
+        work_permit_expiry_date: date | None = None,
+        contract_end_date: date | None = None,
     ) -> Employee | None:
         stmt = select(EmployeeModel).where(
             EmployeeModel.tenant_id == tenant_id,
@@ -839,6 +847,8 @@ class SqlAlchemyEmployeeRepository:
         if model is None:
             return None
 
+        model.work_permit_expiry_date = work_permit_expiry_date
+        model.contract_end_date = contract_end_date
         model.primary_store_id = primary_store_id
         model.user_id = user_id
         model.employee_code = employee_code
@@ -873,6 +883,31 @@ class SqlAlchemyEmployeeRepository:
             raise ConflictError(
                 "Employee conflict: duplicate employee_code, NIE/DNI, or user_id"
             ) from exc
+        return _to_employee(model)
+
+    async def set_kiosk_pin_hash(
+        self,
+        tenant_id: UUID,
+        employee_id: UUID,
+        *,
+        kiosk_pin_hash: str | None,
+        updated_at: datetime,
+    ) -> Employee | None:
+        stmt = select(EmployeeModel).where(
+            EmployeeModel.tenant_id == tenant_id,
+            EmployeeModel.id == employee_id,
+            EmployeeModel.deleted_at.is_(None),
+            EmployeeModel.employment_status.in_(
+                [EmploymentStatus.ACTIVE.value, EmploymentStatus.ON_LEAVE.value]
+            ),
+        )
+        result = await self._session.execute(stmt)
+        model = result.scalar_one_or_none()
+        if model is None:
+            return None
+        model.kiosk_pin_hash = kiosk_pin_hash
+        model.updated_at = updated_at
+        await self._session.flush()
         return _to_employee(model)
 
     async def update_avatar(
@@ -951,6 +986,9 @@ class SqlAlchemyEmployeeRepository:
 
         model.user_id = None
         model.manager_id = None
+        model.work_permit_expiry_date = None
+        model.contract_end_date = None
+        model.kiosk_pin_hash = None
         model.full_name = anonymized_full_name
         model.preferred_name = ""
         model.job_title = ""

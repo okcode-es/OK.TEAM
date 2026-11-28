@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { apiClient, extractApiError } from '@/api/client'
 import type { EmployeeResponse, WorkMode } from '@/api/types'
 import { Button } from '@/components/ui/button'
+import { EmployeeCombobox } from '@/components/EmployeeCombobox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -32,7 +33,17 @@ interface ManualDayClockSheetProps {
   employees?: EmployeeResponse[]
   canSelectEmployee?: boolean
   defaultEmployeeId?: string
+  defaultDate?: string
   onSuccess?: () => void | Promise<void>
+}
+
+function parseTimeToMinutes(value: string): number | null {
+  if (!value || !value.includes(':')) return null
+  const [hStr, mStr] = value.split(':')
+  const h = Number(hStr)
+  const m = Number(mStr)
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return null
+  return h * 60 + m
 }
 
 export function ManualDayClockSheet({
@@ -41,6 +52,7 @@ export function ManualDayClockSheet({
   employees = [],
   canSelectEmployee = false,
   defaultEmployeeId = '',
+  defaultDate,
   onSuccess,
 }: ManualDayClockSheetProps) {
   const { t, i18n } = useTranslation()
@@ -73,6 +85,7 @@ export function ManualDayClockSheet({
     if (!open) return
     setSubmitAttempted(false)
     setApiError(null)
+    setLocalDate(defaultDate || todayIso)
     if (defaultEmployeeId) {
       setEmployeeId(defaultEmployeeId)
     } else if (selfEmployee?.id) {
@@ -80,7 +93,7 @@ export function ManualDayClockSheet({
     } else if (employees.length > 0) {
       setEmployeeId(employees[0].id)
     }
-  }, [open, defaultEmployeeId, selfEmployee?.id, employees])
+  }, [open, defaultDate, todayIso, defaultEmployeeId, selfEmployee?.id, employees])
 
   const isPastDate = Boolean(localDate && localDate < todayIso)
   const missingDate = !localDate
@@ -89,23 +102,45 @@ export function ManualDayClockSheet({
   const partialBreakStart = Boolean(!breakStartTime && breakEndTime)
   const partialBreakEnd = Boolean(breakStartTime && !breakEndTime)
 
+  const inMin = parseTimeToMinutes(clockInTime)
+  const outMin = parseTimeToMinutes(clockOutTime)
+  const isOvernight = Boolean(
+    inMin !== null && outMin !== null && outMin <= inMin,
+  )
+  const shiftDurationMin =
+    inMin !== null && outMin !== null
+      ? isOvernight
+        ? outMin + 1440 - inMin
+        : outMin - inMin
+      : null
+
   const timeOrderError = useMemo(() => {
-    if (!clockInTime) return null
+    if (inMin === null) return null
+    if (shiftDurationMin !== null && shiftDurationMin > 16 * 60) {
+      return t('attendance.manualDay.validation.max16Hours')
+    }
     if (breakStartTime && breakEndTime) {
-      if (breakStartTime <= clockInTime) {
-        return t('attendance.manualDay.validation.breakAfterIn')
+      const bsRaw = parseTimeToMinutes(breakStartTime)
+      const beRaw = parseTimeToMinutes(breakEndTime)
+      if (bsRaw !== null && beRaw !== null) {
+        const bs = isOvernight && bsRaw < inMin ? bsRaw + 1440 : bsRaw
+        const be = isOvernight && beRaw < inMin ? beRaw + 1440 : beRaw
+        if (bs <= inMin) {
+          return t('attendance.manualDay.validation.breakAfterIn')
+        }
+        if (be <= bs) {
+          return t('attendance.manualDay.validation.breakEndAfterStart')
+        }
+        if (outMin !== null) {
+          const outTimeline = isOvernight ? outMin + 1440 : outMin
+          if (outTimeline <= be) {
+            return t('attendance.manualDay.validation.outAfterBreak')
+          }
+        }
       }
-      if (breakEndTime <= breakStartTime) {
-        return t('attendance.manualDay.validation.breakEndAfterStart')
-      }
-      if (clockOutTime && clockOutTime <= breakEndTime) {
-        return t('attendance.manualDay.validation.outAfterBreak')
-      }
-    } else if (clockOutTime && clockOutTime <= clockInTime) {
-      return t('attendance.manualDay.validation.outAfterIn')
     }
     return null
-  }, [clockInTime, breakStartTime, breakEndTime, clockOutTime, t])
+  }, [inMin, outMin, isOvernight, shiftDurationMin, breakStartTime, breakEndTime, t])
 
   const missingFieldLabels = useMemo(() => {
     const list: string[] = []
@@ -302,18 +337,13 @@ export function ManualDayClockSheet({
               <Label htmlFor="manual-day-emp">
                 {t('attendance.manualDay.employee')}
               </Label>
-              <Select value={employeeId} onValueChange={setEmployeeId}>
-                <SelectTrigger id="manual-day-emp" className="w-full bg-white">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {employees.map((emp) => (
-                    <SelectItem key={emp.id} value={emp.id}>
-                      {emp.employee_code} · {emp.full_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <EmployeeCombobox
+                id="manual-day-emp"
+                employees={employees}
+                value={employeeId}
+                onValueChange={setEmployeeId}
+                ariaLabel={t('attendance.manualDay.employee')}
+              />
             </div>
           )}
 
@@ -428,6 +458,15 @@ export function ManualDayClockSheet({
                   {t('attendance.manualDay.validation.clockOutPastRequired')}
                 </p>
               )}
+              {isOvernight &&
+                shiftDurationMin !== null &&
+                shiftDurationMin <= 16 * 60 && (
+                  <p className="text-[11px] font-medium text-[#2563EB] tabular-nums">
+                    {t('attendance.manualDay.overnightHint', {
+                      hours: (shiftDurationMin / 60).toFixed(1),
+                    })}
+                  </p>
+                )}
             </div>
           </div>
 

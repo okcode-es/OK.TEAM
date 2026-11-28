@@ -83,6 +83,8 @@ class ClockAttendanceRequest(BaseModel):
     employee_code: str | None = Field(default=None, max_length=32)
     work_mode: WorkMode = WorkMode.ONSITE
     occurred_at_utc: datetime | None = None
+    # Kiosk-only: required when the employee has a PIN configured. Never echoed or logged.
+    kiosk_pin: str | None = Field(default=None, repr=False)
 
 
 class RecordManualDayRequest(BaseModel):
@@ -403,6 +405,7 @@ async def clock_attendance(
             employee_code=payload.employee_code,
             work_mode=payload.work_mode,
             occurred_at_utc=payload.occurred_at_utc,
+            kiosk_pin=payload.kiosk_pin,
         ),
     )
     await commit()

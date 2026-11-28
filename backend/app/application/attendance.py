@@ -7,7 +7,7 @@ import csv
 import io
 from collections import Counter, defaultdict
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Literal
@@ -41,6 +41,7 @@ from app.domain.employees import (
     EmploymentStatus,
     FrozenRecordError,
     normalize_employee_code,
+    verify_kiosk_pin,
 )
 from app.domain.leaves import LeaveStatus, LeaveType
 from app.domain.organization import (
@@ -98,7 +99,7 @@ class ClockAttendanceCommand:
     employee_code: str | None = None
     work_mode: WorkMode = WorkMode.ONSITE
     occurred_at_utc: datetime | None = None
-
+    kiosk_pin: str | None = field(default=None, repr=False)
 
 @dataclass(frozen=True, slots=True)
 class ClockAttendanceResult:
@@ -375,25 +376,36 @@ class ClockAttendanceUseCase:
             if principal.role == UserRole.STORE_MANAGER:
                 principal.require_store_access(principal.tenant_id, command.store_id)
 
-            normalized_code = normalize_employee_code(command.employee_code)
-            store_employees = await self._employee_repo.list_by_tenant(
-                principal.tenant_id,
-                store_id=command.store_id,
+            # Cross-store kiosk: the tablet's store only decides where the punch is recorded;
+            # the employee is matched by employee_code across the whole tenant.
+            tablet_store = await self._store_repo.get_by_id(
+                principal.tenant_id, command.store_id
             )
+            if tablet_store is None or not tablet_store.is_active:
+                raise EntityNotFoundError("Kiosk store not found or inactive")
+
+            normalized_code = normalize_employee_code(command.employee_code)
+            tenant_employees = await self._employee_repo.list_by_tenant(principal.tenant_id)
             matched = next(
                 (
                     emp
-                    for emp in store_employees
+                    for emp in tenant_employees
                     if emp.employee_code.upper() == normalized_code and emp.deleted_at is None
                 ),
                 None,
             )
             if matched is None:
-                raise EntityNotFoundError(
-                    f"Employee '{normalized_code}' was not found in the selected store"
+                raise EntityNotFoundError(f"Employee '{normalized_code}' was not found")
+            if matched.employment_status not in CLOCKABLE_STATUSES:
+                raise FrozenRecordError(
+                    f"Employee with status '{matched.employment_status.value}' "
+                    "cannot clock attendance"
                 )
-            if principal.role == UserRole.STORE_MANAGER:
-                principal.require_employee_in_scope(matched)
+            if matched.kiosk_pin_hash is not None and not verify_kiosk_pin(
+                command.kiosk_pin, matched.kiosk_pin_hash
+            ):
+                # 403 (not 401) so the SPA does not treat a wrong PIN as an expired session.
+                raise ForbiddenScopeError("Invalid or missing kiosk PIN")
             employee = matched
             target_store_id = command.store_id
         else:
@@ -576,8 +588,12 @@ class RecordManualDayUseCase:
             now_utc=now_utc,
         )
 
-        local_month = command.local_date.strftime("%Y-%m")
-        direct_checks = {(store.id, local_month)}
+        # Overnight shifts may spill into the next month: lock-check every touched local month.
+        store_tz = resolve_timezone(store.timezone)
+        touched_months = {command.local_date.strftime("%Y-%m")} | {
+            ts.astimezone(store_tz).strftime("%Y-%m") for _, ts in sequence
+        }
+        direct_checks = {(store.id, month) for month in touched_months}
         await _check_store_months_open(
             self._payroll_repo,
             tenant_id=principal.tenant_id,
@@ -886,17 +902,19 @@ class GetAttendanceLedgerUseCase:
             if len(employees) == 1:
                 target_event_employee_id = employees[0].id
 
-        all_events = await self._attendance_repo.list_by_tenant(
-            principal.tenant_id,
-            allowed_store_ids=(
-                principal.store_ids if principal.role == UserRole.STORE_MANAGER else None
-            ),
-            store_id=store_id,
-            employee_id=target_event_employee_id,
+        allowed_emp_ids = {e.id for e in employees}
+        all_events = (
+            await self._attendance_repo.list_by_tenant(
+                principal.tenant_id,
+                employee_id=target_event_employee_id,
+            )
+            if allowed_emp_ids
+            else []
         )
         events_by_emp: dict[UUID, list[AttendanceEvent]] = defaultdict(list)
         for ev in all_events:
-            events_by_emp[ev.employee_id].append(ev)
+            if ev.employee_id in allowed_emp_ids:
+                events_by_emp[ev.employee_id].append(ev)
 
         now_utc = _ensure_utc(self._utc_now())
         policy_lookup = (

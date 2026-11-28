@@ -36,6 +36,7 @@ MINOR_CONTINUOUS_THRESHOLD_MINUTES = 270  # 4.50h
 MINOR_REQUIRED_BREAK_MINUTES = 30
 ANNUAL_OVERTIME_WARNING_HOURS = Decimal("60.00")
 ANNUAL_OVERTIME_MAX_HOURS = Decimal("80.00")
+MAX_MANUAL_SHIFT_DURATION = timedelta(hours=16)
 
 
 class AttendanceEventType(StrEnum):
@@ -1220,14 +1221,28 @@ def validate_and_build_manual_day_timestamps(
         (AttendanceEventType.CLOCK_IN, clock_in_utc)
     ]
 
+    # Overnight shift: clock_out at/before clock_in on the wall clock => it falls on local_date + 1.
+    next_day = local_date + timedelta(days=1)
+    is_overnight = clock_out_time is not None and clock_out_time <= clock_in_time
+
     if break_start_time is not None and break_end_time is not None:
-        break_start_utc = parse_hhmm_to_utc(local_date, break_start_time, store_timezone)
-        break_end_utc = parse_hhmm_to_utc(local_date, break_end_time, store_timezone)
+        # For overnight shifts, breaks whose wall-clock time is earlier than clock_in belong to
+        # the early morning of the following day.
+        break_start_date = (
+            next_day if is_overnight and break_start_time < clock_in_time else local_date
+        )
+        break_end_date = (
+            next_day if is_overnight and break_end_time < clock_in_time else local_date
+        )
+        break_start_utc = parse_hhmm_to_utc(break_start_date, break_start_time, store_timezone)
+        break_end_utc = parse_hhmm_to_utc(break_end_date, break_end_time, store_timezone)
         sequence.append((AttendanceEventType.BREAK_START, break_start_utc))
         sequence.append((AttendanceEventType.BREAK_END, break_end_utc))
 
     if clock_out_time is not None:
-        clock_out_utc = parse_hhmm_to_utc(local_date, clock_out_time, store_timezone)
+        clock_out_utc = parse_hhmm_to_utc(
+            next_day if is_overnight else local_date, clock_out_time, store_timezone
+        )
         sequence.append((AttendanceEventType.CLOCK_OUT, clock_out_utc))
 
     for idx in range(1, len(sequence)):
@@ -1236,6 +1251,11 @@ def validate_and_build_manual_day_timestamps(
                 "Invalid time range: timestamps must be in strictly increasing order "
                 "(clock_in < break_start < break_end < clock_out)"
             )
+
+    if sequence[-1][1] - sequence[0][1] > MAX_MANUAL_SHIFT_DURATION:
+        raise ValidationDomainError(
+            "Invalid time range: a single shift cannot exceed 16 hours in total"
+        )
 
     max_future = now_utc + timedelta(minutes=5)
     min_past = now_utc - timedelta(days=31)

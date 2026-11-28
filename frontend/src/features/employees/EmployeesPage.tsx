@@ -104,6 +104,8 @@ interface CreateEmployeeForm {
   work_schedule_type: WorkScheduleType
   contracted_weekly_hours: string
   annual_vacation_days: string
+  work_permit_expiry_date: string
+  contract_end_date: string
   manager_id: string
   nie_dni: string
   iban: string
@@ -125,6 +127,8 @@ const DEFAULT_CREATE_FORM: CreateEmployeeForm = {
   work_schedule_type: 'full_time',
   contracted_weekly_hours: '40.00',
   annual_vacation_days: '30',
+  work_permit_expiry_date: '',
+  contract_end_date: '',
   manager_id: '',
   nie_dni: '',
   iban: '',
@@ -370,6 +374,8 @@ export function EmployeesPage() {
           work_schedule_type: form.work_schedule_type,
           contracted_weekly_hours: Number(form.contracted_weekly_hours),
           annual_vacation_days: Number(form.annual_vacation_days),
+          work_permit_expiry_date: form.work_permit_expiry_date || null,
+          contract_end_date: form.contract_end_date || null,
           manager_id: form.manager_id || null,
           nie_dni: form.nie_dni.trim() || null,
           iban: form.iban.trim() || null,
@@ -1589,6 +1595,40 @@ export function EmployeesPage() {
                   value={form.annual_vacation_days}
                   onChange={(e) =>
                     setForm({ ...form, annual_vacation_days: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="emp-work-permit-expiry">
+                  {t('employees.fields.workPermitExpiryDate')}
+                </Label>
+                <Input
+                  id="emp-work-permit-expiry"
+                  type="date"
+                  className="tabular-nums"
+                  value={form.work_permit_expiry_date}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      work_permit_expiry_date: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="emp-contract-end">
+                  {t('employees.fields.contractEndDate')}
+                </Label>
+                <Input
+                  id="emp-contract-end"
+                  type="date"
+                  className="tabular-nums"
+                  value={form.contract_end_date}
+                  onChange={(e) =>
+                    setForm({ ...form, contract_end_date: e.target.value })
                   }
                 />
               </div>

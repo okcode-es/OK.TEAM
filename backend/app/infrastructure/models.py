@@ -291,6 +291,9 @@ class EmployeeModel(Base):
     )
     hire_date: Mapped[date] = mapped_column(Date, nullable=False)
     termination_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    work_permit_expiry_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    contract_end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    kiosk_pin_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # AES-256-GCM encrypted PII columns + safe masked display values + blind index (NO plaintext)
     nie_dni_enc: Mapped[str | None] = mapped_column(Text, nullable=True)

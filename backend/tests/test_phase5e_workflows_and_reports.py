@@ -553,7 +553,32 @@ def test_two_stage_leave_approval_workflow(tmp_path: Path) -> None:
     hr_h = h(env["hr_id"])
     emp1: Employee = env["emp1"]
 
-    # 1. Employee submits -> pending_manager
+    # 1. Employee submits -> pending_manager; HR can one-step approve directly (B3)
+    create_onestep_res = client.post(
+        "/api/v1/leaves",
+        json={
+            "leave_type": "vacation",
+            "start_date": "2026-12-01",
+            "end_date": "2026-12-02",
+            "reason": "One-step HR approval",
+        },
+        headers=emp_h,
+    )
+    assert create_onestep_res.status_code == 201
+    onestep_id = create_onestep_res.json()["id"]
+    assert create_onestep_res.json()["status"] == "pending_manager"
+
+    hr_onestep = client.post(
+        f"/api/v1/leaves/{onestep_id}/review",
+        json={"approve": True, "review_note": "Direct HR final"},
+        headers=hr_h,
+    )
+    assert hr_onestep.status_code == 200
+    assert hr_onestep.json()["status"] == "approved"
+    assert hr_onestep.json()["hr_reviewed_by_user_id"] == str(env["hr_id"])
+    assert hr_onestep.json()["hr_review_note"] == "Direct HR final"
+
+    # 2. Employee submits another -> pending_manager -> Store Manager -> pending_hr -> HR
     create_res = client.post(
         "/api/v1/leaves",
         json={
@@ -567,15 +592,6 @@ def test_two_stage_leave_approval_workflow(tmp_path: Path) -> None:
     assert create_res.status_code == 201
     leave_id = create_res.json()["id"]
     assert create_res.json()["status"] == "pending_manager"
-
-    # 2. HR blocked at stage 1 -> 422 LEAVE_REQUIRES_MANAGER_FIRST
-    hr_early = client.post(
-        f"/api/v1/leaves/{leave_id}/review",
-        json={"approve": True, "review_note": "Premature"},
-        headers=hr_h,
-    )
-    assert hr_early.status_code == 422
-    assert hr_early.json()["error_code"] == "LEAVE_REQUIRES_MANAGER_FIRST"
 
     # 3. Store Manager approves -> pending_hr
     mgr_ok = client.post(

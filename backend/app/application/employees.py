@@ -20,6 +20,7 @@ from app.domain.employees import (
     WorkScheduleType,
     build_avatar_storage_key,
     compute_retention_until,
+    hash_kiosk_pin,
     mask_iban,
     mask_naf,
     mask_nie_dni,
@@ -29,8 +30,10 @@ from app.domain.employees import (
     normalize_nie_dni,
     validate_annual_vacation_days,
     validate_avatar_upload,
+    validate_contract_end_date,
     validate_contracted_weekly_hours,
     validate_default_break_minutes,
+    validate_kiosk_pin,
     validate_no_manager_cycle,
 )
 from app.domain.organization import (
@@ -80,6 +83,8 @@ class CreateEmployeeCommand:
     default_break_minutes: int | None = None
     manager_id: UUID | None = None
     hire_date: date = date(2026, 1, 1)
+    work_permit_expiry_date: date | None = None
+    contract_end_date: date | None = None
     nie_dni: str | None = field(default=None, repr=False)
     iban: str | None = field(default=None, repr=False)
     naf: str | None = field(default=None, repr=False)
@@ -107,6 +112,9 @@ class UpdateEmployeeCommand:
     manager_id: UUID | None | _UnsetType = UNSET
     hire_date: date = date(2026, 1, 1)
     employment_status: EmploymentStatus = EmploymentStatus.ACTIVE
+    # UNSET => keep existing value; explicit None => clear the date.
+    work_permit_expiry_date: date | None | _UnsetType = UNSET
+    contract_end_date: date | None | _UnsetType = UNSET
     # None => keep existing encrypted value; "" => clear; non-empty => re-encrypt new value
     nie_dni: str | None = field(default=None, repr=False)
     iban: str | None = field(default=None, repr=False)
@@ -358,6 +366,8 @@ class CreateEmployeeUseCase:
             manager_id=cmd.manager_id,
             hire_date=cmd.hire_date,
             termination_date=None,
+            work_permit_expiry_date=cmd.work_permit_expiry_date,
+            contract_end_date=validate_contract_end_date(cmd.hire_date, cmd.contract_end_date),
             nie_dni_enc=nie_enc,
             nie_dni_masked=nie_masked,
             nie_dni_blind_index=nie_blind,
@@ -434,6 +444,18 @@ class UpdateEmployeeUseCase:
         vacation_days = validate_annual_vacation_days(cmd.annual_vacation_days)
         default_break_minutes = validate_default_break_minutes(cmd.default_break_minutes)
 
+        resolved_work_permit_expiry = (
+            existing.work_permit_expiry_date
+            if isinstance(cmd.work_permit_expiry_date, _UnsetType)
+            else cmd.work_permit_expiry_date
+        )
+        resolved_contract_end = validate_contract_end_date(
+            cmd.hire_date,
+            existing.contract_end_date
+            if isinstance(cmd.contract_end_date, _UnsetType)
+            else cmd.contract_end_date,
+        )
+
         if await self._employee_repo.exists_active_code(
             principal.tenant_id,
             employee_code,
@@ -482,6 +504,8 @@ class UpdateEmployeeUseCase:
         updated = await self._employee_repo.update(
             principal.tenant_id,
             employee_id,
+            work_permit_expiry_date=resolved_work_permit_expiry,
+            contract_end_date=resolved_contract_end,
             primary_store_id=cmd.primary_store_id,
             user_id=cmd.user_id,
             employee_code=employee_code,
@@ -510,6 +534,48 @@ class UpdateEmployeeUseCase:
             naf_enc=naf_enc,
             naf_masked=naf_masked,
             updated_at=datetime.now(UTC),
+        )
+        if updated is None:
+            raise EntityNotFoundError("Employee not found")
+        return updated
+
+
+class SetEmployeeKioskPinUseCase:
+    """Owner / HR / in-scope store_manager sets, resets or clears an employee's kiosk PIN."""
+
+    def __init__(self, employee_repo: EmployeeRepository) -> None:
+        self._employee_repo = employee_repo
+
+    async def execute(
+        self,
+        principal: AuthenticatedPrincipal,
+        employee_id: UUID,
+        *,
+        pin: str | None,
+        now_utc: datetime | None = None,
+    ) -> Employee:
+        if principal.role not in {UserRole.OWNER, UserRole.HR, UserRole.STORE_MANAGER}:
+            raise ForbiddenScopeError(
+                "Only owner, HR, or in-scope store_manager may manage kiosk PINs"
+            )
+
+        existing = await self._employee_repo.get_by_id(principal.tenant_id, employee_id)
+        if existing is None:
+            raise EntityNotFoundError("Employee not found")
+        if principal.role == UserRole.STORE_MANAGER:
+            principal.require_employee_in_scope(existing)
+
+        if existing.deleted_at is not None or existing.employment_status not in MUTABLE_STATUSES:
+            raise FrozenRecordError(
+                "Cannot change kiosk PIN of a terminated, legal-hold or anonymized employee"
+            )
+
+        pin_hash = hash_kiosk_pin(validate_kiosk_pin(pin)) if pin is not None else None
+        updated = await self._employee_repo.set_kiosk_pin_hash(
+            principal.tenant_id,
+            employee_id,
+            kiosk_pin_hash=pin_hash,
+            updated_at=(now_utc or datetime.now(UTC)).astimezone(UTC),
         )
         if updated is None:
             raise EntityNotFoundError("Employee not found")

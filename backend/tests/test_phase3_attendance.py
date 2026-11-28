@@ -971,7 +971,7 @@ def test_api_attendance_clock_kiosk_corrections_rbac_and_csv() -> None:
     )
     assert res_mgr_web_unassigned.status_code == 403
 
-    # 4. Legal hold employee blocked from kiosk clock (403 for store_manager, 422 for HR)
+    # 4. Legal hold employee blocked from kiosk clock (422 FrozenRecordError for manager & HR)
     res_hold_kiosk = client.post(
         "/api/v1/attendance/clock",
         headers=_headers(ids["mgr"], t_a),
@@ -982,7 +982,7 @@ def test_api_attendance_clock_kiosk_corrections_rbac_and_csv() -> None:
             "employee_code": "EMP-HOLD",
         },
     )
-    assert res_hold_kiosk.status_code == 403
+    assert res_hold_kiosk.status_code == 422
     res_hold_kiosk_hr = client.post(
         "/api/v1/attendance/clock",
         headers=_headers(ids["hr"], t_a),

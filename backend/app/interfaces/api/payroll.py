@@ -22,7 +22,7 @@ from app.application.payroll import (
     ReopenMonthlyClosingUseCase,
 )
 from app.domain.documents import DocumentStoragePort
-from app.domain.employees import ContractType, WorkScheduleType
+from app.domain.employees import ContractType, PiiCipher, WorkScheduleType
 from app.domain.payroll import (
     AttendancePdfRendererPort,
     ClosingBlocker,
@@ -54,6 +54,7 @@ from app.interfaces.api.deps import (
     get_leave_repository,
     get_payroll_closing_repository,
     get_pdf_renderer,
+    get_pii_cipher,
     get_store_repository,
     get_tenant_repository,
     get_utc_now,
@@ -470,10 +471,30 @@ async def export_gestoria_payroll_csv(
     tenant_repo: Annotated[TenantRepository, Depends(get_tenant_repository)],
     store_repo: Annotated[StoreRepository, Depends(get_store_repository)],
     doc_repo: Annotated[DocumentRepository, Depends(get_document_repository)],
+    employee_repo: Annotated[EmployeeRepository, Depends(get_employee_repository)],
+    pii_cipher: Annotated[PiiCipher, Depends(get_pii_cipher)],
+    include_full_identifiers: Annotated[
+        bool,
+        Query(
+            description=(
+                "When true (owner/hr/accountant only) export full NIE/DNI and NAF "
+                "instead of masked identifiers."
+            )
+        ),
+    ] = False,
 ) -> Response:
     export = await ExportGestoriaPayrollCsvUseCase(
-        payroll_repo, tenant_repo, store_repo, doc_repo
-    ).execute(principal, closing_id=closing_id)
+        payroll_repo,
+        tenant_repo,
+        store_repo,
+        doc_repo,
+        employee_repo,
+        pii_cipher,
+    ).execute(
+        principal,
+        closing_id=closing_id,
+        include_full_identifiers=include_full_identifiers,
+    )
     encoded_fn = quote(export.filename, safe="")
     content_disp = f'attachment; filename="{export.filename}"; filename*=UTF-8\'\'{encoded_fn}'
     return Response(

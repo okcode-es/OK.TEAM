@@ -72,6 +72,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { BreakPolicyForm } from '@/features/attendance/BreakPolicyForm'
+import { EmployeeCombobox } from '@/components/EmployeeCombobox'
 import { ManualDayClockSheet } from '@/features/attendance/ManualDayClockSheet'
 import { SegmentedProgressBar } from '@/features/attendance/SegmentedProgressBar'
 import { useAuth } from '@/features/auth/AuthContext'
@@ -79,8 +80,15 @@ import { useClockState } from '@/features/clock/ClockStateContext'
 import { formatUtcDateTime, isImeComposing } from '@/lib/ime'
 import { cn } from '@/lib/utils'
 
+export interface AttendanceNavigationIntent {
+  employeeId?: string | null
+  localDate?: string | null
+}
+
 interface AttendancePageProps {
   embedded?: boolean
+  initialIntent?: AttendanceNavigationIntent | null
+  onConsumeIntent?: () => void
 }
 
 type ViewMode = 'week' | 'month'
@@ -293,7 +301,11 @@ function localDateTimeInZoneToUtcIso(
   return new Date(secondPass).toISOString()
 }
 
-export function AttendancePage({ embedded = false }: AttendancePageProps) {
+export function AttendancePage({
+  embedded = false,
+  initialIntent = null,
+  onConsumeIntent,
+}: AttendancePageProps) {
   const { t, i18n } = useTranslation()
   const { activeTenant } = useAuth()
   const {
@@ -359,6 +371,9 @@ export function AttendancePage({ embedded = false }: AttendancePageProps) {
   const [detailsSheetOpen, setDetailsSheetOpen] = useState(false)
   const [historySheetOpen, setHistorySheetOpen] = useState(false)
   const [manualDayOpen, setManualDayOpen] = useState(false)
+  const [manualDayDefaultDate, setManualDayDefaultDate] = useState<
+    string | undefined
+  >(undefined)
 
   // Day detail & append-only correction drawer
   const [selectedDayDate, setSelectedDayDate] = useState<string | null>(null)
@@ -393,7 +408,16 @@ export function AttendancePage({ embedded = false }: AttendancePageProps) {
     }
   }, [moreMenuOpen])
 
-  // Load employees list for selector (with AbortController)
+  useEffect(() => {
+    if (!initialIntent) return
+    if (initialIntent.employeeId && showEmployeeSelector) {
+      setSelectedEmployeeId(initialIntent.employeeId)
+    }
+    if (initialIntent.localDate) {
+      setAnchorDate(initialIntent.localDate)
+    }
+    onConsumeIntent?.()
+  }, [initialIntent, showEmployeeSelector, onConsumeIntent])
   useEffect(() => {
     const controller = new AbortController()
     const { signal } = controller
@@ -468,27 +492,20 @@ export function AttendancePage({ embedded = false }: AttendancePageProps) {
           signal,
         })
 
-        // Load shifts for week(s) covered
-        const weekStarts: string[] = []
-        let ws = getMondayIso(dateFrom)
-        while (ws <= dateTo) {
-          weekStarts.push(ws)
-          ws = addDaysIso(ws, 7)
-        }
+        // Load shifts only in week view; month view uses daily_summaries.planned_minutes directly
         const storeIdForShifts = selectedEmployee?.primary_store_id
-        const shiftsPromise = Promise.all(
-          weekStarts.map((wStart) =>
-            apiClient.GET('/api/v1/shifts/weekly', {
-              params: {
-                query: {
-                  week_start: wStart,
-                  store_id: storeIdForShifts || undefined,
+        const shiftsPromise =
+          viewMode === 'week'
+            ? apiClient.GET('/api/v1/shifts/weekly', {
+                params: {
+                  query: {
+                    week_start: getMondayIso(dateFrom),
+                    store_id: storeIdForShifts || undefined,
+                  },
                 },
-              },
-              signal,
-            }),
-          ),
-        )
+                signal,
+              })
+            : Promise.resolve(null)
 
         const fromYear = Number(dateFrom.slice(0, 4))
         const leavesPromise = isAccountant
@@ -511,7 +528,7 @@ export function AttendancePage({ embedded = false }: AttendancePageProps) {
               signal,
             })
 
-        const [ledgerRes, shiftResults, leavesRes] = await Promise.all([
+        const [ledgerRes, shiftRes, leavesRes] = await Promise.all([
           ledgerPromise,
           shiftsPromise,
           leavesPromise,
@@ -532,10 +549,10 @@ export function AttendancePage({ embedded = false }: AttendancePageProps) {
           setLedger(matchedLedger)
         }
 
-        // Collect shifts for target employee
+        // Collect shifts for target employee (week view)
         const collectedShifts: ShiftResponse[] = []
-        for (const sRes of shiftResults) {
-          const row = sRes.data?.rows.find(
+        if (shiftRes?.data) {
+          const row = shiftRes.data.rows.find(
             (r) => r.employee_id === targetEmployeeId,
           )
           if (row) {
@@ -611,6 +628,7 @@ export function AttendancePage({ embedded = false }: AttendancePageProps) {
     selectedEmployee?.primary_store_id,
     dateFrom,
     dateTo,
+    viewMode,
     role,
     isAccountant,
     clockVersion,
@@ -981,6 +999,7 @@ export function AttendancePage({ embedded = false }: AttendancePageProps) {
       !row.isLocked &&
       !row.isFuture
     ) {
+      setManualDayDefaultDate(row.localDate)
       setManualDayOpen(true)
       return
     }
@@ -1101,24 +1120,14 @@ export function AttendancePage({ embedded = false }: AttendancePageProps) {
 
         <div className="flex flex-wrap items-center gap-2">
           {showEmployeeSelector && employees.length > 0 && (
-            <Select
+            <EmployeeCombobox
+              employees={employees}
               value={targetEmployeeId}
               onValueChange={(val) => setSelectedEmployeeId(val)}
-            >
-              <SelectTrigger
-                aria-label={t('attendance.filters.employeeLabel')}
-                className="h-8 min-w-44 border-slate-200 bg-white text-xs"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {employees.map((emp) => (
-                  <SelectItem key={emp.id} value={emp.id}>
-                    {emp.full_name} ({emp.employee_code})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              ariaLabel={t('attendance.filters.employeeLabel')}
+              className="min-w-52"
+              triggerClassName="h-8 border-slate-200 bg-white text-xs"
+            />
           )}
 
           {/* Week / Month segmented toggle */}
@@ -1223,6 +1232,7 @@ export function AttendancePage({ embedded = false }: AttendancePageProps) {
                       role="menuitem"
                       onClick={() => {
                         setMoreMenuOpen(false)
+                        setManualDayDefaultDate(undefined)
                         setManualDayOpen(true)
                       }}
                       className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100"
@@ -1712,6 +1722,7 @@ export function AttendancePage({ embedded = false }: AttendancePageProps) {
                     variant="outline"
                     onClick={() => {
                       setSettingsOpen(false)
+                      setManualDayDefaultDate(undefined)
                       setManualDayOpen(true)
                     }}
                     className="shrink-0"
@@ -2235,6 +2246,7 @@ export function AttendancePage({ embedded = false }: AttendancePageProps) {
         employees={employees}
         canSelectEmployee={canCorrect}
         defaultEmployeeId={targetEmployeeId}
+        defaultDate={manualDayDefaultDate}
         onSuccess={() => {
           setActionFeedback({
             kind: 'success',

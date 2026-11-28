@@ -110,6 +110,20 @@ class UpcomingAnniversaryResponse(BaseModel):
     days_until: int
 
 
+class UpcomingExpiryResponse(BaseModel):
+    """Work-permit (NIE/TIE) or temporary-contract expiry alert; owner/hr/store_manager only."""
+
+    employee_id: UUID
+    full_name: str
+    preferred_name: str
+    employee_code: str
+    department: str
+    store_name: str
+    kind: Literal["work_permit", "contract_end"]
+    expiry_date: date
+    days_remaining: int
+
+
 class TodayClockSegmentResponse(BaseModel):
     kind: Literal["work", "break"]
     start_utc: datetime
@@ -158,6 +172,8 @@ class AdminDashboardResponse(BaseModel):
     pending_justificantes_count: int = 0
     unacknowledged_announcements_count: int = 0
     available_departments: list[str] = []
+    expiry_alerts_count: int = 0
+    expiry_alerts: list[UpcomingExpiryResponse] = []
 
 
 class MyDashboardEmployeeSummaryResponse(BaseModel):
@@ -365,6 +381,21 @@ async def get_admin_dashboard(
         pending_justificantes_count=res.pending_justificantes_count,
         unacknowledged_announcements_count=res.unacknowledged_announcements_count,
         available_departments=list(res.available_departments),
+        expiry_alerts_count=res.expiry_alerts_count,
+        expiry_alerts=[
+            UpcomingExpiryResponse(
+                employee_id=a.employee_id,
+                full_name=a.full_name,
+                preferred_name=a.preferred_name,
+                employee_code=a.employee_code,
+                department=a.department,
+                store_name=a.store_name,
+                kind=a.kind,
+                expiry_date=a.expiry_date,
+                days_remaining=a.days_remaining,
+            )
+            for a in res.expiry_alerts
+        ],
     )
 
 

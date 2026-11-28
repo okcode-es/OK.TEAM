@@ -1324,6 +1324,81 @@
         }
       }
     },
+    "/api/v1/employees/{employee_id}/kiosk-pin": {
+      "put": {
+        "tags": [
+          "employees"
+        ],
+        "summary": "Set, reset or clear a salted-hashed 4-6 digit kiosk PIN (owner / hr / in-scope manager)",
+        "operationId": "setEmployeeKioskPin",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "employee_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Employee Id"
+            }
+          },
+          {
+            "name": "X-Tenant-Id",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Tenant-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KioskPinRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmployeeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/employees/{employee_id}/terminate": {
       "post": {
         "tags": [
@@ -4538,6 +4613,18 @@
             }
           },
           {
+            "name": "include_full_identifiers",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "When true (owner/hr/accountant only) export full NIE/DNI and NAF instead of masked identifiers.",
+              "default": false,
+              "title": "Include Full Identifiers"
+            },
+            "description": "When true (owner/hr/accountant only) export full NIE/DNI and NAF instead of masked identifiers."
+          },
+          {
             "name": "X-Tenant-Id",
             "in": "header",
             "required": false,
@@ -6193,6 +6280,19 @@
             "type": "array",
             "title": "Available Departments",
             "default": []
+          },
+          "expiry_alerts_count": {
+            "type": "integer",
+            "title": "Expiry Alerts Count",
+            "default": 0
+          },
+          "expiry_alerts": {
+            "items": {
+              "$ref": "#/components/schemas/UpcomingExpiryResponse"
+            },
+            "type": "array",
+            "title": "Expiry Alerts",
+            "default": []
           }
         },
         "type": "object",
@@ -7527,6 +7627,17 @@
               }
             ],
             "title": "Occurred At Utc"
+          },
+          "kiosk_pin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kiosk Pin"
           }
         },
         "type": "object",
@@ -7973,6 +8084,18 @@
             "maxLength": 500,
             "title": "Notes",
             "default": ""
+          },
+          "store_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Store Id"
           }
         },
         "type": "object",
@@ -9016,6 +9139,30 @@
             "format": "date",
             "title": "Hire Date"
           },
+          "work_permit_expiry_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Permit Expiry Date"
+          },
+          "contract_end_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract End Date"
+          },
           "nie_dni": {
             "anyOf": [
               {
@@ -9308,6 +9455,35 @@
               }
             ],
             "title": "Termination Date"
+          },
+          "work_permit_expiry_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Permit Expiry Date"
+          },
+          "contract_end_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract End Date"
+          },
+          "has_kiosk_pin": {
+            "type": "boolean",
+            "title": "Has Kiosk Pin",
+            "default": false
           },
           "nie_dni_masked": {
             "anyOf": [
@@ -9709,6 +9885,30 @@
             "$ref": "#/components/schemas/EmploymentStatus",
             "default": "active"
           },
+          "work_permit_expiry_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work Permit Expiry Date"
+          },
+          "contract_end_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract End Date"
+          },
           "nie_dni": {
             "anyOf": [
               {
@@ -9933,6 +10133,24 @@
           "regional"
         ],
         "title": "HolidayScope"
+      },
+      "KioskPinRequest": {
+        "properties": {
+          "pin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pin"
+          }
+        },
+        "type": "object",
+        "title": "KioskPinRequest",
+        "description": "4-6 digit store-tablet PIN, or null to clear. Validated in the domain (422)."
       },
       "LeaveCalendarResponse": {
         "properties": {
@@ -12675,6 +12893,66 @@
           "days_until"
         ],
         "title": "UpcomingBirthdayResponse"
+      },
+      "UpcomingExpiryResponse": {
+        "properties": {
+          "employee_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Employee Id"
+          },
+          "full_name": {
+            "type": "string",
+            "title": "Full Name"
+          },
+          "preferred_name": {
+            "type": "string",
+            "title": "Preferred Name"
+          },
+          "employee_code": {
+            "type": "string",
+            "title": "Employee Code"
+          },
+          "department": {
+            "type": "string",
+            "title": "Department"
+          },
+          "store_name": {
+            "type": "string",
+            "title": "Store Name"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "work_permit",
+              "contract_end"
+            ],
+            "title": "Kind"
+          },
+          "expiry_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Expiry Date"
+          },
+          "days_remaining": {
+            "type": "integer",
+            "title": "Days Remaining"
+          }
+        },
+        "type": "object",
+        "required": [
+          "employee_id",
+          "full_name",
+          "preferred_name",
+          "employee_code",
+          "department",
+          "store_name",
+          "kind",
+          "expiry_date",
+          "days_remaining"
+        ],
+        "title": "UpcomingExpiryResponse",
+        "description": "Work-permit (NIE/TIE) or temporary-contract expiry alert; owner/hr/store_manager only."
       },
       "UpcomingHolidayResponse": {
         "properties": {

@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -44,11 +45,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [activeTenantId, setActiveTenantId] = useState<string | null>(() =>
     localStorage.getItem(STORAGE_TENANT_ID),
   )
+  const activeTenantIdRef = useRef<string | null>(activeTenantId)
+  const profileRequestSeqRef = useRef(0)
+  const profileAbortRef = useRef<AbortController | null>(null)
 
   const devAuthAllowed =
     import.meta.env.DEV || import.meta.env.VITE_DEV_AUTH_ENABLED === 'true'
 
   const selectTenant = useCallback((tenantId: string) => {
+    activeTenantIdRef.current = tenantId
     setActiveTenantId(tenantId)
     setActiveTenantHeader(tenantId)
     localStorage.setItem(STORAGE_TENANT_ID, tenantId)
@@ -56,33 +61,70 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshProfile = useCallback(
     async (preferredTenantId?: string) => {
-      const { data, error } = await apiClient.GET('/api/v1/auth/me')
-      if (error || !data) {
+      const requestSeq = ++profileRequestSeqRef.current
+      profileAbortRef.current?.abort()
+      const controller = new AbortController()
+      profileAbortRef.current = controller
+
+      try {
+        const { data, error } = await apiClient.GET('/api/v1/auth/me', {
+          signal: controller.signal,
+        })
+        if (
+          controller.signal.aborted ||
+          requestSeq !== profileRequestSeqRef.current
+        ) {
+          return
+        }
+        if (error || !data) {
+          activeTenantIdRef.current = null
+          setActiveTenantId(null)
+          setProfile(null)
+          setHasToken(false)
+          setActiveTenantHeader(null)
+          throw new Error(extractApiError(error, 'Failed to load profile'))
+        }
+
+        setProfile(data)
+        setHasToken(true)
+
+        const validPreferred =
+          preferredTenantId &&
+          data.tenants.some((item) => item.tenant_id === preferredTenantId)
+            ? preferredTenantId
+            : null
+        const currentTenantId = activeTenantIdRef.current
+        const targetTenantId =
+          validPreferred ??
+          (currentTenantId &&
+          data.tenants.some((item) => item.tenant_id === currentTenantId)
+            ? currentTenantId
+            : (data.tenants[0]?.tenant_id ?? null))
+
+        if (targetTenantId) {
+          selectTenant(targetTenantId)
+        } else {
+          activeTenantIdRef.current = null
+          setActiveTenantId(null)
+          setActiveTenantHeader(null)
+          localStorage.removeItem(STORAGE_TENANT_ID)
+        }
+      } catch (err) {
+        if (
+          controller.signal.aborted ||
+          requestSeq !== profileRequestSeqRef.current
+        ) {
+          return
+        }
+        activeTenantIdRef.current = null
+        setActiveTenantId(null)
         setProfile(null)
         setHasToken(false)
         setActiveTenantHeader(null)
-        throw new Error(extractApiError(error, 'Failed to load profile'))
-      }
-
-      setProfile(data)
-      setHasToken(true)
-
-      const targetTenantId =
-        preferredTenantId ??
-        (activeTenantId &&
-        data.tenants.some((item) => item.tenant_id === activeTenantId)
-          ? activeTenantId
-          : (data.tenants[0]?.tenant_id ?? null))
-
-      if (targetTenantId) {
-        selectTenant(targetTenantId)
-      } else {
-        setActiveTenantId(null)
-        setActiveTenantHeader(null)
-        localStorage.removeItem(STORAGE_TENANT_ID)
+        throw err
       }
     },
-    [activeTenantId, selectTenant],
+    [selectTenant],
   )
 
   useEffect(() => {
@@ -109,8 +151,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
       } catch {
-        sessionStorage.removeItem(STORAGE_DEV_TOKEN)
-        setDevAccessToken(null)
+        if (!cancelled) {
+          sessionStorage.removeItem(STORAGE_DEV_TOKEN)
+          setDevAccessToken(null)
+        }
       } finally {
         if (!cancelled) {
           setIsLoading(false)
@@ -121,6 +165,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void bootstrap()
     return () => {
       cancelled = true
+      profileAbortRef.current?.abort()
     }
   }, [devAuthAllowed, refreshProfile])
 
@@ -164,6 +209,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   const signOut = useCallback(async () => {
+    profileRequestSeqRef.current += 1
+    profileAbortRef.current?.abort()
+    profileAbortRef.current = null
+    activeTenantIdRef.current = null
     sessionStorage.removeItem(STORAGE_DEV_TOKEN)
     localStorage.removeItem(STORAGE_TENANT_ID)
     clearKioskLock()

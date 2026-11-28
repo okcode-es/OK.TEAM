@@ -115,6 +115,8 @@ class CreateShiftRequest(BaseModel):
     planned_break_minutes: int = Field(default=0, ge=0)
     status: ShiftStatus = ShiftStatus.DRAFT
     notes: str = Field(default="", max_length=500)
+    # Optional cross-store support target; defaults to the employee's primary store.
+    store_id: UUID | None = None
 
 
 class UpdateShiftRequest(BaseModel):
@@ -261,6 +263,7 @@ async def create_shift(
             planned_break_minutes=body.planned_break_minutes,
             status=body.status,
             notes=body.notes,
+            store_id=body.store_id,
         ),
         now_utc=now_utc,
     )

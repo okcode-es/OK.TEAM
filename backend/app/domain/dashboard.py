@@ -110,6 +110,34 @@ class DashboardAnnouncementSummary:
     acknowledged_by_self: bool = False
 
 
+@dataclass(frozen=True, slots=True)
+class UpcomingExpiryItem:
+    """Residence-permit (NIE/TIE) or temporary-contract expiry alert (owner/hr/store_manager)."""
+
+    employee_id: UUID
+    full_name: str
+    preferred_name: str
+    employee_code: str
+    department: str
+    store_name: str
+    kind: Literal["work_permit", "contract_end"]
+    expiry_date: date
+    days_remaining: int
+
+
+EXPIRY_ALERT_HORIZON_DAYS = 60
+
+
+def days_until_expiry(expiry_date: date | None, today: date) -> int | None:
+    """Days until ``expiry_date`` (negative when already expired) if within the 60-day horizon."""
+    if expiry_date is None:
+        return None
+    delta = (expiry_date - today).days
+    if delta <= EXPIRY_ALERT_HORIZON_DAYS:
+        return delta
+    return None
+
+
 def days_until_birthday(birth_date: date, today: date) -> int | None:
     """Compute days until next birthday in [0, 30] without exposing birth year."""
     month = birth_date.month

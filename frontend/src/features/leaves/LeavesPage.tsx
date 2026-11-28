@@ -27,7 +27,11 @@ import {
   Upload,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { AttendancePage } from '@/features/attendance/AttendancePage'
+import {
+  AttendancePage,
+  type AttendanceNavigationIntent,
+} from '@/features/attendance/AttendancePage'
+import { EmployeeCombobox } from '@/components/EmployeeCombobox'
 import { AssignLeaveSheet } from '@/features/leaves/AssignLeaveSheet'
 import { LeaveEntitlementDialog } from '@/features/leaves/LeaveEntitlementDialog'
 import { TeamCalendarGantt } from '@/features/leaves/TeamCalendarGantt'
@@ -135,18 +139,33 @@ export type TimeManagementTab = 'team' | 'absences' | 'attendance'
 
 export function LeavesPage({
   initialTab = 'team',
+  initialIntent = null,
+  onConsumeIntent,
 }: {
   initialTab?: TimeManagementTab
+  initialIntent?: AttendanceNavigationIntent | null
+  onConsumeIntent?: () => void
 }) {
   const { activeTenant, profile } = useAuth()
   const scope = `${activeTenant?.tenant_id}:${activeTenant?.role}:${profile?.user_id}:${initialTab}`
-  return <LeavesWorkspace key={scope} initialTab={initialTab} />
+  return (
+    <LeavesWorkspace
+      key={scope}
+      initialTab={initialTab}
+      initialIntent={initialIntent}
+      onConsumeIntent={onConsumeIntent}
+    />
+  )
 }
 
 function LeavesWorkspace({
   initialTab = 'team',
+  initialIntent = null,
+  onConsumeIntent,
 }: {
   initialTab?: TimeManagementTab
+  initialIntent?: AttendanceNavigationIntent | null
+  onConsumeIntent?: () => void
 }) {
   const { t, i18n } = useTranslation()
   const { activeTenant, profile } = useAuth()
@@ -169,6 +188,7 @@ function LeavesWorkspace({
   const [typeFilter, setTypeFilter] = useState<string>('all')
   const [storeFilter, setStoreFilter] = useState<string>('all')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [employeeFilter, setEmployeeFilter] = useState<string>('all')
   const [calendarEmployeeId, setCalendarEmployeeId] = useState<string>('')
 
   const [stores, setStores] = useState<StoreResponse[]>([])
@@ -202,6 +222,9 @@ function LeavesWorkspace({
   const [createReason, setCreateReason] = useState<string>('')
   const [createJustificanteFile, setCreateJustificanteFile] =
     useState<File | null>(null)
+  const [pendingJustificanteLeaveId, setPendingJustificanteLeaveId] = useState<
+    string | null
+  >(null)
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const [submitAttempted, setSubmitAttempted] = useState(false)
@@ -321,10 +344,31 @@ function LeavesWorkspace({
     return map
   }, [employees])
 
+  useEffect(() => {
+    if (!initialIntent || initialTab === 'attendance') return
+    setActiveTab('absences')
+    if (initialIntent.employeeId && !selfOnlyCalendar) {
+      setEmployeeFilter(initialIntent.employeeId)
+      setCalendarEmployeeId(initialIntent.employeeId)
+    }
+    if (initialIntent.localDate) {
+      const targetYear = Number(initialIntent.localDate.slice(0, 4))
+      if (Number.isFinite(targetYear) && targetYear > 2000) {
+        setYear(targetYear)
+      }
+    }
+    onConsumeIntent?.()
+  }, [initialIntent, initialTab, selfOnlyCalendar, onConsumeIntent])
+
   const filteredRequests = useMemo(() => {
-    if (typeFilter === 'all') return requests
-    return requests.filter((r) => r.leave_type === typeFilter)
-  }, [requests, typeFilter])
+    return requests.filter((r) => {
+      if (typeFilter !== 'all' && r.leave_type !== typeFilter) return false
+      if (employeeFilter !== 'all' && r.employee_id !== employeeFilter) {
+        return false
+      }
+      return true
+    })
+  }, [requests, typeFilter, employeeFilter])
 
   const calendarHolidaysMap = useMemo(() => {
     const map = new Map<string, CalendarHolidayResponse>()
@@ -488,25 +532,33 @@ function LeavesWorkspace({
     if (hasValidationErrors) return
     setCreating(true)
     try {
-      const res = await apiClient.POST('/api/v1/leaves', {
-        body: {
-          employee_id: isEmployeeRole ? undefined : createEmployeeId || undefined,
-          leave_type: createType,
-          start_date: createStartDate,
-          end_date: createEndDate,
-          reason: createReason.trim(),
-        },
-      })
-      if (res.error || !res.data) {
-        setCreateError(extractApiError(res.error, t('common.error')))
-        return
+      let leaveId = pendingJustificanteLeaveId
+      if (!leaveId) {
+        const res = await apiClient.POST('/api/v1/leaves', {
+          body: {
+            employee_id: isEmployeeRole ? undefined : createEmployeeId || undefined,
+            leave_type: createType,
+            start_date: createStartDate,
+            end_date: createEndDate,
+            reason: createReason.trim(),
+          },
+        })
+        if (res.error || !res.data) {
+          setCreateError(extractApiError(res.error, t('common.error')))
+          return
+        }
+        leaveId = res.data.id
       }
+
       if (
         createJustificanteFile &&
         (createType === 'sick_leave' || createType === 'medical_appointment')
       ) {
-        await uploadJustificanteFile(res.data.id, createJustificanteFile)
+        setPendingJustificanteLeaveId(leaveId)
+        await uploadJustificanteFile(leaveId, createJustificanteFile)
       }
+
+      setPendingJustificanteLeaveId(null)
       setCreateOpen(false)
       setSubmitAttempted(false)
       setCreateReason('')
@@ -793,6 +845,7 @@ function LeavesWorkspace({
                 setCreateError(null)
                 setSubmitAttempted(false)
                 setCreateJustificanteFile(null)
+                setPendingJustificanteLeaveId(null)
                 setCreateOpen(true)
               }}
               className="bg-[#2563EB] text-white hover:bg-blue-700"
@@ -861,7 +914,13 @@ function LeavesWorkspace({
 
       {activeTab === 'team' && <TeamCalendarGantt stores={stores} />}
 
-      {activeTab === 'attendance' && <AttendancePage embedded />}
+      {activeTab === 'attendance' && (
+        <AttendancePage
+          embedded
+          initialIntent={initialIntent}
+          onConsumeIntent={onConsumeIntent}
+        />
+      )}
 
       {activeTab === 'absences' && (
         <>
@@ -937,21 +996,13 @@ function LeavesWorkspace({
               <Label className="mb-1.5 block text-[11px] text-slate-500">
                 {t('leaves.employeeLabel')}
               </Label>
-              <Select
+              <EmployeeCombobox
+                employees={employees}
                 value={calendarEmployeeId}
                 onValueChange={setCalendarEmployeeId}
-              >
-                <SelectTrigger className="w-full bg-white text-xs">
-                  <SelectValue placeholder={t('leaves.employeeLabel')} />
-                </SelectTrigger>
-                <SelectContent>
-                  {employees.map((emp) => (
-                    <SelectItem key={emp.id} value={emp.id}>
-                      {emp.employee_code} · {emp.full_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                ariaLabel={t('leaves.employeeLabel')}
+                placeholder={t('leaves.employeeLabel')}
+              />
             </div>
           )}
         </aside>
@@ -1107,6 +1158,19 @@ function LeavesWorkspace({
             </Select>
           )}
 
+          {!isEmployeeRole && employees.length > 0 && (
+            <EmployeeCombobox
+              employees={employees}
+              value={employeeFilter}
+              onValueChange={setEmployeeFilter}
+              includeAllOption
+              allValue="all"
+              allowClear
+              ariaLabel={t('leaves.employeeLabel')}
+              className="min-w-52"
+            />
+          )}
+
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="min-w-36 bg-white">
               <SelectValue />
@@ -1210,6 +1274,7 @@ function LeavesWorkspace({
           if (!open) {
             setSubmitAttempted(false)
             setCreateError(null)
+            setPendingJustificanteLeaveId(null)
           }
         }}
       >
@@ -1273,34 +1338,18 @@ function LeavesWorkspace({
                     *
                   </span>
                 </Label>
-                <Select
+                <EmployeeCombobox
+                  id="leave-employee"
+                  employees={employees}
                   value={createEmployeeId}
                   onValueChange={setCreateEmployeeId}
-                >
-                  <SelectTrigger
-                    id="leave-employee"
-                    aria-invalid={submitAttempted && missingEmployee}
-                    className={cn(
-                      'w-full bg-white',
-                      submitAttempted &&
-                        missingEmployee &&
-                        'border-rose-400 focus-visible:ring-rose-500',
-                    )}
-                  >
-                    <SelectValue
-                      placeholder={t(
-                        'leaves.createDrawer.validation.selectPlaceholder',
-                      )}
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {employees.map((emp) => (
-                      <SelectItem key={emp.id} value={emp.id}>
-                        {emp.employee_code} · {emp.full_name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  disabled={Boolean(pendingJustificanteLeaveId)}
+                  placeholder={t(
+                    'leaves.createDrawer.validation.selectPlaceholder',
+                  )}
+                  ariaLabel={t('leaves.createDrawer.employee')}
+                  ariaInvalid={submitAttempted && missingEmployee}
+                />
                 {submitAttempted && missingEmployee && (
                   <p className="text-xs text-rose-600">
                     {t('leaves.createDrawer.validation.requiredItem', {
@@ -1473,11 +1522,20 @@ function LeavesWorkspace({
 
             <Separator />
 
+            {pendingJustificanteLeaveId && (
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                {t('leaves.justificante.retryUploadHint')}
+              </div>
+            )}
+
             <SheetFooter className="flex gap-2 px-0">
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setCreateOpen(false)}
+                onClick={() => {
+                  setPendingJustificanteLeaveId(null)
+                  setCreateOpen(false)
+                }}
               >
                 {t('leaves.createDrawer.cancel')}
               </Button>
@@ -1487,7 +1545,9 @@ function LeavesWorkspace({
               >
                 {creating
                   ? t('leaves.createDrawer.submitting')
-                  : t('leaves.createDrawer.submit')}
+                  : pendingJustificanteLeaveId
+                    ? t('leaves.justificante.retryUploadAction')
+                    : t('leaves.createDrawer.submit')}
               </Button>
             </SheetFooter>
           </form>

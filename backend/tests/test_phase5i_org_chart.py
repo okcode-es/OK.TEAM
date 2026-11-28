@@ -322,6 +322,8 @@ class _EmployeeRepo:
         emergency_contact_phone: str = "",
         default_break_minutes: int | None = None,
         manager_id: UUID | None = None,
+        work_permit_expiry_date: date | None = None,
+        contract_end_date: date | None = None,
     ) -> Employee | None:
         existing = await self.get_by_id(tenant_id, employee_id)
         if existing is None or existing.deleted_at is not None:
@@ -339,6 +341,8 @@ class _EmployeeRepo:
             emergency_contact_phone=emergency_contact_phone,
             default_break_minutes=default_break_minutes,
             manager_id=manager_id,
+            work_permit_expiry_date=work_permit_expiry_date,
+            contract_end_date=contract_end_date,
             email=email,
             phone=phone,
             birth_date=birth_date,
@@ -408,6 +412,9 @@ class _EmployeeRepo:
             iban_masked=None,
             naf_enc=None,
             naf_masked=None,
+            work_permit_expiry_date=None,
+            contract_end_date=None,
+            kiosk_pin_hash=None,
             avatar_storage_backend=None,
             avatar_storage_key=None,
             avatar_mime_type=None,

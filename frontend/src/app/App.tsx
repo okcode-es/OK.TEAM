@@ -14,6 +14,7 @@ import {
   readKioskLockForSession,
 } from '@/features/attendance/kioskLock'
 import { KioskPage } from '@/features/attendance/KioskPage'
+import type { AttendanceNavigationIntent } from '@/features/attendance/AttendancePage'
 import { ClockStateProvider, useClockState } from '@/features/clock/ClockStateContext'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { DocumentsPage } from '@/features/documents/DocumentsPage'
@@ -101,6 +102,9 @@ function WorkspaceRouter() {
   const { isLoading, isAuthenticated, profile, activeTenant } = useAuth()
   const [section, setSection] = useState<NavSection>('dashboard')
   const [viewedEmployeeId, setViewedEmployeeId] = useState<string | null>(null)
+  const [navIntent, setNavIntent] = useState<AttendanceNavigationIntent | null>(
+    null,
+  )
   const [kioskLockVersion, setKioskLockVersion] = useState(0)
 
   const canOperateKiosk = canRoleOperateKiosk(activeTenant?.role)
@@ -115,11 +119,15 @@ function WorkspaceRouter() {
   const isKioskLocked = lockedKioskRecord !== null
   const effectiveSection: NavSection = isKioskLocked ? 'kiosk' : section
 
-  const handleNavigate = (next: NavSection) => {
+  const handleNavigate = (
+    next: NavSection,
+    intent?: AttendanceNavigationIntent,
+  ) => {
     if (isKioskLocked && next !== 'kiosk') {
       return
     }
     setViewedEmployeeId(null)
+    setNavIntent(intent ?? null)
     setSection(next)
   }
 
@@ -149,6 +157,7 @@ function WorkspaceRouter() {
 
   useEffect(() => {
     setViewedEmployeeId(null)
+    setNavIntent(null)
   }, [activeTenant?.tenant_id])
 
   useEffect(() => {
@@ -221,11 +230,21 @@ function WorkspaceRouter() {
         ))}
       {effectiveSection === 'employees' && <EmployeesPage />}
       {effectiveSection === 'attendance' && (
-        <LeavesPage key="time-attendance" initialTab="attendance" />
+        <LeavesPage
+          key="time-attendance"
+          initialTab="attendance"
+          initialIntent={navIntent}
+          onConsumeIntent={() => setNavIntent(null)}
+        />
       )}
       {effectiveSection === 'schedule' && <SchedulePage />}
       {effectiveSection === 'leaves' && (
-        <LeavesPage key="time-leaves" initialTab="team" />
+        <LeavesPage
+          key="time-leaves"
+          initialTab="team"
+          initialIntent={navIntent}
+          onConsumeIntent={() => setNavIntent(null)}
+        />
       )}
       {effectiveSection === 'documents' && <DocumentsPage />}
       {effectiveSection === 'announcements' && <AnnouncementsPage />}

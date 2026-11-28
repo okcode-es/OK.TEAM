@@ -250,6 +250,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/employees/{employee_id}/kiosk-pin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set, reset or clear a salted-hashed 4-6 digit kiosk PIN (owner / hr / in-scope manager) */
+        put: operations["setEmployeeKioskPin"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/employees/{employee_id}/terminate": {
         parameters: {
             query?: never;
@@ -1253,6 +1270,16 @@ export interface components {
              * @default []
              */
             available_departments: string[];
+            /**
+             * Expiry Alerts Count
+             * @default 0
+             */
+            expiry_alerts_count: number;
+            /**
+             * Expiry Alerts
+             * @default []
+             */
+            expiry_alerts: components["schemas"]["UpcomingExpiryResponse"][];
         };
         /**
          * AlertCode
@@ -1828,6 +1855,8 @@ export interface components {
             work_mode: components["schemas"]["WorkMode"];
             /** Occurred At Utc */
             occurred_at_utc?: string | null;
+            /** Kiosk Pin */
+            kiosk_pin?: string | null;
         };
         /** ClockAttendanceResponse */
         ClockAttendanceResponse: {
@@ -2021,6 +2050,8 @@ export interface components {
              * @default
              */
             notes: string;
+            /** Store Id */
+            store_id?: string | null;
         };
         /** CreateSignedUrlRequest */
         CreateSignedUrlRequest: {
@@ -2452,6 +2483,10 @@ export interface components {
              * Format: date
              */
             hire_date: string;
+            /** Work Permit Expiry Date */
+            work_permit_expiry_date?: string | null;
+            /** Contract End Date */
+            contract_end_date?: string | null;
             /** Nie Dni */
             nie_dni?: string | null;
             /** Iban */
@@ -2575,6 +2610,15 @@ export interface components {
             hire_date: string;
             /** Termination Date */
             termination_date: string | null;
+            /** Work Permit Expiry Date */
+            work_permit_expiry_date?: string | null;
+            /** Contract End Date */
+            contract_end_date?: string | null;
+            /**
+             * Has Kiosk Pin
+             * @default false
+             */
+            has_kiosk_pin: boolean;
             /** Nie Dni Masked */
             nie_dni_masked: string | null;
             /** Iban Masked */
@@ -2720,6 +2764,10 @@ export interface components {
             hire_date: string;
             /** @default active */
             employment_status: components["schemas"]["EmploymentStatus"];
+            /** Work Permit Expiry Date */
+            work_permit_expiry_date?: string | null;
+            /** Contract End Date */
+            contract_end_date?: string | null;
             /** Nie Dni */
             nie_dni?: string | null;
             /** Iban */
@@ -2807,6 +2855,14 @@ export interface components {
          * @enum {string}
          */
         HolidayScope: "national" | "regional";
+        /**
+         * KioskPinRequest
+         * @description 4-6 digit store-tablet PIN, or null to clear. Validated in the domain (422).
+         */
+        KioskPinRequest: {
+            /** Pin */
+            pin?: string | null;
+        };
         /** LeaveCalendarResponse */
         LeaveCalendarResponse: {
             /** Year */
@@ -3983,6 +4039,39 @@ export interface components {
             /** Days Until */
             days_until: number;
         };
+        /**
+         * UpcomingExpiryResponse
+         * @description Work-permit (NIE/TIE) or temporary-contract expiry alert; owner/hr/store_manager only.
+         */
+        UpcomingExpiryResponse: {
+            /**
+             * Employee Id
+             * Format: uuid
+             */
+            employee_id: string;
+            /** Full Name */
+            full_name: string;
+            /** Preferred Name */
+            preferred_name: string;
+            /** Employee Code */
+            employee_code: string;
+            /** Department */
+            department: string;
+            /** Store Name */
+            store_name: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "work_permit" | "contract_end";
+            /**
+             * Expiry Date
+             * Format: date
+             */
+            expiry_date: string;
+            /** Days Remaining */
+            days_remaining: number;
+        };
         /** UpcomingHolidayResponse */
         UpcomingHolidayResponse: {
             /**
@@ -4906,6 +4995,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EmployeeSensitivePiiResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    setEmployeeKioskPin: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                employee_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KioskPinRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmployeeResponse"];
                 };
             };
             /** @description Validation Error */
@@ -6351,7 +6477,10 @@ export interface operations {
     };
     export_gestoria_payroll_csv: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description When true (owner/hr/accountant only) export full NIE/DNI and NAF instead of masked identifiers. */
+                include_full_identifiers?: boolean;
+            };
             header?: {
                 "X-Tenant-Id"?: string | null;
             };

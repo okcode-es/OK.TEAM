@@ -31,12 +31,14 @@ from app.domain.dashboard import (
     TodayClockSegment,
     UpcomingAnniversaryItem,
     UpcomingBirthdayItem,
+    UpcomingExpiryItem,
     WhoIsInGroup,
     WhoIsInStatus,
     build_today_clock_segments,
     compute_target_daily_minutes,
     days_until_anniversary,
     days_until_birthday,
+    days_until_expiry,
 )
 from app.domain.documents import DocumentStoragePort
 from app.domain.employees import Employee, EmploymentStatus
@@ -76,6 +78,10 @@ _ADMIN_DASHBOARD_ROLES: frozenset[UserRole] = frozenset(
 _APPROVER_ROLES: frozenset[UserRole] = frozenset(
     {UserRole.OWNER, UserRole.HR, UserRole.STORE_MANAGER}
 )
+# Residence-permit / temporary-contract expiry alerts: never shown to accountant / employee.
+_EXPIRY_ALERT_ROLES: frozenset[UserRole] = frozenset(
+    {UserRole.OWNER, UserRole.HR, UserRole.STORE_MANAGER}
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,6 +98,8 @@ class AdminDashboardResult:
     unacknowledged_announcements_count: int = 0
     available_departments: tuple[str, ...] = ()
     has_mutations: bool = False
+    expiry_alerts_count: int = 0
+    expiry_alerts: tuple[UpcomingExpiryItem, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -243,16 +251,16 @@ class GetAdminDashboardUseCase:
         for emp in scoped_emps:
             avatar_urls[emp.id] = await mint_avatar_url(self._storage, emp)
 
-        events = await self._attendance_repo.list_by_tenant(
-            principal.tenant_id,
-            allowed_store_ids=(
-                principal.store_ids if principal.role == UserRole.STORE_MANAGER else None
-            ),
-            store_id=store_id,
+        scoped_emp_ids = {e.id for e in scoped_emps}
+        events = (
+            await self._attendance_repo.list_by_tenant(principal.tenant_id)
+            if scoped_emp_ids
+            else []
         )
         events_by_emp: dict[UUID, list[AttendanceEvent]] = defaultdict(list)
         for ev in events:
-            events_by_emp[ev.employee_id].append(ev)
+            if ev.employee_id in scoped_emp_ids:
+                events_by_emp[ev.employee_id].append(ev)
 
         leaves = await self._leave_repo.list_by_tenant(
             principal.tenant_id,
@@ -262,7 +270,6 @@ class GetAdminDashboardUseCase:
             store_id=store_id,
         )
         leaves_by_emp: dict[UUID, list[LeaveRequest]] = defaultdict(list)
-        scoped_emp_ids = {e.id for e in scoped_emps}
         pending_leaves_count = 0
         pending_justificantes_count = 0
         redact_health = principal.role == UserRole.ACCOUNTANT
@@ -606,6 +613,36 @@ class GetAdminDashboardUseCase:
                     ):
                         unacknowledged_announcements_count += 1
 
+        expiry_alerts: list[UpcomingExpiryItem] = []
+        if principal.role in _EXPIRY_ALERT_ROLES:
+            for emp in scoped_emps:
+                emp_store = store_map.get(emp.primary_store_id)
+                emp_tz = resolve_timezone(
+                    emp_store.timezone if emp_store is not None else "Europe/Madrid"
+                )
+                emp_today = now.astimezone(emp_tz).date()
+                for kind, expiry in (
+                    ("work_permit", emp.work_permit_expiry_date),
+                    ("contract_end", emp.contract_end_date),
+                ):
+                    remaining = days_until_expiry(expiry, emp_today)
+                    if expiry is None or remaining is None:
+                        continue
+                    expiry_alerts.append(
+                        UpcomingExpiryItem(
+                            employee_id=emp.id,
+                            full_name=emp.full_name,
+                            preferred_name=emp.preferred_name,
+                            employee_code=emp.employee_code,
+                            department=emp.department,
+                            store_name=emp_store.name if emp_store is not None else "",
+                            kind="work_permit" if kind == "work_permit" else "contract_end",
+                            expiry_date=expiry,
+                            days_remaining=remaining,
+                        )
+                    )
+            expiry_alerts.sort(key=lambda a: (a.days_remaining, a.full_name, a.kind))
+
         return AdminDashboardResult(
             who_is_in=who_is_in,
             upcoming_birthdays=tuple(birthdays),
@@ -619,6 +656,8 @@ class GetAdminDashboardUseCase:
             unacknowledged_announcements_count=unacknowledged_announcements_count,
             available_departments=tuple(sorted(available_depts)),
             has_mutations=has_mutations,
+            expiry_alerts_count=len(expiry_alerts),
+            expiry_alerts=tuple(expiry_alerts),
         )
 
 

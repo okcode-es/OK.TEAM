@@ -5,7 +5,10 @@ Pure Python standard library only (enforced by scripts/check_domain_purity.py).
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import re
+import secrets
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
@@ -36,6 +39,10 @@ _NIE_PREFIX_MAP = {"X": "0", "Y": "1", "Z": "2"}
 _IBAN_PATTERN = re.compile(r"^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$")
 _ES_IBAN_PATTERN = re.compile(r"^ES[0-9]{22}$")
 _NAF_PATTERN = re.compile(r"^[0-9]{12}$")
+_KIOSK_PIN_PATTERN = re.compile(r"[0-9]{4,6}", re.ASCII)
+_KIOSK_PIN_SCHEME = "pbkdf2_sha256"
+KIOSK_PIN_PBKDF2_ITERATIONS = 210_000
+KIOSK_PIN_SALT_BYTES = 16
 
 
 class ContractType(StrEnum):
@@ -259,11 +266,63 @@ class Employee:
     default_break_minutes: int | None = None
     manager_id: UUID | None = None
     deleted_at: datetime | None = None
+    # NIE/TIE residence permit expiry and temporary contract end (P1 retail ops alerts).
+    work_permit_expiry_date: date | None = None
+    contract_end_date: date | None = None
+    # PBKDF2-SHA256 salted hash of the store-tablet kiosk PIN (never serialized to clients/logs).
+    kiosk_pin_hash: str | None = field(default=None, repr=False)
+
+    @property
+    def has_kiosk_pin(self) -> bool:
+        return self.kiosk_pin_hash is not None
 
     @property
     def is_overtime_prohibited(self) -> bool:
         """Art. 12.4.c ET: part-time employees are prohibited from regular overtime."""
         return self.work_schedule_type == WorkScheduleType.PART_TIME
+
+
+def validate_contract_end_date(hire_date: date, contract_end_date: date | None) -> date | None:
+    """A temporary contract cannot end before the employee was hired."""
+    if contract_end_date is not None and contract_end_date < hire_date:
+        raise ValidationDomainError("contract_end_date cannot precede hire_date")
+    return contract_end_date
+
+
+def validate_kiosk_pin(raw: str) -> str:
+    """Kiosk PIN must be 4-6 plain ASCII digits (no whitespace, no unicode digits)."""
+    if not _KIOSK_PIN_PATTERN.fullmatch(raw):
+        raise ValidationDomainError("kiosk_pin must be 4 to 6 digits")
+    return raw
+
+
+def hash_kiosk_pin(pin: str, *, salt: bytes | None = None) -> str:
+    """Return ``pbkdf2_sha256$<iterations>$<salt_hex>$<hash_hex>`` (random 16-byte salt)."""
+    validate_kiosk_pin(pin)
+    salt_bytes = salt if salt is not None else secrets.token_bytes(KIOSK_PIN_SALT_BYTES)
+    digest = hashlib.pbkdf2_hmac(
+        "sha256", pin.encode("ascii"), salt_bytes, KIOSK_PIN_PBKDF2_ITERATIONS
+    )
+    return f"{_KIOSK_PIN_SCHEME}${KIOSK_PIN_PBKDF2_ITERATIONS}${salt_bytes.hex()}${digest.hex()}"
+
+
+def verify_kiosk_pin(pin: str | None, stored_hash: str) -> bool:
+    """Constant-time verification; malformed input or malformed stored hash never raises."""
+    if pin is None or not _KIOSK_PIN_PATTERN.fullmatch(pin):
+        return False
+    try:
+        scheme, iterations_raw, salt_hex, hash_hex = stored_hash.split("$")
+        if scheme != _KIOSK_PIN_SCHEME:
+            return False
+        iterations = int(iterations_raw)
+        expected = bytes.fromhex(hash_hex)
+        salt_bytes = bytes.fromhex(salt_hex)
+    except ValueError:
+        return False
+    if iterations < 1:
+        return False
+    actual = hashlib.pbkdf2_hmac("sha256", pin.encode("ascii"), salt_bytes, iterations)
+    return hmac.compare_digest(actual, expected)
 
 
 def validate_no_manager_cycle(

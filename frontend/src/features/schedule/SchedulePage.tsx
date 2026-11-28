@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Copy,
   Plus,
   Send,
 } from 'lucide-react'
@@ -18,6 +19,7 @@ import { useTranslation } from 'react-i18next'
 import { apiClient, extractApiError } from '@/api/client'
 import type {
   AlertSeverity,
+  EmployeeResponse,
   EmployeeScheduleRowResponse,
   ScheduleAlertResponse,
   ShiftResponse,
@@ -25,6 +27,7 @@ import type {
   StoreResponse,
   WeeklyScheduleResponse,
 } from '@/api/types'
+import { EmployeeCombobox } from '@/components/EmployeeCombobox'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -142,7 +145,10 @@ function ScheduleWorkspace() {
     role === 'owner' || role === 'hr' || role === 'store_manager'
 
   const [stores, setStores] = useState<StoreResponse[]>([])
+  const [employees, setEmployees] = useState<EmployeeResponse[]>([])
   const [selectedStoreId, setSelectedStoreId] = useState<string>('')
+  const [departmentFilter, setDepartmentFilter] = useState<string>('all')
+  const [employeeFilter, setEmployeeFilter] = useState<string>('all')
   const [weekStart, setWeekStart] = useState<string>(() =>
     getMondayIso(new Date()),
   )
@@ -151,12 +157,14 @@ function ScheduleWorkspace() {
   const [errorBanner, setErrorBanner] = useState<string | null>(null)
   const [noticeBanner, setNoticeBanner] = useState<string | null>(null)
   const [publishing, setPublishing] = useState(false)
+  const [copyingPrevWeek, setCopyingPrevWeek] = useState(false)
 
   // Sheet state for create / edit / view
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editingShift, setEditingShift] = useState<ShiftResponse | null>(null)
   const [targetEmployee, setTargetEmployee] =
     useState<EmployeeScheduleRowResponse | null>(null)
+  const [targetStoreId, setTargetStoreId] = useState<string>('')
   const [startDate, setStartDate] = useState('')
   const [startTime, setStartTime] = useState('09:00')
   const [endDate, setEndDate] = useState('')
@@ -169,17 +177,23 @@ function ScheduleWorkspace() {
   const [drawerError, setDrawerError] = useState<string | null>(null)
 
   const loadStores = useCallback(async () => {
-    const res = await apiClient.GET('/api/v1/stores')
-    if (res.data) {
-      setStores(res.data.items)
+    const [storeRes, empRes] = await Promise.all([
+      apiClient.GET('/api/v1/stores'),
+      role !== 'employee' ? apiClient.GET('/api/v1/employees') : Promise.resolve(null),
+    ])
+    if (storeRes.data) {
+      setStores(storeRes.data.items)
       setSelectedStoreId((prev) => {
-        if (prev && res.data.items.some((s) => s.id === prev)) {
+        if (prev && storeRes.data.items.some((s) => s.id === prev)) {
           return prev
         }
-        return res.data.items[0]?.id ?? ''
+        return storeRes.data.items[0]?.id ?? ''
       })
     }
-  }, [])
+    if (empRes?.data) {
+      setEmployees(empRes.data.items)
+    }
+  }, [role])
 
   const loadSchedule = useCallback(async () => {
     if (!selectedStoreId && role !== 'employee') {
@@ -238,6 +252,52 @@ function ScheduleWorkspace() {
     return list
   }, [schedule])
 
+  const employeesById = useMemo(() => {
+    const map = new Map<string, EmployeeResponse>()
+    for (const emp of employees) {
+      map.set(emp.id, emp)
+    }
+    return map
+  }, [employees])
+
+  const availableDepartments = useMemo(() => {
+    const byKey = new Map<string, string>()
+    const rows = schedule?.rows ?? []
+    for (const row of rows) {
+      const dept = employeesById.get(row.employee_id)?.department?.trim()
+      if (!dept) continue
+      const key = dept.toLowerCase()
+      if (!byKey.has(key)) byKey.set(key, dept)
+    }
+    if (byKey.size === 0) {
+      for (const emp of employees) {
+        const dept = emp.department?.trim()
+        if (!dept) continue
+        const key = dept.toLowerCase()
+        if (!byKey.has(key)) byKey.set(key, dept)
+      }
+    }
+    return Array.from(byKey.entries())
+      .sort((a, b) => a[1].localeCompare(b[1]))
+      .map(([key, label]) => ({ key, label }))
+  }, [schedule?.rows, employeesById, employees])
+
+  const filteredRows = useMemo(() => {
+    if (!schedule) return []
+    return schedule.rows.filter((row) => {
+      if (employeeFilter !== 'all' && row.employee_id !== employeeFilter) {
+        return false
+      }
+      if (departmentFilter !== 'all') {
+        const dept =
+          employeesById.get(row.employee_id)?.department?.trim().toLowerCase() ??
+          ''
+        if (dept !== departmentFilter) return false
+      }
+      return true
+    })
+  }, [schedule, employeeFilter, departmentFilter, employeesById])
+
   const hasDraftShifts = useMemo(() => {
     if (!schedule) return false
     return schedule.rows.some((row) =>
@@ -247,8 +307,10 @@ function ScheduleWorkspace() {
 
   const openCreateSheet = (row: EmployeeScheduleRowResponse, dayIso: string) => {
     if (!canEdit) return
+    const emp = employeesById.get(row.employee_id)
     setEditingShift(null)
     setTargetEmployee(row)
+    setTargetStoreId(emp?.primary_store_id ?? selectedStoreId ?? '')
     setStartDate(dayIso)
     setStartTime('09:00')
     setEndDate(dayIso)
@@ -280,6 +342,93 @@ function ScheduleWorkspace() {
     setNotes(shift.notes)
     setDrawerError(null)
     setSheetOpen(true)
+  }
+
+  const handleCopyPreviousWeek = async () => {
+    if (!canEdit || !schedule || copyingPrevWeek) return
+    setCopyingPrevWeek(true)
+    setErrorBanner(null)
+    setNoticeBanner(null)
+    try {
+      const prevWeekStart = addDaysIso(weekStart, -7)
+      const prevRes = await apiClient.GET('/api/v1/shifts/weekly', {
+        params: {
+          query: {
+            week_start: prevWeekStart,
+            store_id: selectedStoreId || undefined,
+          },
+        },
+      })
+      if (prevRes.error || !prevRes.data) {
+        setErrorBanner(extractApiError(prevRes.error, t('common.error')))
+        return
+      }
+      const prevTimezone = prevRes.data.store_timezone || storeTimezone
+      const shiftsToCopy: ShiftResponse[] = []
+      for (const row of prevRes.data.rows) {
+        for (const sh of row.shifts) {
+          if (sh.status !== 'cancelled') {
+            shiftsToCopy.push(sh)
+          }
+        }
+      }
+      if (shiftsToCopy.length === 0) {
+        setNoticeBanner(t('schedule.copyPrevWeekEmpty'))
+        return
+      }
+
+      let createdCount = 0
+      let skippedCount = 0
+      for (const sh of shiftsToCopy) {
+        const shiftTargetStoreId = sh.store_id ?? (selectedStoreId || null)
+        const targetTz =
+          (shiftTargetStoreId
+            ? stores.find((s) => s.id === shiftTargetStoreId)?.timezone
+            : undefined) ?? storeTimezone
+        const sourceTz =
+          (shiftTargetStoreId
+            ? stores.find((s) => s.id === shiftTargetStoreId)?.timezone
+            : undefined) ?? prevTimezone
+        const startLocal = utcIsoToLocalDateAndTime(sh.start_at_utc, sourceTz)
+        const endLocal = utcIsoToLocalDateAndTime(sh.end_at_utc, sourceTz)
+        const nextStartAtUtc = localDateAndTimeInZoneToUtcIso(
+          addDaysIso(startLocal.date, 7),
+          startLocal.time,
+          targetTz,
+        )
+        const nextEndAtUtc = localDateAndTimeInZoneToUtcIso(
+          addDaysIso(endLocal.date, 7),
+          endLocal.time,
+          targetTz,
+        )
+        const createRes = await apiClient.POST('/api/v1/shifts', {
+          body: {
+            employee_id: sh.employee_id,
+            start_at_utc: nextStartAtUtc,
+            end_at_utc: nextEndAtUtc,
+            planned_break_minutes: sh.planned_break_minutes,
+            status: 'draft',
+            notes: sh.notes,
+            store_id: shiftTargetStoreId,
+          },
+        })
+        if (createRes.error || !createRes.data) {
+          skippedCount += 1
+        } else {
+          createdCount += 1
+        }
+      }
+
+      setNoticeBanner(
+        t('schedule.copyPrevWeekSummary', {
+          created: createdCount,
+          skipped: skippedCount,
+        }),
+      )
+      await loadSchedule()
+    } finally {
+      setCopyingPrevWeek(false)
+    }
   }
 
   const handlePublishWeek = async () => {
@@ -318,15 +467,19 @@ function ScheduleWorkspace() {
     setNoticeBanner(null)
 
     try {
+      const effectiveTimezone =
+        (!editingShift && targetStoreId
+          ? stores.find((s) => s.id === targetStoreId)?.timezone
+          : undefined) ?? storeTimezone
       const startAtUtc = localDateAndTimeInZoneToUtcIso(
         startDate,
         startTime,
-        storeTimezone,
+        effectiveTimezone,
       )
       const endAtUtc = localDateAndTimeInZoneToUtcIso(
         endDate,
         endTime,
-        storeTimezone,
+        effectiveTimezone,
       )
       const breakMins = Math.max(0, Number.parseInt(plannedBreakMinutes, 10) || 0)
 
@@ -354,6 +507,7 @@ function ScheduleWorkspace() {
             planned_break_minutes: breakMins,
             status: shiftStatus === 'cancelled' ? 'draft' : shiftStatus,
             notes: notes.trim(),
+            store_id: targetStoreId || null,
           },
         })
         if (res.error || !res.data) {
@@ -475,18 +629,69 @@ function ScheduleWorkspace() {
             {weekDays[0]} — {weekDays[6]}
             {schedule?.store_timezone ? ` · ${schedule.store_timezone}` : ''}
           </span>
+
+          {availableDepartments.length > 0 && (
+            <Select
+              value={departmentFilter}
+              onValueChange={setDepartmentFilter}
+            >
+              <SelectTrigger
+                className="min-w-36 bg-white text-xs"
+                aria-label={t('schedule.filterDepartment')}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">
+                  {t('schedule.allDepartments')}
+                </SelectItem>
+                {availableDepartments.map((dept) => (
+                  <SelectItem key={dept.key} value={dept.key}>
+                    {dept.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          {role !== 'employee' && employees.length > 0 && (
+            <EmployeeCombobox
+              employees={employees}
+              value={employeeFilter}
+              onValueChange={setEmployeeFilter}
+              includeAllOption
+              allValue="all"
+              allowClear
+              ariaLabel={t('schedule.employeeColumn')}
+              className="min-w-48"
+            />
+          )}
         </div>
 
         {canEdit && (
-          <Button
-            type="button"
-            size="sm"
-            disabled={publishing || !hasDraftShifts || !schedule}
-            onClick={() => void handlePublishWeek()}
-          >
-            <Send className="h-4 w-4" aria-hidden="true" />
-            {publishing ? t('schedule.publishing') : t('schedule.publishWeek')}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={copyingPrevWeek || loading || !schedule}
+              onClick={() => void handleCopyPreviousWeek()}
+            >
+              <Copy className="h-4 w-4" aria-hidden="true" />
+              {copyingPrevWeek
+                ? t('schedule.copyingPrevWeek')
+                : t('schedule.copyPrevWeek')}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={publishing || !hasDraftShifts || !schedule}
+              onClick={() => void handlePublishWeek()}
+            >
+              <Send className="h-4 w-4" aria-hidden="true" />
+              {publishing ? t('schedule.publishing') : t('schedule.publishWeek')}
+            </Button>
+          </div>
         )}
       </div>
 
@@ -586,7 +791,7 @@ function ScheduleWorkspace() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {schedule.rows.map((row) => {
+              {filteredRows.map((row) => {
                 const isPartTime = row.work_schedule_type === 'part_time'
                 return (
                   <tr key={row.employee_id} className="align-top">
@@ -760,6 +965,33 @@ function ScheduleWorkspace() {
                 {targetEmployee?.full_name} ({targetEmployee?.employee_code})
               </p>
             </div>
+
+            {!editingShift && stores.length > 0 && (
+              <div className="space-y-1.5">
+                <Label htmlFor="shift-target-store">
+                  {t('schedule.drawer.targetStore')}
+                </Label>
+                <Select
+                  value={targetStoreId}
+                  disabled={!canEdit}
+                  onValueChange={setTargetStoreId}
+                >
+                  <SelectTrigger
+                    id="shift-target-store"
+                    className="w-full bg-white"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {stores.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.code} · {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">

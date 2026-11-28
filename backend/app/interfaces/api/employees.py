@@ -18,6 +18,7 @@ from app.application.employees import (
     GetEmployeeSensitivePiiUseCase,
     GetEmployeeUseCase,
     ListEmployeesUseCase,
+    SetEmployeeKioskPinUseCase,
     TerminateEmployeeUseCase,
     UpdateEmployeeCommand,
     UpdateEmployeeUseCase,
@@ -76,6 +77,8 @@ class EmployeeCreateRequest(BaseModel):
     default_break_minutes: int | None = Field(default=None, ge=5, le=180)
     manager_id: UUID | None = None
     hire_date: date
+    work_permit_expiry_date: date | None = None
+    contract_end_date: date | None = None
     nie_dni: str | None = Field(default=None, max_length=32)
     iban: str | None = Field(default=None, max_length=40)
     naf: str | None = Field(default=None, max_length=32)
@@ -102,6 +105,9 @@ class EmployeeUpdateRequest(BaseModel):
     manager_id: UUID | None = None
     hire_date: date
     employment_status: EmploymentStatus = EmploymentStatus.ACTIVE
+    # Omit to preserve existing date; send null to clear; send ISO date to set.
+    work_permit_expiry_date: date | None = None
+    contract_end_date: date | None = None
     # Omit/null to preserve existing encrypted value; send "" to clear; send new value to rotate.
     nie_dni: str | None = Field(default=None, max_length=32)
     iban: str | None = Field(default=None, max_length=40)
@@ -110,6 +116,17 @@ class EmployeeUpdateRequest(BaseModel):
 
 class EmployeeTerminateRequest(BaseModel):
     termination_date: date
+
+
+class KioskPinRequest(BaseModel):
+    """4-6 digit store-tablet PIN, or null to clear. Validated in the domain (422)."""
+
+    pin: str | None = None
+
+    def __repr__(self) -> str:  # never leak the PIN into logs/tracebacks
+        return "KioskPinRequest(pin=***)"
+
+    __str__ = __repr__
 
 
 class EmployeeResponse(BaseModel):
@@ -138,6 +155,9 @@ class EmployeeResponse(BaseModel):
     is_overtime_prohibited: bool
     hire_date: date
     termination_date: date | None
+    work_permit_expiry_date: date | None = None
+    contract_end_date: date | None = None
+    has_kiosk_pin: bool = False
     nie_dni_masked: str | None
     iban_masked: str | None
     naf_masked: str | None
@@ -182,6 +202,9 @@ class EmployeeResponse(BaseModel):
             is_overtime_prohibited=employee.is_overtime_prohibited,
             hire_date=employee.hire_date,
             termination_date=employee.termination_date,
+            work_permit_expiry_date=employee.work_permit_expiry_date,
+            contract_end_date=employee.contract_end_date,
+            has_kiosk_pin=employee.kiosk_pin_hash is not None,
             nie_dni_masked=employee.nie_dni_masked,
             iban_masked=employee.iban_masked,
             naf_masked=employee.naf_masked,
@@ -425,6 +448,8 @@ async def create_employee(
             default_break_minutes=payload.default_break_minutes,
             manager_id=payload.manager_id,
             hire_date=payload.hire_date,
+            work_permit_expiry_date=payload.work_permit_expiry_date,
+            contract_end_date=payload.contract_end_date,
             nie_dni=payload.nie_dni,
             iban=payload.iban,
             naf=payload.naf,
@@ -497,6 +522,16 @@ async def update_employee(
             ),
             hire_date=payload.hire_date,
             employment_status=payload.employment_status,
+            work_permit_expiry_date=(
+                payload.work_permit_expiry_date
+                if "work_permit_expiry_date" in payload.model_fields_set
+                else UNSET
+            ),
+            contract_end_date=(
+                payload.contract_end_date
+                if "contract_end_date" in payload.model_fields_set
+                else UNSET
+            ),
             nie_dni=payload.nie_dni,
             iban=payload.iban,
             naf=payload.naf,
@@ -531,6 +566,36 @@ async def get_employee_sensitive_pii(
         nie_dni=decrypted.nie_dni,
         iban=decrypted.iban,
         naf=decrypted.naf,
+    )
+
+
+@router.put(
+    "/{employee_id}/kiosk-pin",
+    operation_id="setEmployeeKioskPin",
+    response_model=EmployeeResponse,
+    summary=(
+        "Set, reset or clear a salted-hashed 4-6 digit kiosk PIN "
+        "(owner / hr / in-scope manager)"
+    ),
+)
+async def set_employee_kiosk_pin(
+    employee_id: UUID,
+    payload: KioskPinRequest,
+    response: Response,
+    principal: Annotated[AuthenticatedPrincipal, Depends(get_current_principal)],
+    employee_repo: Annotated[EmployeeRepository, Depends(get_employee_repository)],
+    storage: Annotated[DocumentStoragePort, Depends(get_document_storage)],
+    commit: Annotated[CommitFn, Depends(get_commit_fn)],
+    now_utc: Annotated[datetime, Depends(get_utc_now)],
+) -> EmployeeResponse:
+    response.headers["Cache-Control"] = "no-store"
+    updated = await SetEmployeeKioskPinUseCase(employee_repo).execute(
+        principal, employee_id, pin=payload.pin, now_utc=now_utc
+    )
+    await commit()
+    return EmployeeResponse.from_domain(
+        updated,
+        avatar_url=await mint_avatar_url(storage, updated),
     )
 
 

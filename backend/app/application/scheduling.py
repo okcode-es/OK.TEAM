@@ -81,6 +81,8 @@ class CreateShiftCommand:
     planned_break_minutes: int = 0
     status: ShiftStatus = ShiftStatus.DRAFT
     notes: str = ""
+    # Cross-store support: target store for the shift (defaults to employee.primary_store_id).
+    store_id: UUID | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,6 +117,18 @@ def _require_schedule_write_role(principal: AuthenticatedPrincipal) -> None:
         from app.domain.security import ForbiddenScopeError
 
         raise ForbiddenScopeError("Only owners, HR, or store managers may modify shift schedules")
+
+
+def _require_shift_employee_scope(
+    principal: AuthenticatedPrincipal,
+    employee: Employee,
+    shift_store_id: UUID,
+) -> None:
+    """Enforce both target-store access and home-store/department employee scope for managers."""
+    if principal.role != UserRole.STORE_MANAGER:
+        return
+    principal.require_store_access(principal.tenant_id, shift_store_id)
+    principal.require_employee_in_scope(employee)
 
 
 class GetWeeklyScheduleUseCase:
@@ -184,17 +198,49 @@ class GetWeeklyScheduleUseCase:
         padded_start = win_start_utc - timedelta(hours=24)
         padded_end = win_end_utc + timedelta(hours=24)
 
-        all_store_shifts = await self._shift_repo.list_by_store_window(
-            principal.tenant_id,
-            store.id,
-            window_start_utc=padded_start,
-            window_end_utc=padded_end,
-        )
-        approved_leaves = await self._leave_repo.list_by_tenant(
-            principal.tenant_id,
-            store_id=store.id,
-            status=LeaveStatus.APPROVED,
-        )
+        if principal.role == UserRole.EMPLOYEE:
+            all_store_shifts = await self._shift_repo.list_by_employee_window(
+                principal.tenant_id,
+                employees[0].id,
+                window_start_utc=padded_start,
+                window_end_utc=padded_end,
+            )
+            approved_leaves = await self._leave_repo.list_by_employee(
+                principal.tenant_id,
+                employees[0].id,
+            )
+            approved_leaves = [lv for lv in approved_leaves if lv.status == LeaveStatus.APPROVED]
+        else:
+            all_store_shifts = await self._shift_repo.list_by_store_window(
+                principal.tenant_id,
+                store.id,
+                window_start_utc=padded_start,
+                window_end_utc=padded_end,
+            )
+            home_emp_ids = {e.id for e in employees}
+            cross_emp_ids = {
+                s.employee_id for s in all_store_shifts if s.is_active
+            } - home_emp_ids
+            if cross_emp_ids:
+                tenant_emps = await self._employee_repo.list_by_tenant(
+                    principal.tenant_id,
+                    allowed_statuses=allowed_statuses,
+                )
+                mgr_dept = (
+                    (principal.department_scope or "").strip().casefold()
+                    if principal.role == UserRole.STORE_MANAGER
+                    else ""
+                )
+                for cross_emp in tenant_emps:
+                    if cross_emp.id not in cross_emp_ids or cross_emp.deleted_at is not None:
+                        continue
+                    if mgr_dept and cross_emp.department.strip().casefold() != mgr_dept:
+                        continue
+                    employees.append(cross_emp)
+            approved_leaves = await self._leave_repo.list_by_tenant(
+                principal.tenant_id,
+                status=LeaveStatus.APPROVED,
+            )
 
         shifts_by_emp: dict[UUID, list[Shift]] = {}
         for s in all_store_shifts:
@@ -220,12 +266,31 @@ class GetWeeklyScheduleUseCase:
                 for s in emp_shifts
                 if s.start_at_utc < win_end_utc and s.end_at_utc > win_start_utc
             ]
-            adjacent_shifts = [s for s in emp_shifts if s not in week_shifts]
+            if principal.role == UserRole.EMPLOYEE:
+                eval_shifts = week_shifts
+                adjacent_shifts = [s for s in emp_shifts if s not in week_shifts]
+            else:
+                all_emp_shifts = [
+                    s
+                    for s in await self._shift_repo.list_by_employee_window(
+                        principal.tenant_id,
+                        emp.id,
+                        window_start_utc=padded_start,
+                        window_end_utc=padded_end,
+                    )
+                    if s.is_active
+                ]
+                eval_shifts = [
+                    s
+                    for s in all_emp_shifts
+                    if s.start_at_utc < win_end_utc and s.end_at_utc > win_start_utc
+                ]
+                adjacent_shifts = [s for s in all_emp_shifts if s not in eval_shifts]
             weekly_hours, alerts = evaluate_employee_week_schedule(
                 employee=emp,
                 week_start=monday,
                 store_timezone=store.timezone,
-                shifts=week_shifts,
+                shifts=eval_shifts,
                 adjacent_shifts=adjacent_shifts,
             )
             rows.append(
@@ -291,15 +356,15 @@ class CreateShiftUseCase:
         if employee is None:
             raise EntityNotFoundError(f"Employee {cmd.employee_id} not found")
 
-        principal.require_store_access(principal.tenant_id, employee.primary_store_id)
-        if principal.role == UserRole.STORE_MANAGER:
-            principal.require_employee_in_scope(employee)
+        target_store_id = cmd.store_id or employee.primary_store_id
+        principal.require_store_access(principal.tenant_id, target_store_id)
+        _require_shift_employee_scope(principal, employee, target_store_id)
 
         ensure_employee_schedulable(employee)
 
-        store = await self._store_repo.get_by_id(principal.tenant_id, employee.primary_store_id)
+        store = await self._store_repo.get_by_id(principal.tenant_id, target_store_id)
         if store is None:
-            raise EntityNotFoundError(f"Store {employee.primary_store_id} not found")
+            raise EntityNotFoundError(f"Store {target_store_id} not found")
 
         start_utc, end_utc, break_mins = validate_shift_bounds(
             cmd.start_at_utc, cmd.end_at_utc, cmd.planned_break_minutes
@@ -398,7 +463,7 @@ class UpdateShiftUseCase:
         if employee is None:
             raise EntityNotFoundError(f"Employee {existing.employee_id} not found")
         if principal.role == UserRole.STORE_MANAGER:
-            principal.require_employee_in_scope(employee)
+            _require_shift_employee_scope(principal, employee, existing.store_id)
         ensure_employee_schedulable(employee)
 
         store = await self._store_repo.get_by_id(principal.tenant_id, existing.store_id)
@@ -536,8 +601,11 @@ class PublishWeeklyShiftsUseCase:
                     raise EntityNotFoundError(f"Employee {shift.employee_id} not found")
                 emp = loaded_emp
                 emp_cache[shift.employee_id] = emp
-            if principal.role == UserRole.STORE_MANAGER and not principal.can_manage_employee(emp):
-                continue
+            if principal.role == UserRole.STORE_MANAGER:
+                try:
+                    _require_shift_employee_scope(principal, emp, store_id)
+                except Exception:
+                    continue
             scoped_drafts.append(shift)
             if emp.employment_status in (EmploymentStatus.LEGAL_HOLD, EmploymentStatus.ANONYMIZED):
                 raise FrozenRecordError(
@@ -610,7 +678,7 @@ class CancelShiftUseCase:
         emp = await self._employee_repo.get_by_id(principal.tenant_id, existing.employee_id)
         if emp is not None:
             if principal.role == UserRole.STORE_MANAGER:
-                principal.require_employee_in_scope(emp)
+                _require_shift_employee_scope(principal, emp, existing.store_id)
             elif emp.employment_status in (
                 EmploymentStatus.LEGAL_HOLD,
                 EmploymentStatus.ANONYMIZED,

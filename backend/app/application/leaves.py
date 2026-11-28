@@ -435,12 +435,16 @@ class ReviewLeaveRequestUseCase:
         if principal.role == UserRole.STORE_MANAGER:
             principal.require_employee_in_scope(emp)
 
+        # HR/Owner may directly final-review a PENDING_MANAGER leave (one-step path).
+        one_step_final = leave.status == LeaveStatus.PENDING_MANAGER and principal.role in (
+            UserRole.HR,
+            UserRole.OWNER,
+        )
         if leave.status == LeaveStatus.PENDING_MANAGER:
-            if principal.role == UserRole.HR:
-                raise ValidationDomainError(
-                    "Leave request requires Store Manager approval before HR final review"
-                )
-            target_status = LeaveStatus.PENDING_HR if cmd.approve else LeaveStatus.REJECTED
+            if one_step_final:
+                target_status = LeaveStatus.APPROVED if cmd.approve else LeaveStatus.REJECTED
+            else:
+                target_status = LeaveStatus.PENDING_HR if cmd.approve else LeaveStatus.REJECTED
         elif leave.status == LeaveStatus.PENDING_HR:
             if principal.role == UserRole.STORE_MANAGER:
                 raise ForbiddenScopeError(
@@ -462,12 +466,25 @@ class ReviewLeaveRequestUseCase:
                     "are closed for this store"
                 )
 
-        validate_leave_transition(leave.status, target_status)
+        # One-step HR/Owner review is validated as the HR final stage (PENDING_HR -> final).
+        validate_leave_transition(
+            LeaveStatus.PENDING_HR if one_step_final else leave.status, target_status
+        )
 
         if target_status == LeaveStatus.APPROVED:
             store = await self._store_repo.get_by_id(principal.tenant_id, leave.store_id)
             if store is None:
                 raise EntityNotFoundError(f"Store {leave.store_id} not found")
+            if one_step_final:
+                existing_for_overlap = await self._leave_repo.list_by_employee(
+                    principal.tenant_id, leave.employee_id
+                )
+                check_leave_overlap(
+                    start_date=leave.start_date,
+                    end_date=leave.end_date,
+                    existing_requests=existing_for_overlap,
+                    exclude_id=leave.id,
+                )
             win_start = datetime(
                 leave.start_date.year, leave.start_date.month, leave.start_date.day, tzinfo=UTC
             ) - timedelta(days=1)
@@ -515,7 +532,7 @@ class ReviewLeaveRequestUseCase:
         mgr_at: datetime | None
         hr_by: UUID | None
         hr_at: datetime | None
-        if leave.status == LeaveStatus.PENDING_MANAGER:
+        if leave.status == LeaveStatus.PENDING_MANAGER and not one_step_final:
             mgr_by = principal.user_id
             mgr_at = now
             mgr_note = review_note

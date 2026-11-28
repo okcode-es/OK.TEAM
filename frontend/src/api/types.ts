@@ -28,6 +28,9 @@ export type EmployeeUpdateRequest =
   components['schemas']['EmployeeUpdateRequest']
 export type EmployeeSensitivePiiResponse =
   components['schemas']['EmployeeSensitivePiiResponse']
+export type KioskPinRequest = components['schemas']['KioskPinRequest']
+export type UpcomingExpiryResponse =
+  components['schemas']['UpcomingExpiryResponse']
 export type ContractType = components['schemas']['ContractType']
 export type WorkScheduleType = components['schemas']['WorkScheduleType']
 export type EmploymentStatus = components['schemas']['EmploymentStatus']

@@ -44,6 +44,7 @@ import type {
   WorkScheduleType,
 } from '@/api/types'
 import type { NavSection } from '@/components/layout/AppShell'
+import type { AttendanceNavigationIntent } from '@/features/attendance/AttendancePage'
 import {
   AlertDialog,
   AlertDialogContent,
@@ -54,6 +55,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -168,7 +170,10 @@ function previewToRow(
 }
 
 interface PayrollPageProps {
-  onNavigate?: (section: NavSection) => void
+  onNavigate?: (
+    section: NavSection,
+    intent?: AttendanceNavigationIntent,
+  ) => void
 }
 
 export function PayrollPage({ onNavigate }: PayrollPageProps) {
@@ -196,7 +201,9 @@ export function PayrollPage({ onNavigate }: PayrollPageProps) {
   const [errorBanner, setErrorBanner] = useState<string | null>(null)
 
   const [closingSubmitting, setClosingSubmitting] = useState(false)
+  const [closeConfirmOpen, setCloseConfirmOpen] = useState(false)
   const [exportingCsv, setExportingCsv] = useState(false)
+  const [includeFullIdentifiers, setIncludeFullIdentifiers] = useState(false)
 
   // Reopen Dialog state
   const [reopenOpen, setReopenOpen] = useState(false)
@@ -390,8 +397,10 @@ export function PayrollPage({ onNavigate }: PayrollPageProps) {
       })
       if (res.error || !res.data) {
         setErrorBanner(extractApiError(res.error, t('common.error')))
+        setCloseConfirmOpen(false)
         return
       }
+      setCloseConfirmOpen(false)
       await Promise.all([
         loadPeriodData(selectedStoreId, periodMonth),
         loadStoresAndHistory(),
@@ -407,13 +416,16 @@ export function PayrollPage({ onNavigate }: PayrollPageProps) {
     setErrorBanner(null)
     try {
       const headers = await getAuthHeaders()
-      const response = await fetch(
+      const exportUrl = new URL(
         `${getApiBaseUrl()}/api/v1/payroll/closings/${encodeURIComponent(existingClosing.id)}/gestoria-export`,
-        {
-          method: 'GET',
-          headers,
-        },
       )
+      if (includeFullIdentifiers) {
+        exportUrl.searchParams.set('include_full_identifiers', 'true')
+      }
+      const response = await fetch(exportUrl.toString(), {
+        method: 'GET',
+        headers,
+      })
       if (!response.ok) {
         setErrorBanner(await extractFetchError(response, t('errors.GENERIC')))
         return
@@ -732,7 +744,7 @@ export function PayrollPage({ onNavigate }: PayrollPageProps) {
                 !preview?.can_close ||
                 isClosed
               }
-              onClick={() => void handleCloseMonth()}
+              onClick={() => setCloseConfirmOpen(true)}
             >
               <Lock className="h-4 w-4" aria-hidden="true" />
               {closingSubmitting
@@ -742,18 +754,31 @@ export function PayrollPage({ onNavigate }: PayrollPageProps) {
           )}
 
           {canExportCsv && (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={!isClosed || exportingCsv}
-              onClick={() => void handleExportCsv()}
-            >
-              <FileSpreadsheet className="h-4 w-4" aria-hidden="true" />
-              {exportingCsv
-                ? t('payroll.actions.exporting')
-                : t('payroll.actions.exportCsv')}
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="flex cursor-pointer items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 select-none">
+                <Checkbox
+                  id="payroll-export-full-id"
+                  checked={includeFullIdentifiers}
+                  disabled={!isClosed || exportingCsv}
+                  onCheckedChange={(checked) =>
+                    setIncludeFullIdentifiers(checked === true)
+                  }
+                />
+                <span>{t('payroll.actions.includeFullIdentifiers')}</span>
+              </label>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={!isClosed || exportingCsv}
+                onClick={() => void handleExportCsv()}
+              >
+                <FileSpreadsheet className="h-4 w-4" aria-hidden="true" />
+                {exportingCsv
+                  ? t('payroll.actions.exporting')
+                  : t('payroll.actions.exportCsv')}
+              </Button>
+            </div>
           )}
 
           {canCloseOrReopen && isClosed && (
@@ -1086,7 +1111,12 @@ export function PayrollPage({ onNavigate }: PayrollPageProps) {
                   {onNavigate && targetSection && actionLabel && (
                     <button
                       type="button"
-                      onClick={() => onNavigate(targetSection)}
+                      onClick={() =>
+                        onNavigate(targetSection, {
+                          employeeId: blocker.employee_id,
+                          localDate: blocker.local_date,
+                        })
+                      }
                       className="inline-flex shrink-0 items-center gap-1 self-start rounded-md px-2 py-1 text-xs font-medium text-[#2563EB] transition-colors hover:bg-blue-50 hover:text-blue-700 focus-visible:ring-2 focus-visible:ring-[#2563EB] focus-visible:outline-none sm:self-center"
                     >
                       <span>{actionLabel}</span>
@@ -1529,6 +1559,67 @@ export function PayrollPage({ onNavigate }: PayrollPageProps) {
               </Button>
             </AlertDialogFooter>
           </form>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Close Month Confirmation Dialog */}
+      <AlertDialog
+        open={closeConfirmOpen}
+        onOpenChange={(open) => {
+          if (!closingSubmitting) setCloseConfirmOpen(open)
+        }}
+      >
+        <AlertDialogContent className="bg-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t('payroll.closeDialog.title')}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('payroll.closeDialog.description', {
+                month: periodMonth,
+              })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="grid grid-cols-2 gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
+            <div>
+              <div className="text-slate-600">
+                {t('payroll.closeDialog.employeeCountLabel')}
+              </div>
+              <div className="mt-0.5 text-base font-semibold text-slate-900 tabular-nums">
+                {kpis.employeeCount}
+              </div>
+            </div>
+            <div>
+              <div className="text-slate-600">
+                {t('payroll.closeDialog.totalHoursLabel')}
+              </div>
+              <div className="mt-0.5 text-base font-semibold text-slate-900 tabular-nums">
+                {formatHours(kpis.totalNet, locale)} h
+              </div>
+            </div>
+          </div>
+
+          <AlertDialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={closingSubmitting}
+              onClick={() => setCloseConfirmOpen(false)}
+            >
+              {t('payroll.closeDialog.cancel')}
+            </Button>
+            <Button
+              type="button"
+              disabled={closingSubmitting || !preview?.can_close || isClosed}
+              className="bg-[#2563EB] text-white hover:bg-blue-700"
+              onClick={() => void handleCloseMonth()}
+            >
+              {closingSubmitting
+                ? t('payroll.actions.closing')
+                : t('payroll.closeDialog.confirm')}
+            </Button>
+          </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </div>

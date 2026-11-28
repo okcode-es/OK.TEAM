@@ -227,6 +227,17 @@ class EmployeeRepository(Protocol):
         emergency_contact_phone: str = "",
         default_break_minutes: int | None = None,
         manager_id: UUID | None = None,
+        work_permit_expiry_date: date | None = None,
+        contract_end_date: date | None = None,
+    ) -> Employee | None: ...
+
+    async def set_kiosk_pin_hash(
+        self,
+        tenant_id: UUID,
+        employee_id: UUID,
+        *,
+        kiosk_pin_hash: str | None,
+        updated_at: datetime,
     ) -> Employee | None: ...
 
     async def update_avatar(

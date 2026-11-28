@@ -1049,6 +1049,80 @@ export function DashboardPage({
                     </CardContent>
                   </Card>
 
+                  {(role === 'owner' ||
+                    role === 'hr' ||
+                    role === 'store_manager') &&
+                    adminData.expiry_alerts_count > 0 && (
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <CardTitle className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                              <AlertTriangle
+                                className="h-4 w-4 text-amber-600"
+                                aria-hidden="true"
+                              />
+                              {t('dashboard.expiryAlerts.title')}
+                            </CardTitle>
+                            <Badge
+                              variant="outline"
+                              className="border-amber-200 bg-amber-50 text-amber-800 tabular-nums"
+                            >
+                              {adminData.expiry_alerts_count}
+                            </Badge>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="space-y-2">
+                          {adminData.expiry_alerts.slice(0, 6).map((item) => {
+                            const displayName =
+                              item.preferred_name || item.full_name
+                            const isExpired = item.days_remaining <= 0
+                            return (
+                              <button
+                                key={`${item.employee_id}-${item.kind}`}
+                                type="button"
+                                onClick={() =>
+                                  onOpenEmployeeProfile?.(item.employee_id)
+                                }
+                                className="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2 text-left text-xs transition-colors hover:bg-slate-50"
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <div className="truncate font-medium text-slate-900">
+                                    {displayName}{' '}
+                                    <span className="text-slate-600 tabular-nums">
+                                      ({item.employee_code})
+                                    </span>
+                                  </div>
+                                  <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600 tabular-nums">
+                                    <span>
+                                      {t(
+                                        `dashboard.expiryAlerts.kinds.${item.kind}`,
+                                      )}
+                                    </span>
+                                    <span>·</span>
+                                    <span>{item.expiry_date}</span>
+                                  </div>
+                                </div>
+                                <Badge
+                                  variant="outline"
+                                  className={
+                                    isExpired
+                                      ? 'shrink-0 border-rose-200 bg-rose-50 text-rose-700 tabular-nums'
+                                      : 'shrink-0 border-amber-200 bg-amber-50 text-amber-800 tabular-nums'
+                                  }
+                                >
+                                  {isExpired
+                                    ? t('dashboard.expiryAlerts.expired')
+                                    : t('dashboard.expiryAlerts.daysRemaining', {
+                                        count: item.days_remaining,
+                                      })}
+                                </Badge>
+                              </button>
+                            )
+                          })}
+                        </CardContent>
+                      </Card>
+                    )}
+
                   <Card>
                     <CardHeader className="pb-2">
                       <CardTitle className="flex items-center gap-2 text-sm font-semibold text-slate-900">
